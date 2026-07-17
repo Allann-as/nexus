@@ -8,6 +8,7 @@
 pub mod entities;
 pub mod errors;
 pub mod ledger;
+pub mod recurrence;
 pub mod schedule;
 pub mod score;
 pub mod streak;
