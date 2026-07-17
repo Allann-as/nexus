@@ -21,6 +21,7 @@ import { Checkbox } from "../../design-system/Checkbox";
 import { CountUp } from "../../design-system/cards";
 import { ProgressBar } from "../../design-system/charts";
 import { Button, cx } from "../../design-system/primitives";
+import { metricDecimals } from "../../lib/format";
 import type { GoalWithProgress, MilestoneView, ProgressSource } from "../../lib/ipc";
 
 export function GoalCard({
@@ -78,7 +79,7 @@ export function GoalCard({
           <span className="tabular text-[34px] leading-none font-semibold text-[var(--text-primary)]">
             <CountUp
               to={goal.currentValue ?? goal.startValue}
-              decimals={decimalsFor(goal.targetValue, goal.currentValue ?? goal.startValue)}
+              decimals={metricDecimals(goal.currentValue ?? goal.startValue)}
             />
           </span>
           <span className="tabular text-[15px] text-[var(--text-tertiary)]">
@@ -168,18 +169,6 @@ export function GoalCard({
       </div>
     </article>
   );
-}
-
-/**
- * Quantas casas o número merece: 77,4 kg precisa de uma; 30 dias, de nenhuma.
- *
- * Olha os DOIS valores, e não só o alvo. Uma meta de 82 kg até 72 kg tem alvo
- * inteiro, e arredondar por ele exibia a pesagem de **77,4 como "77"** — o card
- * dizendo um número que o usuário nunca registrou. O alvo é redondo; a vida
- * medida não é.
- */
-function decimalsFor(target: number, current: number): number {
-  return Number.isInteger(target) && Number.isInteger(current) ? 0 : 1;
 }
 
 /**

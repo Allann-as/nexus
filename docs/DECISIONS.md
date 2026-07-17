@@ -612,9 +612,9 @@ para as 17h30 deixou `starts_at=17:30`, `rule_start=15:00`.
 
 ---
 
-## ADR-0023 — Trocar a régua de uma meta é configuração, não história
+## ADR-0023 — O ledger registra fatos vividos, não configuração de medição
 
-**Data:** 2026-07-17 · **Status:** aceito
+**Data:** 2026-07-17 · **Status:** aceito · **ratificado pelo arquiteto 2026-07-17**
 
 **Contexto.** A constituição diz que toda mutação relevante grava no ledger na
 mesma transação. O toggle "qual barra manda" (métrica × sub-desafios, §5 da
@@ -630,15 +630,22 @@ ninguém procuraria e que empurrariam para baixo os que importam. A mesma regra
 vale para o `move_milestone`: arrastar um sub-desafio é arrumar a mesa, e o M2 já
 tinha decidido isso para o `move_task`.
 
-**A fronteira, para não virar caso a caso.** Grava no ledger o que o usuário
-responderia se perguntassem "o que você fez ontem?". "Marquei o sub-desafio",
-sim. "Mudei como a barra é calculada", não.
+**O critério geral (ratificado pelo arquiteto, regra para as próximas sessões).**
+Antes de gravar qualquer mutação no ledger, pergunte:
+
+> **Isso aconteceu na VIDA do usuário, ou na CONFIGURAÇÃO do app?**
+
+Só o primeiro entra no ledger. "Marquei o sub-desafio", "registrei a pesagem",
+"concluí a tarefa" — vida vivida, grava. "Mudei como a barra é calculada",
+"reordenei a lista", "troquei o horário do lembrete", "mudei a cor da Esfera" —
+configuração de como o app se comporta ou mede, **não grava**. Preferências não
+são história; enchê-la delas é afogar os fatos reais nos ajustes de mesa.
 
 ---
 
-## ADR-0024 — "A terceira terça do mês" não existe no vocabulário — e o seed não finge que sim
+## ADR-0024 — "A terceira terça do mês": agendada para o M4, não inventada no M3
 
-**Data:** 2026-07-17 · **Status:** aceito · **complementa o ADR-0021**
+**Data:** 2026-07-17 · **Status:** aceito · **complementa o ADR-0021** · **revisado 2026-07-17 pelo arquiteto**
 
 **Contexto.** O prompt do M3 pede um seed com um evento recorrente na "terceira
 terça do mês". O ADR-0021 fechou o vocabulário da recorrência em
@@ -646,18 +653,33 @@ terça do mês". O ADR-0021 fechou o vocabulário da recorrência em
 sexta"** como exemplo do que ficou deliberadamente de fora. O `Monthly` é por dia
 do mês; `BYDAY=3TU` da RFC-5545 não é expressável.
 
-**Decisão.** O código ganha. O seed semeia uma mensal por dia do mês ("Reunião de
-condomínio, todo dia 15") e a divergência fica registrada aqui.
+**Decisão (M3).** O código ganha. O M3 não inventa a variante para fazer um seed
+bonito — semeia uma mensal por dia do mês ("Reunião de condomínio, todo dia 15"),
+porque uma variante nova é gravada em JSON no banco do usuário **para sempre**, e
+isso é decisão de arquitetura, não detalhe de dado de demonstração.
 
-**Por que não estender o enum agora.** Seria uma variante nova gravada em JSON no
-banco do usuário **para sempre**, decidida para fazer um seed bonito. O
-vocabulário da recorrência é uma decisão de arquitetura, não um detalhe do dado
-de demonstração — ela sobe para o arquiteto, não para o commit.
+**Decisão do arquiteto (revisão).** A regra veio da spec original e é caso real
+de agenda — consultas, reuniões mensais, vencimentos. Ela **não vai para o V2**:
+fica **agendada para o M4**, junto do template "Agenda simples", que é o
+milestone que já toca o calendário. Assim o M3.5 (Saúde + Finanças, a prioridade
+do usuário) não atrasa por ela.
 
-**Consequência.** Um seed que precisasse de INSERT cru para existir estaria
-provando uma feature que o app não tem. "Terceira terça do mês" fica no backlog
-V2 como o que é: um pedido de produto sobre o vocabulário, com preço conhecido
-(uma variante `MonthlyByWeekday { interval, week, weekday }` + expansão + testes).
+**Escopo fechado do item M4:**
+
+- `Recurrence::MonthlyByWeekday { interval, week, weekday }` no enum (JSON legível,
+  `tag` explícito, igual às outras variantes).
+- Expansão em `domain::recurrence`, ancorada na âncora como as demais.
+- Testes, incluindo:
+  - **a 5ª ocorrência que não existe no mês** ("quinta sexta de fevereiro"): a
+    expansão pula o mês em vez de escorregar para o mês seguinte — o mesmo
+    princípio do dia 31 (ADR-0021), decidido na âncora.
+  - **interação com `rule_start` e a idempotência da extensão** (ADR-0022/0026):
+    materializar, estender a janela e reexpandir tem que respeitar a UNIQUE
+    `(event_id, rule_start)` e não duplicar nem ressuscitar ocorrência movida.
+
+**Consequência.** "Terceira terça do mês" deixa de ser uma lacuna e vira um item
+com dono (M4) e escopo escrito — nenhuma sessão futura precisa redescobrir o
+preço nem redecidir o lugar.
 
 ---
 
