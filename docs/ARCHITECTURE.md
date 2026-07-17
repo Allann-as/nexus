@@ -1,0 +1,147 @@
+# NEXUS — Arquitetura
+
+> Documento vivo. Atualize-o no mesmo commit que muda a estrutura.
+> Estado atual: **M0 — Fundação concluída**.
+
+## 1. O que o NEXUS é
+
+Um **Personal Operating System**: um único executável desktop que concentra
+áreas, projetos, metas, hábitos, rotinas, agenda, notas, arquivos e uma linha do
+tempo histórica imutável.
+
+Projetado para acumular milhões de registros ao longo de décadas sem perder
+velocidade.
+
+## 2. A constituição (regras invioláveis)
+
+| # | Regra | Como é garantida hoje |
+|---|---|---|
+| 1 | **Zero rede** | Nenhuma dependência HTTP. CSP `default-src 'self'`. Fontes empacotadas via `@fontsource` (nunca CDN). Allowlist Tauri mínima: só `core:default`. Updater desligado. |
+| 2 | **Zero IA** | Todo insight é SQL + estatística descritiva, com `formula` e `sample_size` no payload. |
+| 3 | **Um artefato** | SQLite embarcado (`bundled`). Sem Docker, sem serviço, sem processo residente. |
+| 4 | **Dados sagrados** | WAL, transações, `quick_check` na abertura, backups (M5), export JSON/CSV (M5). |
+| 5 | **Performance é feature** | Orçamentos da §8 do prompt mestre são requisitos. Listas virtualizadas; BI fora da thread de UI. |
+| 6 | **Longevidade** | Dependências mínimas e maduras. Dados = SQL puro + JSON. Migrations em SQL plano. |
+| 7 | **Clean Architecture** | Regra de dependência abaixo, verificada por revisão. |
+| 8 | **Teclado-primeiro** | `Ctrl+K` e chords `G+<tecla>` no shell desde o M0. |
+
+## 3. Regra de dependência
+
+```
+commands ──> application ──> domain <── infrastructure
+```
+
+As setas apontam para `domain`, e `domain` não aponta para nada. Essa é a regra
+inteira.
+
+- `domain/` — entidades, value objects, serviços puros. **Nunca** importa
+  `rusqlite`, `tauri` ou `infrastructure`. Testável sem banco e sem janela.
+  - Única exceção consciente: `domain/errors.rs` implementa `From<rusqlite::Error>`.
+    O erro é convertido para `String` na fronteira, então nenhum tipo estrangeiro
+    vaza para dentro do domínio. Ver ADR-0003.
+- `application/` — casos de uso orquestrando o domínio via *ports* (traits).
+- `infrastructure/` — adaptadores concretos (SQLite, arquivos, logs).
+- `commands/` — camada de interface Tauri. Fina: parse, chama caso de uso, mapeia erro.
+
+O frontend só conhece o backend por `src/lib/ipc.ts` — uma função TS por command
+Rust. Nenhuma feature chama `invoke` diretamente.
+
+## 4. Topologia de conexões (o ponto mais importante do backend)
+
+Um escritor, muitos leitores — exatamente o que o WAL existe para servir:
+
+- **`Db::write`** — uma única `Connection` atrás de um `Mutex`. O SQLite só
+  permite um escritor por vez de qualquer forma; tornar isso explícito
+  transforma disputa de lock em uma fila que controlamos, em vez de
+  `SQLITE_BUSY` surpresa.
+- **`Db::read`** — pool r2d2 (4 conexões) abertas `READ_ONLY` + `query_only=ON`.
+  Sob WAL, leem concorrentemente a uma escrita em andamento, sem bloquear a UI.
+  O `bi_engine` (M4) vai beber daqui.
+
+Há **um único ponto** que abre conexão e aplica PRAGMAs:
+`infrastructure/db/mod.rs::configure`.
+
+```
+journal_mode = WAL          (persiste no arquivo)
+synchronous  = NORMAL       (seguro sob WAL)
+foreign_keys = ON
+busy_timeout = 5000
+cache_size   = -64000       (64 MB)
+mmap_size    = 268435456    (256 MB)
+temp_store   = MEMORY
+```
+
+`PRAGMA optimize` roda no fechamento. `VACUUM` entra na manutenção mensal (M5).
+
+**Ordem de abertura importa:** `quick_check` roda **antes** de qualquer migration
+— um banco corrompido é detectado antes que qualquer escrita o toque.
+
+## 5. Localização dos dados
+
+`%APPDATA%/Nexus/` — nunca ao lado do executável.
+
+```
+nexus.db  nexus.db-wal  nexus.db-shm
+media/     arquivos anexados (path relativo no banco, hash SHA-256)
+backups/   snapshots via VACUUM INTO + retenção (M5)
+exports/   JSON + CSV legíveis por humanos (M5)
+logs/      rotação diária
+```
+
+## 6. Estado por milestone
+
+| Milestone | Escopo | Estado |
+|---|---|---|
+| **M0** | Fundação: scaffold, pool+PRAGMAs+migrations, tokens, shell, `check.ps1` | ✅ **concluído** |
+| M1 | CRUD Áreas/Nodes, Inbox, ledger, FTS5, palette com busca real | ⬜ |
+| M2 | Tarefas, Projetos, Hábitos, Rotinas, ticks, streaks, Dashboard v1 | ⬜ |
+| M3 | Calendário (timeblocking, RFC-5545, conflitos), Metas + projeção | ⬜ |
+| M4 | Notas (CodeMirror, wiki-links), Timeline, `bi_engine`, Insights | ⬜ |
+| M5 | Backup/restore, export, Revisão Semanal, Modo Foco, seed de 5 anos | ⬜ |
+| M6 | Ícone, instalador, manual, entrega | ⬜ |
+
+### O que o M0 entrega de verdade
+
+- Banco SQLite embarcado, WAL, FKs, schema core (`0001`) aplicado e idempotente.
+- 7 testes cobrindo PRAGMAs, FKs, CHECK de `kind`, read-pool read-only, migrations.
+- Shell navegável: sidebar colapsável, topbar, command palette (`Ctrl+K`) com
+  fuzzy match, chords `G+<tecla>`, tema dark/light em runtime.
+- Dashboard e Configurações **lendo dados reais** do SQLite via IPC tipado.
+- `check.ps1` verde: fmt, clippy `-D warnings`, testes, `tsc`, vite build, release.
+
+### Medições reais do M0 (build `tauri build`, release)
+
+| Métrica | Orçamento | Medido |
+|---|---|---|
+| Binário | — | **4,8 MB** |
+| Cold start até janela | < 1,5 s | **0,86 s** |
+| RSS do processo host | < 300 MB total | **31 MB** (host; WebView2 à parte) |
+
+> Ressalva honesta: RAM total (host + WebView2) e os orçamentos de busca,
+> timeline e scroll só podem ser validados contra o seed de 5 anos, no M5.
+
+## 7. Frontend
+
+- **React 19 + TypeScript + Vite**; **Tailwind v4** lendo os tokens de
+  `design-system/tokens.css` via `@theme inline`.
+- **Zustand** para estado de UI (tema, sidebar) — persistido em localStorage,
+  pois são preferências de chrome, não dados do usuário.
+- **TanStack Query** para tudo que vem do SQLite. `retry: false` de propósito:
+  o backend é um arquivo local, não um serviço de rede; não há link instável
+  para retentar, e uma falha aqui é um bug real que deve aparecer.
+- **Hash routing** (`createHashRouter`): em produção a app carrega sob o
+  protocolo `tauri://`, onde não há servidor para resolver caminhos profundos.
+
+## 8. Como rodar
+
+```powershell
+npm install
+npm run tauri dev      # desenvolvimento
+.\check.ps1            # gate completo (fmt, clippy, testes, tsc, build, release)
+.\check.ps1 -Quick     # sem o build release
+npx tauri build        # instaladores NSIS + MSI
+```
+
+> **Atenção:** `cargo build --release` sozinho **não** produz um app funcional —
+> ele não embute o frontend e o binário tenta carregar `localhost:1420`. Só a
+> CLI (`tauri build`) orquestra o bundle. Ver ADR-0005.

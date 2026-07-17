@@ -1,0 +1,139 @@
+/* ============================================================
+   AURORA — the NEXUS design system
+   ------------------------------------------------------------
+   Minimalismo moderno premium: Linear + Craft + Apple HIG.
+   Dark by default, data-dense yet calm.
+
+   The "wow" comes from typography, spacing, hierarchy and
+   micro-motion — never from loud gradients or heavy shadows.
+
+   Themes swap ONLY the variables in this file. Any component
+   reaching for a raw hex value is a bug.
+   ============================================================ */
+
+/* --- DARK (default) ------------------------------------- */
+:root,
+:root[data-theme="dark"] {
+  --bg-base: #0c0d10; /* app background — near-black, blue-leaning */
+  --bg-surface: #131418; /* cards, panels */
+  --bg-raised: #1a1c22; /* popovers, command palette */
+  --bg-hover: #1e2029;
+  --border-subtle: #26282f;
+  --border-strong: #343742;
+
+  --text-primary: #e8eaf0;
+  --text-secondary: #9ba0ad;
+  --text-tertiary: #5e626e;
+
+  --accent: #7c8cf8; /* Nexus indigo — primary actions and focus */
+  --accent-hover: #8f9dfa;
+  --accent-muted: #7c8cf826;
+
+  --success: #4ade80; /* habits done, streaks */
+  --warning: #fbbf24;
+  --danger: #f87171;
+
+  --shadow-float: 0 8px 32px rgb(0 0 0 / 0.45);
+  color-scheme: dark;
+}
+
+/* --- LIGHT ---------------------------------------------- */
+:root[data-theme="light"] {
+  --bg-base: #f7f8fa;
+  --bg-surface: #ffffff;
+  --bg-raised: #ffffff;
+  --bg-hover: #f0f1f5;
+  --border-subtle: #e4e6ec;
+  --border-strong: #d0d3dd;
+
+  --text-primary: #14161c;
+  --text-secondary: #5b6070;
+  --text-tertiary: #8e93a3;
+
+  --accent: #5566e8;
+  --accent-hover: #4859d8;
+  --accent-muted: #5566e81f;
+
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+
+  --shadow-float: 0 8px 32px rgb(15 20 40 / 0.12);
+  color-scheme: light;
+}
+
+:root {
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* Spacing — 4px scale. Content grid is 8pt. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Density */
+  --row-list: 40px; /* list rows */
+  --row-data: 32px; /* tables and dense data */
+  --sidebar-w: 240px;
+  --sidebar-w-collapsed: 56px;
+  --topbar-h: 48px;
+
+  /* Motion — 150–200ms, decelerating. Anything slower feels sluggish;
+     anything faster reads as a jump cut. */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --dur-fast: 150ms;
+  --dur-base: 200ms;
+
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
+}
+
+/* Expose tokens to Tailwind v4 utilities (bg-surface, text-secondary, …) */
+@theme inline {
+  --color-base: var(--bg-base);
+  --color-surface: var(--bg-surface);
+  --color-raised: var(--bg-raised);
+  --color-hover: var(--bg-hover);
+  --color-subtle: var(--border-subtle);
+  --color-strong: var(--border-strong);
+
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-tertiary: var(--text-tertiary);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-muted: var(--accent-muted);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --ease-aurora: var(--ease);
+}
+
+/* --- Motion accessibility -------------------------------
+   Not a nicety: motion can trigger vestibular symptoms. The
+   app must remain fully usable with animation off. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
