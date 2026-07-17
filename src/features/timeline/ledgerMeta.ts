@@ -171,11 +171,9 @@ export function describe(entry: LedgerEntry): string {
     }
   }
 
-  if (entry.eventType === "completed") {
-    const achievement = asString(p.achievement);
-    if (achievement) return achievement;
-  }
-
+  // Uma conquista (`completed` com `achievement`) já tem `titleSnapshot` humano
+  // — "📖 Terminou 'X' ★★★★★", "🏆 Y — objetivo alcançado!". A chave crua do
+  // payload ('book_finished') é vocabulário interno, não texto de tela.
   return title || KIND_LABEL[entry.entityKind] || prettify(entry.eventType);
 }
 

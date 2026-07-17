@@ -18,6 +18,7 @@
 
 import {
   Calendar,
+  FileText,
   FolderKanban,
   History,
   Inbox,
@@ -40,6 +41,9 @@ export const NAV_ITEMS: NavItem[] = [
   { path: "/", label: "Hub", icon: LayoutGrid, jumpKey: "h" },
   { path: "/calendar", label: "Calendário", icon: Calendar, jumpKey: "c" },
   { path: "/inbox", label: "Inbox", icon: Inbox, jumpKey: "i" },
+  // Notas é global como o Inbox e a Timeline: uma nota atravessa Esferas (os
+  // [[wiki-links]] ligam qualquer node), então ela mora na rail, não numa Esfera.
+  { path: "/notes", label: "Notas", icon: FileText, jumpKey: "n" },
   { path: "/timeline", label: "Timeline", icon: History, jumpKey: "t" },
   { path: "/insights", label: "Insights", icon: Sparkles, jumpKey: "s" },
 ];
