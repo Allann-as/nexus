@@ -259,6 +259,41 @@
   }
 }
 
+/* Fechar uma caixinha (Objetivos Financeiros): o troféu entra num
+   pulinho dourado. Uma vez, e para. Só transform/opacity. */
+@keyframes nexus-celebrate {
+  0% {
+    transform: scale(0.4) rotate(-12deg);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.15) rotate(4deg);
+    opacity: 1;
+  }
+  70% {
+    transform: scale(0.95) rotate(0deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* O halo dourado da conquista: cresce e some, uma vez. */
+@keyframes nexus-burst {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
 /* --- Motion accessibility -------------------------------------
    Não é gentileza: movimento dispara sintomas vestibulares. O app
    tem que continuar inteiro com a animação desligada. O count-up

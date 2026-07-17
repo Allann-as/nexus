@@ -36,6 +36,7 @@ import { HealthExams } from "./HealthExams";
 import { FinanceDashboard } from "../finance/FinanceDashboard";
 import { ContributionsTab } from "../finance/ContributionsTab";
 import { AporteModal } from "../finance/AporteModal";
+import { CaixinhasTab } from "../fin-goals/CaixinhasTab";
 
 /**
  * As tabs de cada template.
@@ -64,9 +65,8 @@ const TABS: Record<Template, Tab[]> = {
     // Esfera. Uma tab só para ela repetiria o que o Painel já mostra.
   ],
   fin_goals: [
-    { key: "dashboard", label: "Painel" },
+    { key: "boxes", label: "Caixinhas" },
     { key: "goals", label: "Metas" },
-    { key: "boxes", label: "Caixinhas", milestone: "M4" },
   ],
   career: [
     { key: "dashboard", label: "Painel" },
@@ -238,6 +238,10 @@ function SphereContent({
 
   if (sphere.template === "finance") {
     return <FinanceContent tab={tab} />;
+  }
+
+  if (sphere.template === "fin_goals") {
+    return <CaixinhasTab areaId={sphere.id} />;
   }
 
   return <SphereDashboard sphere={sphere} card={card} />;
