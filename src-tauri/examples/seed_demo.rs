@@ -17,9 +17,12 @@ use nexus_lib::application::ports::{
     NewContribution, NewEvent, NewEventDetails, NewGoal, NewGoalDetails, NewMilestone,
 };
 use nexus_lib::application::use_cases::{
-    areas::AreaService, events::EventService, fin_goals::FinGoalService, finance::FinanceService,
-    goals::GoalService, habits::HabitService, nodes::NodeService, tasks::TaskService,
+    areas::AreaService, books::BookService, career::CareerService, events::EventService,
+    fin_goals::FinGoalService, finance::FinanceService, goals::GoalService, habits::HabitService,
+    nodes::NodeService, notes::NoteService, tasks::TaskService,
 };
+use nexus_lib::application::ports::LedgerRepository;
+use nexus_lib::domain::entities::CareerMilestoneKind;
 use nexus_lib::domain::entities::{
     AssetClass, Direction, Kind, MilestoneKind, ProgressSource, Template,
 };
@@ -30,10 +33,12 @@ use nexus_lib::infrastructure::clock::{SystemClock, Uuid7Gen};
 use nexus_lib::infrastructure::db::Db;
 use nexus_lib::infrastructure::paths::Paths;
 use nexus_lib::infrastructure::repositories::{
-    area_repo::SqliteAreaRepository, contribution_repo::SqliteContributionRepository,
-    event_repo::SqliteEventRepository, fin_goal_repo::SqliteFinGoalRepository,
-    goal_repo::SqliteGoalRepository, habit_repo::SqliteHabitRepository,
-    node_repo::SqliteNodeRepository, task_repo::SqliteTaskRepository,
+    area_repo::SqliteAreaRepository, book_repo::SqliteBookRepository,
+    contribution_repo::SqliteContributionRepository, event_repo::SqliteEventRepository,
+    fin_goal_repo::SqliteFinGoalRepository, goal_repo::SqliteGoalRepository,
+    habit_repo::SqliteHabitRepository, ledger_repo::SqliteLedgerRepository,
+    node_repo::SqliteNodeRepository, note_repo::SqliteNoteRepository,
+    task_repo::SqliteTaskRepository,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -98,9 +103,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let fin_goals = FinGoalService {
         fin_goals: fin_goal_repo,
-        areas: area_repo,
-        ids,
+        areas: area_repo.clone(),
+        ids: ids.clone(),
         clock: clock.clone(),
+    };
+    let books = BookService {
+        books: Arc::new(SqliteBookRepository::new(db.clone())),
+        areas: area_repo.clone(),
+        ids: ids.clone(),
+        clock: clock.clone(),
+    };
+    let ledger_repo: Arc<dyn LedgerRepository> = Arc::new(SqliteLedgerRepository::new(db.clone()));
+    let career = CareerService {
+        ledger: ledger_repo,
+        ids: ids.clone(),
+        clock: clock.clone(),
+    };
+    let notes_svc = NoteService {
+        notes: Arc::new(SqliteNoteRepository::new(db.clone())),
+        nodes: Arc::new(SqliteNodeRepository::new(db.clone())),
+        ids: ids.clone(),
+        clock: clock.clone(),
+        paths: paths.clone(),
     };
 
     // ===== Esferas =====
@@ -651,6 +675,102 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         n_deposits += 1;
     }
     println!("  2 caixinhas com {n_deposits} depósitos");
+
+    // ===== Biblioteca (M4) =====
+    //
+    // Livros em estados variados, para a estante ter fila, leitura em andamento e
+    // terminados com nota — e a meta anual, para o anel ter numerador.
+    let estudos = all_areas
+        .iter()
+        .find(|a| a.template == Template::Studies)
+        .expect("a Esfera Estudos é semeada pela 0005");
+
+    let nome_do_vento = books.create(
+        "O Nome do Vento",
+        Some(estudos.id.clone()),
+        Some("Patrick Rothfuss".into()),
+        Some(656),
+        Some("ficcao".into()),
+    )?;
+    books.set_progress(&nome_do_vento.id, 320)?; // lendo, ~metade
+
+    let clean = books.create(
+        "Código Limpo",
+        Some(estudos.id.clone()),
+        Some("Robert C. Martin".into()),
+        Some(431),
+        Some("carreira".into()),
+    )?;
+    books.finish(&clean.id, Some(5), Some("Mudou como escrevo funções.".into()))?;
+
+    let sapiens = books.create(
+        "Sapiens",
+        Some(estudos.id.clone()),
+        Some("Yuval Harari".into()),
+        Some(443),
+        Some("pessoal".into()),
+    )?;
+    books.finish(&sapiens.id, Some(4), None)?;
+
+    books.create(
+        "A Guerra dos Tronos",
+        Some(estudos.id.clone()),
+        Some("George R. R. Martin".into()),
+        Some(694),
+        Some("ficcao".into()),
+    )?; // fila
+
+    books.set_reading_goal(12)?;
+    println!("  4 livros na estante + meta de leitura");
+
+    // ===== Carreira: um marco (M4) =====
+    career.record_milestone(
+        "Promovido a Engenheiro Sênior",
+        CareerMilestoneKind::Promotion,
+        Some(format_day(today - chrono::Duration::days(40))),
+        Some("Depois de 2 anos no time de plataforma.".into()),
+    )?;
+    println!("  1 marco de carreira");
+
+    // ===== Notas com wiki-links (M4) =====
+    //
+    // Duas notas que se citam: a segunda ganha um backlink automático da primeira.
+    let protocolo = notes_svc.create("Protocolo de sono", Some(saude.id.clone()))?;
+    let diario = notes_svc.create("Diário — semana", Some(saude.id.clone()))?;
+    notes_svc.save_body(
+        &protocolo.id,
+        "# Protocolo de sono\n\n- Dormir 7h30 por noite\n- Sem telas 1h antes\n\nRelacionado: [[Diário — semana]]",
+    )?;
+    notes_svc.save_body(
+        &diario.id,
+        "Segui o [[Protocolo de sono]] 5 de 7 dias. Melhor disposição.\n\n- [x] segunda\n- [ ] domingo",
+    )?;
+    println!("  2 notas com wiki-links e backlinks");
+
+    // ===== Um evento recorrente por dia-da-semana (ADR-0024) =====
+    //
+    // "Reunião de equipe, toda 3ª terça": a variante MonthlyByWeekday do M4,
+    // materializada como qualquer outra recorrência.
+    if let Some(first) = today.with_day(1) {
+        events.create(&NewEvent {
+            title: "Reunião de equipe".into(),
+            area_id: Some(carreira.id.clone()),
+            details: NewEventDetails {
+                starts_at: at(first, 10, 0),
+                ends_at: at(first, 11, 0),
+                all_day: false,
+                rrule: Some(Recurrence::MonthlyByWeekday {
+                    interval: 1,
+                    week: 3,
+                    weekday: 2,
+                }),
+                recurrence_end: None,
+                location: Some("Sala 3".into()),
+                category: None,
+            },
+        })?;
+        println!("  1 série 'toda 3ª terça'");
+    }
 
     // ===== Inbox =====
     for title in [

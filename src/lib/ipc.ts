@@ -516,6 +516,8 @@ export type Recurrence =
   | { type: "daily"; interval: number }
   | { type: "weekly"; interval: number; days: number[] }
   | { type: "monthly"; interval: number }
+  /** "A terceira terça do mês": `week` 1–5, `weekday` 0=domingo…6=sábado. */
+  | { type: "monthly_by_weekday"; interval: number; week: number; weekday: number }
   | { type: "yearly"; interval: number };
 
 /** A REGRA de um evento. O que o calendário desenha é a `Occurrence`. */

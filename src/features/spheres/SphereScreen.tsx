@@ -39,6 +39,7 @@ import { AporteModal } from "../finance/AporteModal";
 import { CaixinhasTab } from "../fin-goals/CaixinhasTab";
 import { CareerContent } from "../career/CareerContent";
 import { StudiesContent } from "../studies/StudiesContent";
+import { SimpleContent } from "../simple/SimpleContent";
 
 /**
  * As tabs de cada template.
@@ -87,8 +88,8 @@ const TABS: Record<Template, Tab[]> = {
   simple: [
     { key: "dashboard", label: "Painel" },
     { key: "goals", label: "Metas" },
-    { key: "agenda", label: "Agenda", milestone: "M4" },
-    { key: "checklists", label: "Checklists", milestone: "M4" },
+    { key: "agenda", label: "Agenda" },
+    { key: "checklists", label: "Checklists" },
   ],
 };
 
@@ -252,6 +253,10 @@ function SphereContent({
 
   if (sphere.template === "studies") {
     return <StudiesContent areaId={sphere.id} tab={tab} />;
+  }
+
+  if (sphere.template === "simple") {
+    return <SimpleContent sphere={sphere} card={card} tab={tab} />;
   }
 
   return <SphereDashboard sphere={sphere} card={card} />;
