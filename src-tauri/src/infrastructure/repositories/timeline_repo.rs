@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use rusqlite::{params, Row};
 
+use crate::application::ports::{MonthRollup, TimelineRepository};
 use crate::domain::errors::Result;
 use crate::domain::ledger::LedgerEntry;
 use crate::infrastructure::db::Db;
@@ -21,20 +22,6 @@ impl SqliteTimelineRepository {
     pub fn new(db: Arc<Db>) -> Self {
         Self { db }
     }
-}
-
-/// Um mês congelado — as contagens que a visão ANO desenha.
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MonthRollup {
-    /// 'YYYY-MM'.
-    pub month: String,
-    /// Total de eventos do mês.
-    pub events: i64,
-    /// Conquistas (event_type = 'completed').
-    pub completed: i64,
-    /// Marcações de hábito ('checked').
-    pub checked: i64,
 }
 
 fn map_entry(row: &Row) -> rusqlite::Result<LedgerEntry> {
@@ -53,11 +40,11 @@ fn map_entry(row: &Row) -> rusqlite::Result<LedgerEntry> {
 const SELECT: &str =
     "SELECT seq, ts, day, entity_id, entity_kind, event_type, payload, title_snapshot FROM ledger";
 
-impl SqliteTimelineRepository {
+impl TimelineRepository for SqliteTimelineRepository {
     /// Os meses ('YYYY-MM') com evento no ledger que são ANTERIORES a
     /// `current_month` — os candidatos a congelar. O mês corrente nunca entra:
     /// ele ainda está em curso.
-    pub fn ledger_months_before(&self, current_month: &str) -> Result<Vec<String>> {
+    fn ledger_months_before(&self, current_month: &str) -> Result<Vec<String>> {
         self.db.with_read(|c| {
             let mut stmt = c.prepare_cached(
                 "SELECT DISTINCT substr(day, 1, 7) AS m FROM ledger
@@ -70,7 +57,7 @@ impl SqliteTimelineRepository {
     }
 
     /// Os meses que já têm rollup congelado.
-    pub fn rolled_up_months(&self) -> Result<Vec<String>> {
+    fn rolled_up_months(&self) -> Result<Vec<String>> {
         self.db.with_read(|c| {
             let mut stmt =
                 c.prepare_cached("SELECT DISTINCT month FROM timeline_rollups ORDER BY month")?;
@@ -81,7 +68,7 @@ impl SqliteTimelineRepository {
 
     /// Congela um mês: grava as contagens agregadas em `timeline_rollups`, numa
     /// transação. `INSERT OR REPLACE` torna o congelamento idempotente.
-    pub fn freeze_month(&self, month: &str, now: i64) -> Result<()> {
+    fn freeze_month(&self, month: &str, now: i64) -> Result<()> {
         self.db.with_write(|conn| {
             let tx = conn.transaction()?;
             let day_from = format!("{month}-01");
@@ -115,7 +102,7 @@ impl SqliteTimelineRepository {
     /// Meses completos vêm de `timeline_rollups` (congelados). O mês corrente,
     /// que ainda não foi congelado, é computado AO VIVO do ledger e mesclado — a
     /// visão ANO nunca mostra o mês em curso vazio.
-    pub fn year(&self, year: &str, current_month: &str) -> Result<Vec<MonthRollup>> {
+    fn year(&self, year: &str, current_month: &str) -> Result<Vec<MonthRollup>> {
         self.db.with_read(|c| {
             // Os congelados do ano.
             let mut stmt = c.prepare_cached(
@@ -172,7 +159,7 @@ impl SqliteTimelineRepository {
     ///
     /// `today` é 'YYYY-MM-DD'; a busca casa o sufixo 'MM-DD' e exclui o próprio
     /// hoje (só o passado — "há 1/2/5 anos").
-    pub fn on_this_day(&self, today: &str) -> Result<Vec<LedgerEntry>> {
+    fn on_this_day(&self, today: &str) -> Result<Vec<LedgerEntry>> {
         self.db.with_read(|c| {
             let mmdd = &today[5..]; // 'MM-DD'
             let mut stmt = c.prepare_cached(&format!(

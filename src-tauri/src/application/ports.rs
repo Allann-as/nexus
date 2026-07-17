@@ -163,6 +163,34 @@ pub trait LedgerRepository: Send + Sync {
     fn count(&self) -> Result<i64>;
 }
 
+/* ===== Timeline: a Máquina do Tempo ===== */
+
+/// Um mês congelado — as contagens que a visão ANO desenha.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MonthRollup {
+    /// 'YYYY-MM'.
+    pub month: String,
+    pub events: i64,
+    /// Conquistas (event_type = 'completed').
+    pub completed: i64,
+    /// Marcações de hábito ('checked').
+    pub checked: i64,
+}
+
+pub trait TimelineRepository: Send + Sync {
+    /// Meses ('YYYY-MM') com evento no ledger anteriores a `current_month`.
+    fn ledger_months_before(&self, current_month: &str) -> Result<Vec<String>>;
+    /// Meses já congelados em `timeline_rollups`.
+    fn rolled_up_months(&self) -> Result<Vec<String>>;
+    /// Congela um mês (idempotente).
+    fn freeze_month(&self, month: &str, now: i64) -> Result<()>;
+    /// Os rollups de um ano; o mês corrente é computado ao vivo.
+    fn year(&self, year: &str, current_month: &str) -> Result<Vec<MonthRollup>>;
+    /// "Neste dia": eventos do mesmo 'MM-DD' de anos anteriores.
+    fn on_this_day(&self, today: &str) -> Result<Vec<LedgerEntry>>;
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchHit {

@@ -12,3 +12,4 @@ pub mod habits;
 pub mod nodes;
 pub mod spheres;
 pub mod tasks;
+pub mod timeline;

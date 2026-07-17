@@ -11,6 +11,7 @@ use crate::application::use_cases::{
     areas::AreaService, books::BookService, career::CareerService, dashboard::DashboardService,
     events::EventService, fin_goals::FinGoalService, finance::FinanceService, goals::GoalService,
     habits::HabitService, nodes::NodeService, spheres::SphereService, tasks::TaskService,
+    timeline::TimelineService,
 };
 use crate::domain::errors::Result;
 use crate::infrastructure::clock::{SystemClock, Uuid7Gen};
@@ -23,7 +24,7 @@ use crate::infrastructure::repositories::{
     fin_goal_repo::SqliteFinGoalRepository, goal_repo::SqliteGoalRepository,
     habit_repo::SqliteHabitRepository, ledger_repo::SqliteLedgerRepository,
     node_repo::SqliteNodeRepository, sphere_repo::SqliteSphereRepository,
-    task_repo::SqliteTaskRepository,
+    task_repo::SqliteTaskRepository, timeline_repo::SqliteTimelineRepository,
 };
 
 pub struct AppState {
@@ -39,6 +40,7 @@ pub struct AppState {
     pub fin_goals: FinGoalService,
     pub books: BookService,
     pub career: CareerService,
+    pub timeline: TimelineService,
     pub dashboard: DashboardService,
     pub spheres: SphereService,
     pub ledger: Arc<dyn LedgerRepository>,
@@ -123,6 +125,12 @@ impl AppState {
             clock: clock.clone(),
         };
 
+        let timeline = TimelineService {
+            timeline: Arc::new(SqliteTimelineRepository::new(db.clone())),
+            ledger: ledger.clone(),
+            clock: clock.clone(),
+        };
+
         let dashboard = DashboardService {
             habits: habits.clone(),
             tasks: tasks.clone(),
@@ -157,6 +165,7 @@ impl AppState {
             fin_goals,
             books,
             career,
+            timeline,
             dashboard,
             spheres,
             ledger,

@@ -1121,3 +1121,33 @@ export const recordCareerMilestone = (m: {
 
 /** Os marcos de carreira, do mais recente ao mais antigo. */
 export const careerMilestones = () => call<LedgerEntry[]>("career_milestones");
+
+/* ===== Timeline: a Máquina do Tempo ===== */
+
+/** Um mês congelado da visão ANO — mirrors `ports::MonthRollup`. */
+export interface MonthRollup {
+  /** 'YYYY-MM'. */
+  month: string;
+  events: number;
+  completed: number;
+  checked: number;
+}
+
+/** A visão MÊS: os eventos entre dois dias 'YYYY-MM-DD', paginados. */
+export const timelineRange = (
+  fromDay: string,
+  toDay: string,
+  limit = 500,
+  offset = 0,
+) => call<LedgerEntry[]>("timeline_range", { fromDay, toDay, limit, offset });
+
+/** A visão ANO: um resumo por mês de um ano 'YYYY'. */
+export const timelineYear = (year: string) =>
+  call<MonthRollup[]>("timeline_year", { year });
+
+/** "Neste dia": o que aconteceu no mesmo dia de anos anteriores. */
+export const onThisDay = () => call<LedgerEntry[]>("on_this_day");
+
+/** Congela os meses completos ainda pendentes. Chamado ao abrir a Timeline. */
+export const ensureTimelineRollups = () =>
+  call<number>("ensure_timeline_rollups");
