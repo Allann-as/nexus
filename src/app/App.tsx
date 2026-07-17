@@ -12,7 +12,8 @@ import { HabitsScreen } from "../features/habits/HabitsScreen";
 import { ProjectsScreen } from "../features/projects/ProjectsScreen";
 import { GoalsScreen } from "../features/goals/GoalsScreen";
 import { CalendarScreen } from "../features/calendar/CalendarScreen";
-import { NotesScreen, TimelineScreen, InsightsScreen } from "../features/screens";
+import { NotesScreen, InsightsScreen } from "../features/screens";
+import { TimelineScreen } from "../features/timeline/TimelineScreen";
 import { useUi, applyTheme } from "../stores/ui";
 
 const queryClient = new QueryClient({

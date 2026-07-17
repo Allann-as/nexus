@@ -24,6 +24,7 @@ import { Gauge } from "../../design-system/charts";
 import { ScoreDetail } from "./ScoreDetail";
 import { SphereCard } from "./SphereCard";
 import { TodayStrip } from "./TodayStrip";
+import { OnThisDay } from "../timeline/OnThisDay";
 
 export function HubScreen() {
   const navigate = useNavigate();
@@ -159,6 +160,9 @@ export function HubScreen() {
           <SectionLabel>Hoje</SectionLabel>
           <TodayStrip data={today.data} isPending={today.isPending} />
         </section>
+
+        {/* ===== neste dia (só aparece quando há passado) ===== */}
+        <OnThisDay />
       </div>
     </div>
   );
