@@ -1,6 +1,7 @@
 //! Implementações SQLite dos ports declarados em `application::ports`.
 
 pub mod area_repo;
+pub mod contribution_repo;
 pub mod event_repo;
 pub mod goal_repo;
 pub mod habit_repo;

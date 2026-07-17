@@ -120,7 +120,7 @@ impl GoalService {
             ts: self.clock.now_ms(),
             day: self.clock.today_local(),
             entity_id: id.clone(),
-            entity_kind: Kind::Goal,
+            entity_kind: Kind::Goal.into(),
             event_type: EventType::Created,
             payload: json!({
                 "metric": d.metric_name,
@@ -193,7 +193,7 @@ impl GoalService {
                 NexusError::Validation(format!("instante fora do calendário: {noted_at}"))
             })?),
             entity_id: goal_id.to_string(),
-            entity_kind: Kind::Goal,
+            entity_kind: Kind::Goal.into(),
             // O vocabulário do ledger tem um evento só para isto: a timeline
             // filtra por ele para desenhar a série da meta sem JOIN nenhum.
             event_type: EventType::GoalCheckpoint,
@@ -297,7 +297,7 @@ impl GoalService {
             ts: self.clock.now_ms(),
             day: self.clock.today_local(),
             entity_id: id.clone(),
-            entity_kind: Kind::Milestone,
+            entity_kind: Kind::Milestone.into(),
             event_type: EventType::Created,
             payload: json!({
                 "goal": m.goal_id,
@@ -346,7 +346,7 @@ impl GoalService {
             ts: self.clock.now_ms(),
             day: self.clock.today_local(),
             entity_id: id.to_string(),
-            entity_kind: Kind::Milestone,
+            entity_kind: Kind::Milestone.into(),
             // 'completed' é o que o BI conta como conclusão; desmarcar é a
             // correção de um clique, não uma conclusão negativa.
             event_type: if done {

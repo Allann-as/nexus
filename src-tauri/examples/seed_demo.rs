@@ -14,13 +14,15 @@ use std::sync::Arc;
 
 use nexus_lib::application::ports::Clock;
 use nexus_lib::application::ports::{
-    NewEvent, NewEventDetails, NewGoal, NewGoalDetails, NewMilestone,
+    NewContribution, NewEvent, NewEventDetails, NewGoal, NewGoalDetails, NewMilestone,
 };
 use nexus_lib::application::use_cases::{
-    areas::AreaService, events::EventService, goals::GoalService, habits::HabitService,
-    nodes::NodeService, tasks::TaskService,
+    areas::AreaService, events::EventService, finance::FinanceService, goals::GoalService,
+    habits::HabitService, nodes::NodeService, tasks::TaskService,
 };
-use nexus_lib::domain::entities::{Direction, Kind, MilestoneKind, ProgressSource, Template};
+use nexus_lib::domain::entities::{
+    AssetClass, Direction, Kind, MilestoneKind, ProgressSource, Template,
+};
 use nexus_lib::domain::recurrence::Recurrence;
 use nexus_lib::domain::schedule::{format_day, parse_day, Schedule};
 use nexus_lib::domain::streak::TickStatus;
@@ -28,9 +30,10 @@ use nexus_lib::infrastructure::clock::{SystemClock, Uuid7Gen};
 use nexus_lib::infrastructure::db::Db;
 use nexus_lib::infrastructure::paths::Paths;
 use nexus_lib::infrastructure::repositories::{
-    area_repo::SqliteAreaRepository, event_repo::SqliteEventRepository,
-    goal_repo::SqliteGoalRepository, habit_repo::SqliteHabitRepository,
-    node_repo::SqliteNodeRepository, task_repo::SqliteTaskRepository,
+    area_repo::SqliteAreaRepository, contribution_repo::SqliteContributionRepository,
+    event_repo::SqliteEventRepository, goal_repo::SqliteGoalRepository,
+    habit_repo::SqliteHabitRepository, node_repo::SqliteNodeRepository,
+    task_repo::SqliteTaskRepository,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -83,6 +86,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         goals: goal_repo,
         nodes: node_repo,
         areas: area_repo,
+        ids: ids.clone(),
+        clock: clock.clone(),
+    };
+    let finance = FinanceService {
+        contributions: Arc::new(SqliteContributionRepository::new(db.clone())),
         ids,
         clock: clock.clone(),
     };
@@ -533,6 +541,56 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     println!("  {} metas com sub-desafios", goals.list(None)?.len());
+
+    // ===== Finanças (M3.5) =====
+    //
+    // Aportes ao longo de 8 meses, em várias classes e dois bancos: é o que dá
+    // à área acumulada uma curva, ao donut fatias, às barras bancos, e à Saúde
+    // Financeira as quatro parcelas (regularidade, diversificação, consistência
+    // — e a de objetivos redistribuída, que chega no M4).
+    //
+    // Determinístico: (mês, banco, classe, centavos). Um aporte por mês, com um
+    // extra em alguns, para a média de 6m e a série terem textura.
+    let aportes: &[(u32, &str, AssetClass, i64)] = &[
+        (7, "acct-btg-invest", AssetClass::RendaFixa, 120_000),
+        (6, "acct-btg-invest", AssetClass::Acoes, 80_000),
+        (6, "acct-nubank", AssetClass::Reserva, 50_000),
+        (5, "acct-btg-invest", AssetClass::Fiis, 60_000),
+        (4, "acct-btg-invest", AssetClass::RendaFixa, 100_000),
+        (4, "acct-btg-invest", AssetClass::EtfExterior, 70_000),
+        (3, "acct-btg-invest", AssetClass::Acoes, 90_000),
+        (2, "acct-btg-invest", AssetClass::Cripto, 40_000),
+        (2, "acct-nubank", AssetClass::Reserva, 50_000),
+        (1, "acct-btg-invest", AssetClass::RendaFixa, 110_000),
+        (0, "acct-btg-invest", AssetClass::Fiis, 65_000),
+    ];
+    use chrono::Datelike;
+    let mut n_aportes = 0;
+    for (months_ago, account, class, cents) in aportes {
+        // O dia 5 de cada mês — uma data estável para o mês bater na série.
+        let day = today
+            .checked_sub_months(chrono::Months::new(*months_ago))
+            .map(|d| d.with_day(5).unwrap_or(d))
+            .unwrap_or(today);
+        finance.contribute(&NewContribution {
+            account_id: (*account).into(),
+            asset_class: *class,
+            amount_cents: *cents,
+            happened_on: format_day(day),
+            note: None,
+        })?;
+        n_aportes += 1;
+    }
+    // Um resgate, para a lista mostrar o vermelho e o líquido fechar certo.
+    finance.contribute(&NewContribution {
+        account_id: "acct-btg-invest".into(),
+        asset_class: AssetClass::Cripto,
+        amount_cents: -15_000,
+        happened_on: format_day(today - chrono::Duration::days(10)),
+        note: Some("realização parcial".into()),
+    })?;
+    n_aportes += 1;
+    println!("  {n_aportes} aportes em 8 meses");
 
     // ===== Inbox =====
     for title in [

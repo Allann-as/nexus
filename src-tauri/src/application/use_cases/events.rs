@@ -86,7 +86,7 @@ impl EventService {
             ts: self.clock.now_ms(),
             day: self.clock.today_local(),
             entity_id: id.clone(),
-            entity_kind: Kind::Event,
+            entity_kind: Kind::Event.into(),
             event_type: EventType::Created,
             payload: json!({
                 "startsAt": d.starts_at,
@@ -131,6 +131,15 @@ impl EventService {
         self.events.update(id, patch, self.clock.now_ms())
     }
 
+    /// Os próximos compromissos de uma categoria (os exames da Saúde, §3.1).
+    ///
+    /// A partir de hoje, o mais próximo primeiro: é o que o dashboard usa para
+    /// "próximo exame" e o alerta de < 7 dias.
+    pub fn upcoming_by_category(&self, category: &str, limit: i64) -> Result<Vec<Occurrence>> {
+        self.events
+            .upcoming_by_category(category, &self.clock.today_local(), limit)
+    }
+
     /// Arrasta UMA ocorrência para outro horário (o timeblocking).
     ///
     /// `occurrence_start` e não só o id do evento: a chave de uma ocorrência é
@@ -156,7 +165,7 @@ impl EventService {
             ts: self.clock.now_ms(),
             day: self.clock.today_local(),
             entity_id: event_id.to_string(),
-            entity_kind: Kind::Event,
+            entity_kind: Kind::Event.into(),
             event_type: EventType::StatusChanged,
             payload: json!({
                 "moved": true,
@@ -212,7 +221,7 @@ impl EventService {
             ts: self.clock.now_ms(),
             day: self.clock.today_local(),
             entity_id: event_id.to_string(),
-            entity_kind: Kind::Event,
+            entity_kind: Kind::Event.into(),
             event_type: EventType::StatusChanged,
             payload: json!({
                 "resized": true,
@@ -249,7 +258,7 @@ impl EventService {
             ts: self.clock.now_ms(),
             day: self.clock.today_local(),
             entity_id: event_id.to_string(),
-            entity_kind: Kind::Event,
+            entity_kind: Kind::Event.into(),
             event_type: EventType::StatusChanged,
             payload: json!({ "cancelled": true, "occurrence": occurrence_start }),
             title_snapshot: event.title.clone(),
@@ -271,7 +280,7 @@ impl EventService {
             ts: self.clock.now_ms(),
             day: self.clock.today_local(),
             entity_id: id.to_string(),
-            entity_kind: Kind::Event,
+            entity_kind: Kind::Event.into(),
             event_type: EventType::Deleted,
             payload: json!({ "startsAt": event.starts_at, "series": event.rrule.is_some() }),
             title_snapshot: event.title.clone(),

@@ -807,3 +807,123 @@ export const setGoalProgressSource = (id: string, source: ProgressSource) =>
 /** Arrasta um sub-desafio para a posição `toIndex` da árvore. */
 export const moveMilestone = (id: string, toIndex: number) =>
   call<void>("move_milestone", { id, toIndex });
+
+/* ===== calendário: exames por categoria (M3.5) ===== */
+
+/** Os próximos compromissos de uma categoria — os exames da Saúde (§3.1). */
+export const eventsByCategory = (category: string, limit = 20) =>
+  call<Occurrence[]>("events_by_category", { category, limit });
+
+/* ===== finanças (M3.5) ===== */
+
+/** Uma conta/banco. Espelha `ports::Account` e a tabela `accounts` (0005). */
+export interface Account {
+  id: string;
+  name: string;
+  /** 'banking' | 'investment'. */
+  kind: string;
+  color: string;
+  sortOrder: number;
+}
+
+/**
+ * A classe de um ativo. Espelha `domain::entities::AssetClass` e o CHECK de
+ * `contributions.asset_class` (0010).
+ */
+export type AssetClass =
+  | "renda_fixa"
+  | "acoes"
+  | "fiis"
+  | "etf_exterior"
+  | "cripto"
+  | "reserva"
+  | "outros";
+
+export interface Contribution {
+  id: string;
+  accountId: string;
+  assetClass: string;
+  /** Centavos. Negativo é resgate. */
+  amountCents: number;
+  happenedOn: string;
+  note: string | null;
+  createdAt: number;
+}
+
+/** Um total por chave (classe ou banco) — as fatias do donut e das barras. */
+export interface Bucket {
+  key: string;
+  label: string;
+  cents: number;
+}
+
+/** O aporte de um mês — o ponto da área acumulada. */
+export interface MonthTotal {
+  month: string;
+  cents: number;
+}
+
+/** Uma parcela da Saúde Financeira, com a conta que a produziu. */
+export interface FinancialComponent {
+  label: string;
+  weight: number;
+  ratio: number;
+  detail: string;
+}
+
+/** A Saúde Financeira 0–100, com o breakdown e a fórmula. */
+export interface FinancialHealth {
+  /** `null` quando ainda não há aporte — não zero. */
+  value: number | null;
+  components: FinancialComponent[];
+  formula: string;
+}
+
+/** O dashboard das Finanças — mirrors `use_cases::finance::FinanceOverview`. */
+export interface FinanceOverview {
+  totalContributedCents: number;
+  /** `null` = patrimônio nunca informado à mão; a UI mostra o total aportado. */
+  portfolioCents: number | null;
+  byClass: Bucket[];
+  byAccount: Bucket[];
+  /** Aporte por mês, do mais antigo ao mais novo. */
+  monthly: MonthTotal[];
+  thisMonthCents: number;
+  avg6mCents: number;
+  streakMonths: number;
+  health: FinancialHealth;
+}
+
+export const listAccounts = () => call<Account[]>("list_accounts");
+
+/**
+ * Registra um aporte (ou resgate, com `amountCents` negativo).
+ *
+ * Um aporte é um fato da vida do usuário: ele grava no ledger (ADR-0023/0027).
+ */
+export const addContribution = (c: {
+  accountId: string;
+  assetClass: AssetClass;
+  amountCents: number;
+  happenedOn: string;
+  note?: string | null;
+}) =>
+  call<Contribution>("add_contribution", {
+    contribution: {
+      accountId: c.accountId,
+      assetClass: c.assetClass,
+      amountCents: c.amountCents,
+      happenedOn: c.happenedOn,
+      note: c.note ?? null,
+    },
+  });
+
+export const recentContributions = (limit = 50) =>
+  call<Contribution[]>("recent_contributions", { limit });
+
+/** Todo o dashboard das Finanças, numa chamada. */
+export const financeOverview = () => call<FinanceOverview>("finance_overview");
+
+/** O patrimônio informado à mão para um mês ('AAAA-MM'). */
+export const setPortfolioSnapshot = (month: string, totalCents: number) =>
+  call<void>("set_portfolio_snapshot", { month, totalCents });

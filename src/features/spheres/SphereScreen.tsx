@@ -13,14 +13,29 @@
 
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Settings2 } from "lucide-react";
 
-import { getArea, sphereOverview, toNexusError, type Template } from "../../lib/ipc";
+import {
+  getArea,
+  listAccounts,
+  sphereOverview,
+  toNexusError,
+  type Area,
+  type SphereCard,
+  type Template,
+} from "../../lib/ipc";
 import { Button, cx } from "../../design-system/primitives";
 import { SphereIcon } from "../hub/SphereIcon";
 import { GoalsList } from "../goals/GoalsList";
 import { SphereDashboard } from "./SphereDashboard";
+import { HealthDashboard } from "./HealthDashboard";
+import { HealthCheckpoints } from "./HealthCheckpoints";
+import { HealthTraining } from "./HealthTraining";
+import { HealthExams } from "./HealthExams";
+import { FinanceDashboard } from "../finance/FinanceDashboard";
+import { ContributionsTab } from "../finance/ContributionsTab";
+import { AporteModal } from "../finance/AporteModal";
 
 /**
  * As tabs de cada template.
@@ -37,15 +52,16 @@ const TABS: Record<Template, Tab[]> = {
   health: [
     { key: "dashboard", label: "Painel" },
     { key: "goals", label: "Metas" },
-    { key: "checkpoints", label: "Checkpoints", milestone: "M3.5" },
-    { key: "training", label: "Treino", milestone: "M3.5" },
-    { key: "exams", label: "Exames", milestone: "M3.5" },
+    { key: "checkpoints", label: "Checkpoints" },
+    { key: "training", label: "Treino" },
+    { key: "exams", label: "Exames" },
   ],
   finance: [
     { key: "dashboard", label: "Painel" },
     { key: "goals", label: "Metas" },
-    { key: "contributions", label: "Aportes", milestone: "M3.5" },
-    { key: "allocation", label: "Alocação", milestone: "M3.5" },
+    { key: "contributions", label: "Aportes" },
+    // A alocação (donut + Saúde Financeira) mora no Painel — é o resumo da
+    // Esfera. Uma tab só para ela repetiria o que o Painel já mostra.
   ],
   fin_goals: [
     { key: "dashboard", label: "Painel" },
@@ -181,14 +197,82 @@ export function SphereScreen() {
         </nav>
 
         <div className="mt-6">
-          {sphere && active?.key === "goals" ? (
-            <GoalsList areaId={sphere.id} />
-          ) : (
-            sphere && <SphereDashboard sphere={sphere} card={card} />
+          {sphere && (
+            <SphereContent
+              sphere={sphere}
+              card={card}
+              tab={active?.key ?? "dashboard"}
+            />
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * O que cada tab de cada template mostra.
+ *
+ * O `template` da Esfera decide o conteúdo; o `SphereScreen` só desenha o header
+ * e as pílulas. "Metas" é universal (chega pela Esfera dona); o resto é a tela
+ * que o template promete. Um `default` cai no painel genérico — é o que uma
+ * Esfera ainda sem tela especializada mostra.
+ */
+function SphereContent({
+  sphere,
+  card,
+  tab,
+}: {
+  sphere: Area;
+  card: SphereCard | undefined;
+  tab: string;
+}) {
+  if (tab === "goals") return <GoalsList areaId={sphere.id} />;
+
+  if (sphere.template === "health") {
+    if (tab === "checkpoints") return <HealthCheckpoints areaId={sphere.id} />;
+    if (tab === "training") return <HealthTraining areaId={sphere.id} colour={sphere.color} />;
+    if (tab === "exams") return <HealthExams />;
+    return <HealthDashboard sphere={sphere} card={card} />;
+  }
+
+  if (sphere.template === "finance") {
+    return <FinanceContent tab={tab} />;
+  }
+
+  return <SphereDashboard sphere={sphere} card={card} />;
+}
+
+/**
+ * As Finanças, com o modal de aporte compartilhado entre o Painel e a lista.
+ *
+ * O modal vive AQUI e não em cada tab: abrir um aporte do Painel e da lista tem
+ * que ser o mesmo gesto, e um modal por tab teria dois estados a sincronizar.
+ */
+function FinanceContent({ tab }: { tab: string }) {
+  const client = useQueryClient();
+  const [aporte, setAporte] = useState(false);
+  const { data: accounts = [] } = useQuery({
+    queryKey: ["accounts"],
+    queryFn: listAccounts,
+  });
+
+  const refresh = () => {
+    void client.invalidateQueries({ queryKey: ["finance"] });
+    setAporte(false);
+  };
+
+  return (
+    <>
+      {tab === "contributions" ? (
+        <ContributionsTab onAporte={() => setAporte(true)} />
+      ) : (
+        <FinanceDashboard onAporte={() => setAporte(true)} />
+      )}
+      {aporte && (
+        <AporteModal accounts={accounts} onClose={() => setAporte(false)} onSaved={refresh} />
+      )}
+    </>
   );
 }
 

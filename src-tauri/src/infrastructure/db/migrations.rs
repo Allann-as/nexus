@@ -25,6 +25,7 @@ fn migrations() -> Migrations<'static> {
         M::up(include_str!(
             "../../../migrations/0009_milestone_counts_from.sql"
         )),
+        M::up(include_str!("../../../migrations/0010_finances.sql")),
     ])
 }
 

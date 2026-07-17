@@ -21,12 +21,15 @@ import {
   Paperclip,
   Inbox as InboxIcon,
   Search as SearchIcon,
+  PiggyBank,
   type LucideIcon,
 } from "lucide-react";
 
 import { NAV_ITEMS, SECONDARY_ROUTES } from "../../app/navigation";
-import { listAreas, search, type Kind } from "../../lib/ipc";
+import { listAccounts, listAreas, search, type Kind } from "../../lib/ipc";
 import { sphereIcon } from "../hub/SphereIcon";
+import { parseAporte } from "../finance/parseAporte";
+import { useAporte } from "../../stores/aporte";
 import { fuzzyScore } from "./fuzzy";
 import { cx, Kbd } from "../../design-system/primitives";
 
@@ -106,6 +109,15 @@ export function CommandPalette({
     enabled: open,
   });
 
+  // As contas alimentam o "aportar 500 no btg": o parser casa o nome do banco
+  // contra esta lista. Cache compartilhado com o resto do app.
+  const { data: accounts = [] } = useQuery({
+    queryKey: ["accounts"],
+    queryFn: listAccounts,
+    enabled: open,
+    staleTime: 5 * 60_000,
+  });
+
   const actions = useMemo<Row[]>(
     () => [
       ...NAV_ITEMS.map((item) => ({
@@ -142,6 +154,25 @@ export function CommandPalette({
       .map((r) => r.a);
   }, [actions, query]);
 
+  // "aportar 500 no btg" — o comando em linguagem natural (§3.2). Uma linha só,
+  // no topo, quando a query casa: valor + banco viram os defaults do modal, e o
+  // Enter abre com tudo pré-preenchido. Reconhecido aqui e não no fuzzy porque
+  // é um comando PARAMÉTRICO, não um item de lista — o número faz parte dele.
+  const aporteRow = useMemo<Row | null>(() => {
+    const parsed = parseAporte(query, accounts);
+    if (!parsed) return null;
+    return {
+      id: "aporte:quick",
+      label: parsed.label,
+      hint: "Aporte",
+      icon: PiggyBank,
+      run: () =>
+        useAporte
+          .getState()
+          .openAporte({ amountCents: parsed.amountCents, accountId: parsed.accountId }),
+    };
+  }, [query, accounts]);
+
   const resultRows = useMemo<Row[]>(
     () =>
       hits.map((h) => ({
@@ -158,8 +189,8 @@ export function CommandPalette({
   );
 
   const rows = useMemo(
-    () => [...matchedActions, ...resultRows],
-    [matchedActions, resultRows],
+    () => [...(aporteRow ? [aporteRow] : []), ...matchedActions, ...resultRows],
+    [aporteRow, matchedActions, resultRows],
   );
 
   useEffect(() => {

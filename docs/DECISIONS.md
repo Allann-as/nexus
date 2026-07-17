@@ -748,3 +748,66 @@ ADR-0023 para a fronteira.
 **Verificado dirigindo o app:** 19 cliques na seta do mês, de julho/2026 a
 fevereiro/2028 — o mês que a 0007 prometia vazio abriu com 37 compromissos, e a
 borda das séries andou de 2028-01-18 para 2028-05-30, sem uma linha duplicada.
+
+---
+
+## ADR-0027 — O ledger admite fatos que não são nodes
+
+**Data:** 2026-07-17 · **Status:** aceito · **M3.5**
+
+**Contexto.** Até o M3, toda linha do ledger falava de um node — `entity_kind`
+era um `Kind` (note, task, goal…). O aporte (M3.5) é o primeiro FATO da vida do
+usuário que **não** é um node: ele vive em `contributions`, não em `nodes`.
+Forçá-lo a um `Kind` gravaria uma mentira na coluna (`entity_kind = 'note'`), e o
+BI que filtra por ela pegaria o aporte junto com as notas.
+
+**Decisão.** `LedgerEntityKind`: `Node(Kind)` para tudo que era, mais variantes
+soltas para os fatos sem node (`Contribution` hoje). `impl From<Kind>` deixa os
+26 call sites antigos escreverem `Kind::X.into()` — a mudança é mecânica e o
+compilador aponta cada um.
+
+**Consequência.** O aporte é um fato de verdade no ledger (ADR-0023: "isso
+aconteceu na vida do usuário?" — sim), com `event_type = value_recorded`, e a
+Timeline (M4) vai desenhá-lo sem um caso especial. O modelo do ledger deixou de
+presumir que história é sempre sobre um node — o que era uma limitação
+acidental, não uma decisão.
+
+**A regra que fica.** Um fato novo sem node (uma sessão de foco no M5, um
+snapshot) ganha uma variante em `LedgerEntityKind`, não um `Kind` emprestado. O
+`Kind` é o vocabulário dos NODES; o ledger tem o seu, maior.
+
+---
+
+## ADR-0028 — `category` do exame já existia; a Saúde Financeira é computada, não gravada
+
+**Data:** 2026-07-17 · **Status:** aceito · **M3.5** · duas divergências da spec, registradas
+
+**Contexto.** A spec do M3.5 pede duas coisas que o código já resolvia de outro
+jeito. Registrar as divergências aqui, porque "o código ganha" (regra da Fase 3).
+
+**1. `event_details.category` — a spec pede "adicione `category TEXT`".** Ela já
+existe: a migration **0007** a adicionou (`ALTER TABLE event_details ADD COLUMN
+category`), com o índice `idx_event_category`. Os exames são eventos com
+`category='exame'`, e o `events_by_category` só lê o que já estava lá. **Nenhuma
+migration nova para isso** — criar uma segunda coluna `category` seria um erro
+de duplicação.
+
+**2. Saúde Financeira "gravada no ledger → gráfico de evolução".** A nota é uma
+FUNÇÃO PURA do histórico de aportes (regularidade, diversificação,
+consistência): computá-la a cada aporte e empilhar snapshots num ledger
+append-only cria duplicação e um problema de upsert (uma nota por mês, muitos
+aportes por mês). **Decisão:** a nota é computada ao vivo para o gauge, com
+breakdown e fórmula; a evolução mensal, quando a tela existir, recomputa a nota
+ao fim de cada mês a partir do MESMO histórico — determinístico, sem escrita.
+
+**Por que é a escolha certa, não um atalho.** Um insight do NEXUS é sempre
+computado e explicável (constituição §2). Gravar a nota seria gravar uma
+derivação — e derivações que divergem da fonte são exatamente o bug que o
+ledger-como-fonte-única evita. O job de fechamento de mês do M4.5 pode
+materializar rollups se a performance pedir; por ora, recomputar é barato e
+honesto.
+
+**Consequência.** A parcela "progresso dos objetivos financeiros" (25 pts) não
+tem dado no M3.5 — os objetivos são M4. Ela se **redistribui** (ADR-0014), como
+a rotina matinal do Nexus Score: a nota não é castigada por uma feature que
+ainda não existe, e ganha a parcela sozinha quando o M4 chegar.

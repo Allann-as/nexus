@@ -305,6 +305,29 @@ ressuscita a ocorrência que o usuário tirou dali. O índice UNIQUE
 `(event_id, rule_start)` diz ao banco a invariante — **uma linha por turno** — e é
 ele que torna a extensão idempotente de graça. Ver ADR-0022.
 
+## 5.7 As Finanças (0010)
+
+A Esfera Finanças é sobre INVESTIR, não gastar (o controle de gastos vive em
+outro app). Duas tabelas apontando para `accounts` (os 6 bancos da 0005):
+
+- **`contributions`** — cada aporte. `amount_cents INTEGER` (dinheiro é sempre
+  centavo, nunca float), `asset_class` num CHECK fechado (é o eixo do donut, e
+  uma classe livre viraria uma fatia de um só). **Resgate é aporte negativo** —
+  não uma tabela separada nem uma coluna de sinal: a soma acumulada já faz a
+  conta, e uma segunda tabela duplicaria toda query de total. `happened_on` é dia
+  local `'YYYY-MM-DD'`, como `habit_ticks.day` — "quanto aportei em março" é um
+  range scan por texto, sem `strftime(..., 'localtime')`.
+- **`portfolio_snapshots`** — o patrimônio informado à mão, PK `month`. O NEXUS
+  sabe o que você aportou, mas o patrimônio também rende sozinho e isso ele não
+  tem como saber (sem cotação, sem rede). `INSERT OR REPLACE`: reinformar o mês
+  corrige, não empilha.
+
+Um aporte é um FATO da vida do usuário, então também vira evento no ledger — e
+foi ele que forçou o ledger a admitir história que não é sobre um node
+(`LedgerEntityKind`, ADR-0027). A **Saúde Financeira** (`domain::financial_health`)
+é uma função pura do histórico, com pesos redistribuídos e fórmula exibível
+(ADR-0028); ela é computada, nunca gravada.
+
 ## 6. Integridade e migrations
 
 - `user_version` gerenciado pelo `rusqlite_migration`.
