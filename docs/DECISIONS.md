@@ -498,3 +498,77 @@ Finanças (azul `#4D8DFF`) ficam a ΔE 13 em visão normal, abaixo do piso de 15
 Aceito: as duas sempre aparecem com ícone e nome (ADR-0017), e Estudos-ciano faz
 parte da identidade. Registrado para ninguém "descobrir" isto de novo daqui a
 seis meses e achar que é bug.
+
+---
+
+## ADR-0020 — Adicionar um `kind` custa uma recriação de `nodes`
+
+**Data:** 2026-07-17 · **Status:** aceito
+
+**Contexto.** O DATA_MODEL §2 promete desde o M0 que criar um tipo de entidade é
+rotina: "1 valor no CHECK de `kind` + 1 satélite + 1 migration". O M3 cobrou a
+promessa pela primeira vez (`milestone`, os sub-desafios) e descobriu o preço: o
+SQLite **não sabe alterar um CHECK**. A única via é o *12-step procedure* —
+recriar a tabela mais referenciada do schema, com o dado do usuário dentro.
+
+**Alternativas recusadas.**
+
+- **Reaproveitar um kind existente.** `task` faria o sub-desafio vazar para as
+  listas de tarefa, para o "Hoje" e para o Nexus Score. `goal` pediria métrica,
+  unidade e direção que um checkbox não tem. Um kind errado é para sempre — a
+  string fica gravada no banco do usuário.
+- **Tabela fora do padrão Node** (`goal_milestones` solta). Sub-desafio perderia
+  busca, tags, links e timeline de graça, e o Node Pattern passaria a ter uma
+  exceção — que é como um padrão morre.
+- **Largar o CHECK na recriação.** Ele é a única defesa contra um kind digitado
+  errado virar uma linha que nunca mais aparece em lugar nenhum.
+
+**Decisão.** Pagar o 12-step, uma vez, com teste para cada armadilha, e deixar a
+receita pronta para o próximo (`book`, no M4).
+
+**Consequência.** As FKs passam a ser desligadas no runner durante as migrations
+— não é afrouxar, porque `foreign_key_check` passou a rodar depois sobre o banco
+INTEIRO, o que é mais forte que a checagem incremental (que só olha o que foi
+tocado). As três armadilhas do procedimento (CASCADE comendo os satélites, rowid
+renumerado quebrando a busca, rename explodindo nos gatilhos) falham **em
+silêncio** — por isso cada uma tem um teste, e não uma revisão.
+
+**Lição.** "1 valor no CHECK" era uma frase escrita sem nunca ter sido executada.
+A promessa continua verdadeira; ela só não era barata.
+
+---
+
+## ADR-0021 — Recorrência: subconjunto da RFC-5545, materializado
+
+**Data:** 2026-07-17 · **Status:** aceito
+
+**Contexto.** O prompt mestre pede "recorrência RFC-5545". A RFC inteira permite
+"a cada 2 meses, na terceira sexta, exceto em dezembro, contando da segunda
+semana ISO" — e suportá-la significa carregar um parser e um motor de expansão
+para sempre.
+
+**Decisão.** Um subconjunto fechado (`daily`/`weekly`/`monthly`/`yearly`, com
+intervalo), em JSON legível na coluna, no mesmo formato do `Schedule` dos
+hábitos. E **materializar** as ocorrências 18 meses à frente, em vez de expandir
+na leitura.
+
+**Consequência.** Desenhar um mês do calendário é um range scan por `starts_at`:
+o custo depende do mês pedido, não de quantas regras existem nem de há quanto
+tempo. Com RRULE expandida na leitura, abrir novembro/2027 exigiria expandir toda
+regra do banco desde o começo dos tempos — a cada troca de mês.
+
+O preço é a janela de 18 meses e um job que a estende. Aceito: é o mesmo trade
+que o Google Agenda faz.
+
+**O caso que decidiu o desenho.** Um evento no dia 31, repetido mensalmente. Em
+fevereiro o dia 31 não existe, e há duas saídas: pular o mês ou grudar no último
+dia. Pular é pior — "todo mês" que some em fevereiro é um lembrete que falha
+justamente onde o usuário confiou nele. E a ocorrência seguinte é calculada a
+partir da **âncora**, não da anterior: senão a série derivaria 31 → 28 → 28 → 28
+e o evento migraria de dia para sempre.
+
+**Conflito é detecção, nunca bloqueio.** Intervalo meio-aberto (quem acaba às 10h
+não conflita com quem começa às 10h, senão toda agenda cheia acusaria conflito),
+e o app mostra o conflito sem impedir a escrita. Marcar duas coisas no mesmo
+horário é uma decisão que o usuário tem o direito de tomar; o NEXUS avisa, não
+manda.

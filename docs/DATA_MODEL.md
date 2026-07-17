@@ -229,6 +229,57 @@ precisa listar os bancos desde o primeiro boot. Ela não tem `created_at`: uma
 conta não é um acontecimento, é uma gaveta. O ledger conta o que você fez (o
 aporte), não onde você guardou.
 
+## 5.6 O Tempo (0007)
+
+### Adicionar um `kind` custa uma recriação de tabela
+
+A §2 promete que criar um tipo é rotina: "1 valor no CHECK de `kind` + 1
+satélite + 1 migration". A 0007 cobrou a promessa pela primeira vez (`milestone`)
+e o preço apareceu: **o SQLite não sabe alterar um `CHECK`**. A única via é o
+[12-step procedure](https://sqlite.org/lang_altertable.html#otheralter) — criar
+a tabela nova, copiar, dropar a antiga, renomear.
+
+Recriar `nodes` — a tabela mais referenciada do schema — tem três armadilhas, e
+**as três falham em silêncio**. Cada uma tem um teste em `migrations.rs`
+(`mod recreating_nodes`), e o próximo `kind` (o `book` do M4) segue a mesma
+receita:
+
+| Armadilha | O que acontece se esquecer |
+|---|---|
+| **CASCADE** | `DROP TABLE nodes` com FK ligada roda um `DELETE FROM` implícito, e os `ON DELETE CASCADE` dos oito satélites apagam anos de dados. As FKs são desligadas **no runner** (`migrations.rs`), não no `.sql`: o pragma é no-op dentro de uma transação, e é dentro de uma que cada migration roda. `foreign_key_check` roda depois, sobre o banco inteiro. |
+| **rowid** | `search_index` é FTS5 contentless: o vínculo com o conteúdo é `search_index.rowid = nodes.rowid` (§4). Copiar sem `rowid` explícito renumera tudo e a busca passa a devolver a linha errada — sem erro. |
+| **rename** | Desde o 3.25 o `ALTER TABLE RENAME` reparsa o schema para reescrever referências em triggers/views. Os gatilhos de FTS que moram em `note_details`/`node_tags` falam de `nodes`, que acabou de ser dropada → o rename explode. `PRAGMA legacy_alter_table=ON` devolve o comportamento que o 12-step espera. |
+
+### Recorrências: materializadas, não expandidas
+
+`event_occurrences` guarda cada ocorrência como linha. A alternativa — guardar só
+a RRULE e expandir na leitura — faz desenhar novembro/2027 exigir expandir
+**toda** regra do banco desde o começo dos tempos, a cada troca de mês. Com
+ocorrências materializadas é um range scan por `starts_at`: o custo é do mês
+pedido, não da história.
+
+O preço é a janela: 18 meses à frente, estendida pelo `EventService` quando o
+usuário navega para perto da borda.
+
+Um evento **sem** recorrência também ganha uma linha aqui. Não é desperdício: é o
+que faz o calendário ler UMA tabela em vez de um `UNION` de "avulsos + séries" em
+toda query — e um `UNION` que alguém vai esquecer de atualizar um dia.
+
+`status` na ocorrência ('scheduled' | 'cancelled' | 'moved') é o que permite
+"toda terça, MENOS a de 25/11": a exceção mora na ocorrência, e a regra da série
+não é reescrita.
+
+### Sub-desafios são nodes
+
+O node já carrega quase tudo: título, `parent_id` (a meta) e `status='done'` —
+que **é** o checkbox. `milestone_details` guarda só o resto: se é `simple` (um
+checkbox) ou `counter` ("21/30 dias", alimentado pelos ticks de um hábito
+linkado, nunca por número digitado à mão), o `weight` na média e a ordem.
+
+`goal_details.progress_source` existe porque uma meta quantitativa tem duas
+medidas possíveis de progresso — a métrica e os sub-desafios — e elas discordam.
+Adivinhar qual mostrar seria o app decidindo por um número que é do usuário.
+
 ## 6. Integridade e migrations
 
 - `user_version` gerenciado pelo `rusqlite_migration`.

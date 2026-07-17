@@ -1,7 +1,7 @@
 # NEXUS — Arquitetura
 
 > Documento vivo. Atualize-o no mesmo commit que muda a estrutura.
-> Estado atual: **M2.5 — Midnight Overhaul concluído**.
+> Estado atual: **M3 — Tempo (em curso)**. M2.5 concluído.
 
 ## 1. O que o NEXUS é
 
@@ -205,10 +205,19 @@ por vez (por isso a palette e a captura são mutuamente exclusivas no `Shell`);
 com o app parado, nenhuma animação roda.
 
 **Gráficos: SVG ou ECharts?** (ADR-0018) — `SVG para ≤ ~100 pontos decorativos;
-ECharts para telas de análise.` Os micro-gráficos do Hub são SVG **para sempre**:
-o Hub é o caminho do cold start e nunca instancia engine de gráfico. ECharts
-entra a partir do M3 e só onde a tela é de análise (calendário/heatmaps,
-Finanças, Insights), onde eixo, tooltip e zoom não se reimplementam à mão.
+ECharts para telas de análise.` Os micro-gráficos do Hub são SVG **para sempre**
+(`charts.tsx`): o Hub é o caminho do cold start e nunca instancia engine de
+gráfico. ECharts (`Chart.tsx` + `nexusTheme.ts`, desde o M3) entra só onde a tela
+é de análise — calendário/heatmaps, Finanças, Insights —, onde eixo, tooltip e
+zoom não se reimplementam à mão.
+
+O `Chart.tsx` existe para as quatro regras da §6 não serem esquecidas uma por
+vez: uma instância por gráfico (init duplicado vaza um canvas que continua
+desenhando), `lazyUpdate`, animação **só na montagem**, e `ResizeObserver` (o
+ECharts não redimensiona sozinho — sem ele o gráfico fica do tamanho que o
+container tinha no primeiro frame, normalmente zero). O tema lê os tokens
+resolvidos do CSS, porque o canvas não entende `var(--x)`; por isso ele é
+re-registrado quando o tema claro/escuro troca.
 
 **A cor da Esfera nunca é a única pista** (ADR-0017): ela tinge, não codifica.
 Todo lugar que mostra uma Esfera mostra também ícone e nome. Nenhum gráfico pode
