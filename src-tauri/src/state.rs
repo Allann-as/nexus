@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::application::ports::{LedgerRepository, SearchRepository};
 use crate::application::use_cases::{
-    areas::AreaService, dashboard::DashboardService, events::EventService,
+    areas::AreaService, books::BookService, dashboard::DashboardService, events::EventService,
     fin_goals::FinGoalService, finance::FinanceService, goals::GoalService, habits::HabitService,
     nodes::NodeService, spheres::SphereService, tasks::TaskService,
 };
@@ -18,11 +18,12 @@ use crate::infrastructure::db::Db;
 use crate::infrastructure::fts::SqliteSearchRepository;
 use crate::infrastructure::paths::Paths;
 use crate::infrastructure::repositories::{
-    area_repo::SqliteAreaRepository, contribution_repo::SqliteContributionRepository,
-    event_repo::SqliteEventRepository, fin_goal_repo::SqliteFinGoalRepository,
-    goal_repo::SqliteGoalRepository, habit_repo::SqliteHabitRepository,
-    ledger_repo::SqliteLedgerRepository, node_repo::SqliteNodeRepository,
-    sphere_repo::SqliteSphereRepository, task_repo::SqliteTaskRepository,
+    area_repo::SqliteAreaRepository, book_repo::SqliteBookRepository,
+    contribution_repo::SqliteContributionRepository, event_repo::SqliteEventRepository,
+    fin_goal_repo::SqliteFinGoalRepository, goal_repo::SqliteGoalRepository,
+    habit_repo::SqliteHabitRepository, ledger_repo::SqliteLedgerRepository,
+    node_repo::SqliteNodeRepository, sphere_repo::SqliteSphereRepository,
+    task_repo::SqliteTaskRepository,
 };
 
 pub struct AppState {
@@ -36,6 +37,7 @@ pub struct AppState {
     pub goals: GoalService,
     pub finance: FinanceService,
     pub fin_goals: FinGoalService,
+    pub books: BookService,
     pub dashboard: DashboardService,
     pub spheres: SphereService,
     pub ledger: Arc<dyn LedgerRepository>,
@@ -107,6 +109,13 @@ impl AppState {
             clock: clock.clone(),
         };
 
+        let books = BookService {
+            books: Arc::new(SqliteBookRepository::new(db.clone())),
+            areas: area_repo.clone(),
+            ids: ids.clone(),
+            clock: clock.clone(),
+        };
+
         let dashboard = DashboardService {
             habits: habits.clone(),
             tasks: tasks.clone(),
@@ -139,6 +148,7 @@ impl AppState {
             goals,
             finance,
             fin_goals,
+            books,
             dashboard,
             spheres,
             ledger,

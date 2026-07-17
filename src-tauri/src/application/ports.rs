@@ -5,7 +5,8 @@
 //! estes traits de novo, sem tocar em uma linha de regra de negócio.
 
 use crate::domain::entities::{
-    Area, AssetClass, Direction, Kind, MilestoneKind, Node, ProgressSource, Status, Template,
+    Area, AssetClass, BookStatus, Direction, Kind, MilestoneKind, Node, ProgressSource, Status,
+    Template,
 };
 use crate::domain::errors::Result;
 use crate::domain::ledger::{LedgerEntry, NewLedgerEvent};
@@ -882,4 +883,101 @@ pub trait FinGoalRepository: Send + Sync {
     /// `None` quando não há nenhuma. Alimenta a parcela "Objetivos" da Saúde
     /// Financeira (ADR-0028).
     fn active_progress(&self) -> Result<Option<f64>>;
+}
+
+/* ===== Biblioteca: os livros ===== */
+
+#[derive(Debug, Clone)]
+pub struct NewBook {
+    pub title: String,
+    pub area_id: Option<String>,
+    pub author: Option<String>,
+    pub total_pages: Option<i64>,
+    pub shelf: Option<String>,
+}
+
+/// Um livro: o node + o satélite. `node_status` é o do node (para a busca e a
+/// timeline); `status` é o de LEITURA (fila/lendo/lido/abandonado).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Book {
+    pub id: String,
+    pub title: String,
+    pub area_id: Option<String>,
+    pub author: Option<String>,
+    pub total_pages: Option<i64>,
+    pub current_page: i64,
+    pub status: BookStatus,
+    pub rating: Option<i64>,
+    pub shelf: Option<String>,
+    pub started_on: Option<String>,
+    pub finished_on: Option<String>,
+    pub created_at: i64,
+}
+
+/// Alteração parcial de um livro. `None` = não mexer. Progresso, status,
+/// prateleira e nota — nenhum é um FATO da vida (é estado de leitura), então não
+/// grava no ledger. Terminar um livro é o fato, e tem caminho próprio.
+#[derive(Debug, Clone, Default)]
+pub struct BookPatch {
+    pub current_page: Option<i64>,
+    pub status: Option<BookStatus>,
+    pub rating: Option<Option<i64>>,
+    pub shelf: Option<Option<String>>,
+    /// Datas derivadas de mudanças de status (começou a ler → `started_on`).
+    pub started_on: Option<Option<String>>,
+    pub finished_on: Option<Option<String>>,
+    /// O status do NODE, quando o de leitura muda (lido → done, abandonado →
+    /// dropped). O serviço decide; o repo só aplica.
+    pub node_status: Option<Status>,
+}
+
+/// A resenha de 1 frase que vira uma nota linkada ao livro (§2.2).
+#[derive(Debug, Clone)]
+pub struct ReviewNote {
+    pub note_id: String,
+    pub title: String,
+    pub body_md: String,
+    pub event: NewLedgerEvent,
+}
+
+pub trait BookRepository: Send + Sync {
+    fn create_with_event(
+        &self,
+        id: &str,
+        node: &NewNode,
+        new: &NewBook,
+        event: &NewLedgerEvent,
+    ) -> Result<Book>;
+
+    fn get(&self, id: &str) -> Result<Book>;
+
+    /// Todos os livros de uma Esfera (ou todos). Os filtros de status/prateleira/
+    /// nota são do front: uma estante pessoal tem dezenas de livros, não milhares.
+    fn list(&self, area_id: Option<&str>) -> Result<Vec<Book>>;
+
+    /// Aplica um patch de estado de leitura. Sem ledger (ADR-0023).
+    fn update(&self, id: &str, patch: &BookPatch) -> Result<Book>;
+
+    /// Termina o livro: status 'lido', nota, `finished_on`, node 'done' e o
+    /// evento de conquista — na mesma transação. Se `review` for `Some`, cria a
+    /// nota linkada (o primeiro consumidor de `links`) junto, atômico.
+    fn finish_with_event(
+        &self,
+        id: &str,
+        rating: Option<i64>,
+        finished_on: &str,
+        now: i64,
+        completion: &NewLedgerEvent,
+        review: Option<&ReviewNote>,
+    ) -> Result<Book>;
+
+    /// Quantos livros foram marcados 'lido' num ano ('YYYY') — a meta anual.
+    fn finished_in_year(&self, year: &str) -> Result<i64>;
+
+    /// A meta anual de leitura de um ano, se houver.
+    fn reading_goal(&self, year: &str) -> Result<Option<i64>>;
+
+    /// Grava/atualiza a meta anual (INSERT OR REPLACE).
+    fn set_reading_goal(&self, year: &str, target: i64, noted_at: i64) -> Result<()>;
 }

@@ -5,6 +5,7 @@
 //! tipado em `src/lib/ipc.ts` no frontend.
 
 pub mod areas;
+pub mod books;
 pub mod events;
 pub mod fin_goals;
 pub mod finance;

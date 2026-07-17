@@ -1019,3 +1019,75 @@ export const depositFinGoal = (deposit: {
 
 export const finGoalDeposits = (goalId: string) =>
   call<FinGoalDeposit[]>("fin_goal_deposits", { goalId });
+
+/* ===== Biblioteca: os livros ===== */
+
+/** O ciclo de vida de um livro. Espelha `domain::entities::BookStatus`. */
+export type BookStatus = "fila" | "lendo" | "lido" | "abandonado";
+
+export interface Book {
+  id: string;
+  title: string;
+  areaId: string | null;
+  author: string | null;
+  totalPages: number | null;
+  currentPage: number;
+  status: BookStatus;
+  /** 0–5 estrelas, ou `null` se não avaliado. */
+  rating: number | null;
+  shelf: string | null;
+  startedOn: string | null;
+  finishedOn: string | null;
+  createdAt: number;
+}
+
+/** O painel de Estudos — mirrors `use_cases::books::StudiesOverview`. */
+export interface StudiesOverview {
+  year: string;
+  readingGoal: number | null;
+  finishedThisYear: number;
+  readingNow: Book[];
+  totalBooks: number;
+}
+
+export const createBook = (book: {
+  title: string;
+  areaId?: string | null;
+  author?: string | null;
+  totalPages?: number | null;
+  shelf?: string | null;
+}) =>
+  call<Book>("create_book", {
+    book: {
+      title: book.title,
+      areaId: book.areaId ?? null,
+      author: book.author ?? null,
+      totalPages: book.totalPages ?? null,
+      shelf: book.shelf ?? null,
+    },
+  });
+
+export const listBooks = (areaId?: string | null) =>
+  call<Book[]>("list_books", { areaId: areaId ?? null });
+
+export const setBookProgress = (id: string, currentPage: number) =>
+  call<Book>("set_book_progress", { id, currentPage });
+
+export const setBookStatus = (id: string, status: BookStatus) =>
+  call<Book>("set_book_status", { id, status });
+
+export const setBookShelf = (id: string, shelf: string | null) =>
+  call<Book>("set_book_shelf", { id, shelf });
+
+export const setBookRating = (id: string, rating: number | null) =>
+  call<Book>("set_book_rating", { id, rating });
+
+/** Termina o livro: 'lido', conquista no ledger, e a resenha vira nota linkada. */
+export const finishBook = (id: string, rating: number | null, review: string | null) =>
+  call<Book>("finish_book", { id, rating, review });
+
+export const studiesOverview = (areaId?: string | null) =>
+  call<StudiesOverview>("studies_overview", { areaId: areaId ?? null });
+
+export const setReadingGoal = (target: number) =>
+  call<void>("set_reading_goal", { target });
