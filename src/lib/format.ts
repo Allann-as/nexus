@@ -49,6 +49,34 @@ export function formatMetric(value: number): string {
   });
 }
 
+/**
+ * Centavos → "R$ 1.234,56". Dinheiro é sempre centavo inteiro no NEXUS
+ * (constituição): a conversão para reais mora aqui, num lugar só, para nenhuma
+ * tela dividir por 100 à mão e arredondar diferente.
+ */
+export function formatMoney(cents: number): string {
+  return (cents / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+/**
+ * Centavos → "R$ 1,2 mil" / "R$ 3,4 mi" — para eixos de gráfico e rótulos
+ * curtos, onde o valor exato pesa mais que a precisão.
+ *
+ * Só para APRESENTAÇÃO em espaço apertado: o número exato aparece no tooltip e
+ * nos cards, formatado por `formatMoney`. Aqui o arredondamento é legítimo —
+ * é um rótulo de eixo, não um registro (ver `metricDecimals`).
+ */
+export function formatMoneyShort(cents: number): string {
+  const reais = cents / 100;
+  const abs = Math.abs(reais);
+  if (abs >= 1_000_000) return `R$ ${(reais / 1_000_000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mi`;
+  if (abs >= 1_000) return `R$ ${(reais / 1_000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil`;
+  return `R$ ${reais.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
+}
+
 /** Byte counts in the largest unit that keeps the number readable. */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

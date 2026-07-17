@@ -197,6 +197,28 @@ impl EventRepository for SqliteEventRepository {
         })
     }
 
+    fn upcoming_by_category(
+        &self,
+        category: &str,
+        from_day: &str,
+        limit: i64,
+    ) -> Result<Vec<Occurrence>> {
+        self.db.with_read(|c| {
+            // Usa `idx_event_category` (0007) e o índice de dia. A cancelada
+            // sai: um exame desmarcado não é o próximo exame.
+            let mut stmt = c.prepare_cached(&format!(
+                "{SELECT_OCCURRENCE}
+                  WHERE e.category = ?1
+                    AND o.day >= ?2
+                    AND o.status <> 'cancelled'
+                  ORDER BY o.starts_at
+                  LIMIT ?3"
+            ))?;
+            let rows = stmt.query_map(params![category, from_day, limit], map_occurrence)?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        })
+    }
+
     fn update(&self, id: &str, patch: &EventPatch, updated_at: i64) -> Result<Event> {
         self.db.with_write(|conn| {
             let tx = conn.transaction()?;
@@ -463,7 +485,7 @@ mod tests {
             ts: 1_000,
             day: "2026-07-17".into(),
             entity_id: id.into(),
-            entity_kind: Kind::Event,
+            entity_kind: Kind::Event.into(),
             event_type: EventType::Created,
             payload: serde_json::json!({}),
             title_snapshot: "Reunião".into(),

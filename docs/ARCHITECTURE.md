@@ -1,7 +1,7 @@
 # NEXUS — Arquitetura
 
 > Documento vivo. Atualize-o no mesmo commit que muda a estrutura.
-> Estado atual: **M3 concluído** (Calendário + Metas). Próximo: M3.5 — Esferas I.
+> Estado atual: **M3.5 concluído** (Saúde + Finanças). Próximo: M4 — Esferas II.
 
 ## 1. O que o NEXUS é
 
@@ -97,7 +97,7 @@ logs/      rotação diária
 | **M2** | Tarefas, Projetos, Hábitos, Rotinas, ticks, streaks, Dashboard v1 | ✅ **concluído** |
 | **M2.5** | Design system Midnight, Esferas da Vida, o Hub, rail global | ✅ **concluído** |
 | **M3** | Calendário (timeblocking, RFC-5545, conflitos), Metas + sub-desafios | ✅ **concluído** |
-| M3.5 | Esferas I: Saúde (checkpoints, treino, exames) + Finanças (aportes, Saúde Financeira) | ⬜ |
+| **M3.5** | Esferas I: Saúde (checkpoints, treino, exames) + Finanças (aportes, Saúde Financeira) | ✅ **concluído** |
 | M4 | Esferas II: Objetivos Financeiros, Estudos + Biblioteca, Carreira; Notas; Timeline | ⬜ |
 | M4.5 | `bi_engine`, Momentum, Conquistas, Retrospectiva | ⬜ |
 | M5 | Backup/restore, export, Revisão Semanal, Modo Foco, seed de 5 anos | ⬜ |
@@ -161,6 +161,28 @@ logs/      rotação diária
 - **A ordem de lista arrastável virou domínio** (`domain::ordering`): a média dos
   vizinhos que o M2 escreveu para tarefas agora serve também aos sub-desafios —
   duas cópias divergiriam no dia em que só uma fosse corrigida.
+
+### O que o M3.5 entrega de verdade
+
+- **Saúde**: os checkpoints do dia são os hábitos REAIS do core, filtrados pela
+  Esfera (uma query, `habits_today`, compartilhada com o Hub) — marcar aqui é o
+  mesmo tick de sempre. O painel de treino é um heatmap ECharts (a fronteira do
+  ADR-0018: análise densa) mais a taxa por dia da semana. Exames são eventos de
+  calendário com `category='exame'` (coluna da 0007, não uma tabela nova — ver
+  ADR-0028), com alerta de < 7 dias.
+- **Finanças** (migration 0010): `contributions` (aporte; resgate é valor
+  negativo) e `portfolio_snapshots` (patrimônio informado à mão). Dinheiro é
+  sempre centavo inteiro. Registrar um aporte é um FATO — grava no ledger, e o
+  ledger passou a admitir fatos que não são nodes (`LedgerEntityKind`,
+  ADR-0027). Aporte em 5 segundos por modal e por Ctrl+K ("aportar 500 no btg",
+  parser testado).
+- **Saúde Financeira 0–100** (`domain::financial_health`, pura e testada):
+  30 regularidade + 25 diversificação (1−Herfindahl) + 25 objetivos (M4) + 20
+  consistência, com os pesos redistribuídos entre o que se aplica (ADR-0014) e a
+  fórmula sempre exibível. Computada ao vivo, não gravada (ADR-0028).
+- **ECharts entra de verdade** (ADR-0018): a área acumulada e o donut de
+  alocação das Finanças, e o heatmap de treino da Saúde — as três telas de
+  análise densa que justificam a engine. O resto do app segue em SVG.
 
 ### Medições reais (build `tauri build`, release)
 

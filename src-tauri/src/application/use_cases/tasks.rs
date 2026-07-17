@@ -72,7 +72,7 @@ impl TaskService {
             ts: self.clock.now_ms(),
             day: self.clock.today_local(),
             entity_id: id.clone(),
-            entity_kind: Kind::Task,
+            entity_kind: Kind::Task.into(),
             event_type: EventType::Created,
             payload: json!({ "priority": priority, "project": project_id }),
             title_snapshot: title.clone(),
@@ -116,7 +116,7 @@ impl TaskService {
             ts: self.clock.now_ms(),
             day: self.clock.today_local(),
             entity_id: id.clone(),
-            entity_kind: Kind::Project,
+            entity_kind: Kind::Project.into(),
             event_type: EventType::Created,
             payload: json!({}),
             title_snapshot: title.clone(),
@@ -160,7 +160,7 @@ impl TaskService {
             ts: now,
             day: self.clock.today_local(),
             entity_id: id.to_string(),
-            entity_kind: Kind::Task,
+            entity_kind: Kind::Task.into(),
             // 'completed' é o que o BI conta como conclusão. Reabrir não é
             // uma conclusão negativa — é outra coisa.
             event_type: if done {

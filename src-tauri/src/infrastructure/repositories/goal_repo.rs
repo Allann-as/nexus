@@ -442,7 +442,7 @@ mod tests {
             ts: 1_000,
             day: "2026-07-17".into(),
             entity_id: id.into(),
-            entity_kind: kind,
+            entity_kind: kind.into(),
             event_type: EventType::Created,
             payload: serde_json::json!({}),
             title_snapshot: "t".into(),

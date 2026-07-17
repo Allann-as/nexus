@@ -45,6 +45,39 @@ impl EventType {
     }
 }
 
+/// De que a linha do ledger fala.
+///
+/// Até o M3 toda história era sobre um node — por isso `entity_kind` era um
+/// `Kind`. O aporte (M3.5) é o primeiro FATO que não é um node: ele vive na
+/// tabela `contributions`, não em `nodes`. Forçá-lo a um `Kind` gravaria uma
+/// mentira na coluna (`entity_kind = 'note'`?), e o BI que filtra por ela
+/// pegaria o aporte junto com as notas.
+///
+/// `Node(Kind)` cobre tudo que era; as variantes soltas são os fatos sem node.
+/// O `From<Kind>` deixa os 26 call sites antigos escreverem `Kind::X.into()` sem
+/// mais cerimônia. Ver ADR-0027.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LedgerEntityKind {
+    Node(Kind),
+    /// Um aporte ou resgate — um fato financeiro, não um node.
+    Contribution,
+}
+
+impl LedgerEntityKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LedgerEntityKind::Node(k) => k.as_str(),
+            LedgerEntityKind::Contribution => "contribution",
+        }
+    }
+}
+
+impl From<Kind> for LedgerEntityKind {
+    fn from(k: Kind) -> Self {
+        LedgerEntityKind::Node(k)
+    }
+}
+
 /// Um evento a ser acrescentado ao ledger.
 ///
 /// Sem `seq`: quem numera é o banco (rowid), e a ordem total é dele. O domínio
@@ -54,7 +87,7 @@ pub struct NewLedgerEvent {
     pub ts: i64,
     pub day: String,
     pub entity_id: String,
-    pub entity_kind: Kind,
+    pub entity_kind: LedgerEntityKind,
     pub event_type: EventType,
     pub payload: serde_json::Value,
     /// O título na época. A timeline renderiza sem JOIN com `nodes`, então

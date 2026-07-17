@@ -6,6 +6,7 @@ import { Topbar } from "./Topbar";
 import { useKeyboard } from "./useKeyboard";
 import { CommandPalette } from "../features/command-palette/CommandPalette";
 import { QuickCapture } from "../features/inbox/QuickCapture";
+import { AporteHost } from "../features/finance/AporteHost";
 import { Toaster } from "../design-system/Toaster";
 
 export function Shell() {
@@ -45,6 +46,7 @@ export function Shell() {
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <QuickCapture open={captureOpen} onClose={() => setCaptureOpen(false)} />
+      <AporteHost />
       <Toaster />
     </div>
   );

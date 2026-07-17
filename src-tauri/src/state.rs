@@ -8,8 +8,9 @@ use std::sync::Arc;
 
 use crate::application::ports::{LedgerRepository, SearchRepository};
 use crate::application::use_cases::{
-    areas::AreaService, dashboard::DashboardService, events::EventService, goals::GoalService,
-    habits::HabitService, nodes::NodeService, spheres::SphereService, tasks::TaskService,
+    areas::AreaService, dashboard::DashboardService, events::EventService, finance::FinanceService,
+    goals::GoalService, habits::HabitService, nodes::NodeService, spheres::SphereService,
+    tasks::TaskService,
 };
 use crate::domain::errors::Result;
 use crate::infrastructure::clock::{SystemClock, Uuid7Gen};
@@ -17,10 +18,11 @@ use crate::infrastructure::db::Db;
 use crate::infrastructure::fts::SqliteSearchRepository;
 use crate::infrastructure::paths::Paths;
 use crate::infrastructure::repositories::{
-    area_repo::SqliteAreaRepository, event_repo::SqliteEventRepository,
-    goal_repo::SqliteGoalRepository, habit_repo::SqliteHabitRepository,
-    ledger_repo::SqliteLedgerRepository, node_repo::SqliteNodeRepository,
-    sphere_repo::SqliteSphereRepository, task_repo::SqliteTaskRepository,
+    area_repo::SqliteAreaRepository, contribution_repo::SqliteContributionRepository,
+    event_repo::SqliteEventRepository, goal_repo::SqliteGoalRepository,
+    habit_repo::SqliteHabitRepository, ledger_repo::SqliteLedgerRepository,
+    node_repo::SqliteNodeRepository, sphere_repo::SqliteSphereRepository,
+    task_repo::SqliteTaskRepository,
 };
 
 pub struct AppState {
@@ -32,6 +34,7 @@ pub struct AppState {
     pub tasks: Arc<TaskService>,
     pub events: EventService,
     pub goals: GoalService,
+    pub finance: FinanceService,
     pub dashboard: DashboardService,
     pub spheres: SphereService,
     pub ledger: Arc<dyn LedgerRepository>,
@@ -49,6 +52,7 @@ impl AppState {
         let sphere_repo = Arc::new(SqliteSphereRepository::new(db.clone()));
         let event_repo = Arc::new(SqliteEventRepository::new(db.clone()));
         let goal_repo = Arc::new(SqliteGoalRepository::new(db.clone()));
+        let contribution_repo = Arc::new(SqliteContributionRepository::new(db.clone()));
         let ledger: Arc<dyn LedgerRepository> = Arc::new(SqliteLedgerRepository::new(db.clone()));
         let search: Arc<dyn SearchRepository> = Arc::new(SqliteSearchRepository::new(db.clone()));
 
@@ -87,6 +91,12 @@ impl AppState {
             clock: clock.clone(),
         };
 
+        let finance = FinanceService {
+            contributions: contribution_repo,
+            ids: ids.clone(),
+            clock: clock.clone(),
+        };
+
         let dashboard = DashboardService {
             habits: habits.clone(),
             tasks: tasks.clone(),
@@ -117,6 +127,7 @@ impl AppState {
             tasks,
             events,
             goals,
+            finance,
             dashboard,
             spheres,
             ledger,

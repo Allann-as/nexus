@@ -5,7 +5,7 @@
 //! estes traits de novo, sem tocar em uma linha de regra de negócio.
 
 use crate::domain::entities::{
-    Area, Direction, Kind, MilestoneKind, Node, ProgressSource, Status, Template,
+    Area, AssetClass, Direction, Kind, MilestoneKind, Node, ProgressSource, Status, Template,
 };
 use crate::domain::errors::Result;
 use crate::domain::ledger::{LedgerEntry, NewLedgerEvent};
@@ -484,6 +484,19 @@ pub trait EventRepository: Send + Sync {
     /// dias e a uma única janela.
     fn overlapping_window(&self, from_ms: i64, to_ms: i64) -> Result<Vec<Occurrence>>;
 
+    /// As próximas ocorrências de uma categoria, de `from_day` em diante.
+    ///
+    /// A entrada dos exames da Saúde (§3.1): eventos com `category='exame'`, o
+    /// próximo primeiro. Categoria e não uma tabela `exams` — um exame é um
+    /// compromisso com hora e lugar, e a categoria é a única coisa que o
+    /// distingue de um almoço (ver a §2 da 0007).
+    fn upcoming_by_category(
+        &self,
+        category: &str,
+        from_day: &str,
+        limit: i64,
+    ) -> Result<Vec<Occurrence>>;
+
     fn update(&self, id: &str, patch: &EventPatch, updated_at: i64) -> Result<Event>;
 
     /// Remarca UMA ocorrência e grava o evento, na mesma transação.
@@ -679,4 +692,97 @@ pub trait GoalRepository: Send + Sync {
 
     /// Reespaça a árvore em inteiros quando a média satura.
     fn renumber_milestones(&self, goal_id: &str) -> Result<()>;
+}
+
+/* ===== Finanças: aportes e patrimônio ===== */
+
+/// Uma conta/banco. Espelha a tabela `accounts` (0005).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Account {
+    pub id: String,
+    pub name: String,
+    /// 'banking' | 'investment'. Só 'investment' entra na alocação: dinheiro
+    /// parado na conta corrente não é patrimônio investido.
+    pub kind: String,
+    pub color: String,
+    pub sort_order: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewContribution {
+    pub account_id: String,
+    pub asset_class: AssetClass,
+    /// Centavos. Negativo é resgate.
+    pub amount_cents: i64,
+    pub happened_on: String,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Contribution {
+    pub id: String,
+    pub account_id: String,
+    pub asset_class: String,
+    pub amount_cents: i64,
+    pub happened_on: String,
+    pub note: Option<String>,
+    pub created_at: i64,
+}
+
+/// Um total por chave (classe ou banco), já somado no SQL — as fatias do donut e
+/// das barras. `key` é a `AssetClass::as_str()` ou o `account_id`.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Bucket {
+    pub key: String,
+    pub label: String,
+    pub cents: i64,
+}
+
+/// O aporte total de um mês — o ponto da área acumulada.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MonthTotal {
+    /// 'YYYY-MM'.
+    pub month: String,
+    pub cents: i64,
+}
+
+pub trait ContributionRepository: Send + Sync {
+    fn accounts(&self) -> Result<Vec<Account>>;
+
+    /// Grava o aporte E o evento de ledger, na mesma transação. Um aporte é um
+    /// fato da vida do usuário (ADR-0023): ele existe na história.
+    fn create_with_event(
+        &self,
+        id: &str,
+        c: &NewContribution,
+        created_at: i64,
+        event: &NewLedgerEvent,
+    ) -> Result<Contribution>;
+
+    /// Os aportes mais recentes — a lista da tab.
+    fn recent(&self, limit: i64) -> Result<Vec<Contribution>>;
+
+    /// Total líquido por classe de ativo, do mais alto ao mais baixo — o donut e
+    /// a diversificação. Agrupa pela `asset_class` que o aporte declara: a
+    /// classe é a aposta, e cada aporte já diz a sua (inclusive 'reserva').
+    fn totals_by_class(&self) -> Result<Vec<Bucket>>;
+
+    /// Total líquido por banco — as barras. Só as contas com saldo positivo
+    /// aparecem; um banco zerado por resgate não é uma barra.
+    fn totals_by_account(&self) -> Result<Vec<Bucket>>;
+
+    /// Aporte somado por mês, dos últimos `months` meses, do mais antigo ao mais
+    /// recente. A entrada da área acumulada e das médias.
+    fn monthly_totals(&self, months: i64) -> Result<Vec<MonthTotal>>;
+
+    /// O total informado à mão para um mês, se houver. `None` = o usuário nunca
+    /// registrou o patrimônio daquele mês.
+    fn latest_snapshot_cents(&self) -> Result<Option<i64>>;
+
+    /// Grava/atualiza o retrato do patrimônio de um mês (INSERT OR REPLACE).
+    fn set_snapshot(&self, month: &str, total_cents: i64, noted_at: i64) -> Result<()>;
 }

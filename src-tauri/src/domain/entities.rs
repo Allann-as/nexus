@@ -336,6 +336,54 @@ pub fn validate_color(raw: &str) -> Result<String> {
     Ok(s.to_ascii_uppercase())
 }
 
+/// A classe de um ativo — o eixo do donut de alocação (§3.2).
+///
+/// Espelha o CHECK de `contributions.asset_class` (0010). Fechado, e não texto
+/// livre, porque é o eixo de um gráfico: uma classe digitada à mão viraria uma
+/// fatia de um só, e a soma deixaria de fechar 100%.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AssetClass {
+    RendaFixa,
+    Acoes,
+    Fiis,
+    EtfExterior,
+    Cripto,
+    Reserva,
+    Outros,
+}
+
+impl AssetClass {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AssetClass::RendaFixa => "renda_fixa",
+            AssetClass::Acoes => "acoes",
+            AssetClass::Fiis => "fiis",
+            AssetClass::EtfExterior => "etf_exterior",
+            AssetClass::Cripto => "cripto",
+            AssetClass::Reserva => "reserva",
+            AssetClass::Outros => "outros",
+        }
+    }
+
+    pub fn parse(s: &str) -> Result<Self> {
+        Ok(match s {
+            "renda_fixa" => AssetClass::RendaFixa,
+            "acoes" => AssetClass::Acoes,
+            "fiis" => AssetClass::Fiis,
+            "etf_exterior" => AssetClass::EtfExterior,
+            "cripto" => AssetClass::Cripto,
+            "reserva" => AssetClass::Reserva,
+            "outros" => AssetClass::Outros,
+            other => {
+                return Err(NexusError::Validation(format!(
+                    "classe de ativo desconhecida: {other}"
+                )))
+            }
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
