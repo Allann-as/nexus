@@ -8,8 +8,8 @@ use std::sync::Arc;
 
 use crate::application::ports::{LedgerRepository, SearchRepository};
 use crate::application::use_cases::{
-    areas::AreaService, dashboard::DashboardService, habits::HabitService, nodes::NodeService,
-    spheres::SphereService, tasks::TaskService,
+    areas::AreaService, dashboard::DashboardService, events::EventService, goals::GoalService,
+    habits::HabitService, nodes::NodeService, spheres::SphereService, tasks::TaskService,
 };
 use crate::domain::errors::Result;
 use crate::infrastructure::clock::{SystemClock, Uuid7Gen};
@@ -17,7 +17,8 @@ use crate::infrastructure::db::Db;
 use crate::infrastructure::fts::SqliteSearchRepository;
 use crate::infrastructure::paths::Paths;
 use crate::infrastructure::repositories::{
-    area_repo::SqliteAreaRepository, habit_repo::SqliteHabitRepository,
+    area_repo::SqliteAreaRepository, event_repo::SqliteEventRepository,
+    goal_repo::SqliteGoalRepository, habit_repo::SqliteHabitRepository,
     ledger_repo::SqliteLedgerRepository, node_repo::SqliteNodeRepository,
     sphere_repo::SqliteSphereRepository, task_repo::SqliteTaskRepository,
 };
@@ -29,6 +30,8 @@ pub struct AppState {
     pub nodes: NodeService,
     pub habits: Arc<HabitService>,
     pub tasks: Arc<TaskService>,
+    pub events: EventService,
+    pub goals: GoalService,
     pub dashboard: DashboardService,
     pub spheres: SphereService,
     pub ledger: Arc<dyn LedgerRepository>,
@@ -44,6 +47,8 @@ impl AppState {
         let habit_repo = Arc::new(SqliteHabitRepository::new(db.clone()));
         let task_repo = Arc::new(SqliteTaskRepository::new(db.clone()));
         let sphere_repo = Arc::new(SqliteSphereRepository::new(db.clone()));
+        let event_repo = Arc::new(SqliteEventRepository::new(db.clone()));
+        let goal_repo = Arc::new(SqliteGoalRepository::new(db.clone()));
         let ledger: Arc<dyn LedgerRepository> = Arc::new(SqliteLedgerRepository::new(db.clone()));
         let search: Arc<dyn SearchRepository> = Arc::new(SqliteSearchRepository::new(db.clone()));
 
@@ -65,6 +70,22 @@ impl AppState {
             ids: ids.clone(),
             clock: clock.clone(),
         });
+
+        let events = EventService {
+            events: event_repo,
+            nodes: node_repo.clone(),
+            areas: area_repo.clone(),
+            ids: ids.clone(),
+            clock: clock.clone(),
+        };
+
+        let goals = GoalService {
+            goals: goal_repo,
+            nodes: node_repo.clone(),
+            areas: area_repo.clone(),
+            ids: ids.clone(),
+            clock: clock.clone(),
+        };
 
         let dashboard = DashboardService {
             habits: habits.clone(),
@@ -94,6 +115,8 @@ impl AppState {
             },
             habits,
             tasks,
+            events,
+            goals,
             dashboard,
             spheres,
             ledger,

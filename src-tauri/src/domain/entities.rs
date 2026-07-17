@@ -27,6 +27,12 @@ pub enum Kind {
     Event,
     File,
     InboxItem,
+    /// Um sub-desafio de uma meta ("30 dias sem açúcar").
+    ///
+    /// Kind próprio, e não uma `Task` com um flag: uma tarefa vaza para as
+    /// listas de tarefa e para o Nexus Score, e um sub-desafio não é trabalho
+    /// planejado do dia. Ver o cabeçalho da 0007.
+    Milestone,
 }
 
 impl Kind {
@@ -41,6 +47,7 @@ impl Kind {
             Kind::Event => "event",
             Kind::File => "file",
             Kind::InboxItem => "inbox_item",
+            Kind::Milestone => "milestone",
         }
     }
 
@@ -55,6 +62,7 @@ impl Kind {
             "event" => Kind::Event,
             "file" => Kind::File,
             "inbox_item" => Kind::InboxItem,
+            "milestone" => Kind::Milestone,
             other => {
                 return Err(NexusError::Validation(format!(
                     "kind desconhecido: {other}"
@@ -92,6 +100,104 @@ impl Status {
             other => {
                 return Err(NexusError::Validation(format!(
                     "status desconhecido: {other}"
+                )))
+            }
+        })
+    }
+}
+
+/// Para que lado uma meta quantitativa anda.
+///
+/// Espelha o CHECK de `goal_details.direction` (0001). Não é dedutível de
+/// `start_value` vs `target_value`: uma meta de "manter em 80 kg" tem os dois
+/// iguais, e o usuário ainda assim sabe se está subindo ou descendo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Direction {
+    Increase,
+    Decrease,
+}
+
+impl Direction {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Direction::Increase => "increase",
+            Direction::Decrease => "decrease",
+        }
+    }
+
+    pub fn parse(s: &str) -> Result<Self> {
+        Ok(match s {
+            "increase" => Direction::Increase,
+            "decrease" => Direction::Decrease,
+            other => {
+                return Err(NexusError::Validation(format!(
+                    "direção de meta desconhecida: {other} (esperado 'increase' ou 'decrease')"
+                )))
+            }
+        })
+    }
+}
+
+/// Qual barra manda no progresso de uma meta.
+///
+/// Espelha o CHECK de `goal_details.progress_source` (0007). A métrica e os
+/// sub-desafios discordam o tempo todo — perder 3 dos 10 kg com 4 dos 5
+/// sub-desafios feitos são 30% e 80% do mesmo dia. Escolher por conta própria
+/// seria o app decidindo por um número que é do usuário.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProgressSource {
+    Metric,
+    Milestones,
+}
+
+impl ProgressSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ProgressSource::Metric => "metric",
+            ProgressSource::Milestones => "milestones",
+        }
+    }
+
+    pub fn parse(s: &str) -> Result<Self> {
+        Ok(match s {
+            "metric" => ProgressSource::Metric,
+            "milestones" => ProgressSource::Milestones,
+            other => {
+                return Err(NexusError::Validation(format!(
+                    "fonte de progresso desconhecida: {other} (esperado 'metric' ou 'milestones')"
+                )))
+            }
+        })
+    }
+}
+
+/// O tipo de um sub-desafio. Espelha o CHECK de `milestone_details.kind` (0007).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MilestoneKind {
+    /// Um checkbox e pronto.
+    Simple,
+    /// "21/30 dias", alimentado pelos ticks de um hábito.
+    Counter,
+}
+
+impl MilestoneKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MilestoneKind::Simple => "simple",
+            MilestoneKind::Counter => "counter",
+        }
+    }
+
+    pub fn parse(s: &str) -> Result<Self> {
+        Ok(match s {
+            "simple" => MilestoneKind::Simple,
+            "counter" => MilestoneKind::Counter,
+            other => {
+                return Err(NexusError::Validation(format!(
+                    "tipo de sub-desafio desconhecido: {other}"
                 )))
             }
         })
@@ -246,9 +352,38 @@ mod tests {
             Kind::Event,
             Kind::File,
             Kind::InboxItem,
+            Kind::Milestone,
         ] {
             assert_eq!(Kind::parse(k.as_str()).unwrap(), k);
         }
+    }
+
+    #[test]
+    fn kind_strings_match_the_check_constraint() {
+        // O CHECK de `nodes.kind` (recriado na 0007) espelha exatamente estas
+        // strings. Divergir aqui faz o INSERT falhar na máquina do usuário, não
+        // neste teste.
+        assert_eq!(Kind::Milestone.as_str(), "milestone");
+        assert_eq!(Kind::InboxItem.as_str(), "inbox_item");
+    }
+
+    #[test]
+    fn goal_vocabularies_match_their_check_constraints() {
+        // Idem: `goal_details.direction` (0001), `goal_details.progress_source`
+        // e `milestone_details.kind` (0007).
+        for d in [Direction::Increase, Direction::Decrease] {
+            assert_eq!(Direction::parse(d.as_str()).unwrap(), d);
+        }
+        for s in [ProgressSource::Metric, ProgressSource::Milestones] {
+            assert_eq!(ProgressSource::parse(s.as_str()).unwrap(), s);
+        }
+        for k in [MilestoneKind::Simple, MilestoneKind::Counter] {
+            assert_eq!(MilestoneKind::parse(k.as_str()).unwrap(), k);
+        }
+        assert_eq!(ProgressSource::Milestones.as_str(), "milestones");
+        assert!(Direction::parse("subir").is_err());
+        assert!(ProgressSource::parse("vibes").is_err());
+        assert!(MilestoneKind::parse("timer").is_err());
     }
 
     #[test]

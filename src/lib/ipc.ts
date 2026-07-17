@@ -63,7 +63,8 @@ export type Kind =
   | "routine"
   | "event"
   | "file"
-  | "inbox_item";
+  | "inbox_item"
+  | "milestone";
 
 export type Status = "active" | "done" | "archived" | "dropped";
 
@@ -502,3 +503,242 @@ export interface SphereCard extends Area {
 
 /** Todos os cards do Hub, com estatística real. Uma chamada para a tela toda. */
 export const sphereOverview = () => call<SphereCard[]>("sphere_overview");
+
+/* ===== calendário ===== */
+
+/**
+ * Mirrors `domain::recurrence::Recurrence` — um subconjunto deliberado da
+ * RFC-5545. `days`: 0=domingo … 6=sábado, igual ao `Schedule` dos hábitos.
+ */
+export type Recurrence =
+  | { type: "daily"; interval: number }
+  | { type: "weekly"; interval: number; days: number[] }
+  | { type: "monthly"; interval: number }
+  | { type: "yearly"; interval: number };
+
+/** A REGRA de um evento. O que o calendário desenha é a `Occurrence`. */
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  areaId: string | null;
+  status: string;
+  startsAt: number;
+  endsAt: number;
+  allDay: boolean;
+  rrule: Recurrence | null;
+  recurrenceEnd: number | null;
+  location: string | null;
+  category: string | null;
+}
+
+/**
+ * Uma ocorrência materializada.
+ *
+ * O evento avulso também tem exatamente uma — por isso o calendário lê uma
+ * lista só, nunca uma união de "avulsos" com "séries". A chave é
+ * (eventId, startsAt): `eventId` sozinho não identifica uma das 78 terças.
+ */
+export interface Occurrence {
+  eventId: string;
+  title: string;
+  areaId: string | null;
+  startsAt: number;
+  endsAt: number;
+  /** 'YYYY-MM-DD' local — o dia que o usuário vê. */
+  day: string;
+  status: "scheduled" | "cancelled" | "moved";
+  allDay: boolean;
+  location: string | null;
+  category: string | null;
+  isRecurring: boolean;
+}
+
+/** Dois compromissos no mesmo intervalo. O backend avisa; nunca barra. */
+export interface Conflict {
+  a: Occurrence;
+  b: Occurrence;
+}
+
+export const createEvent = (e: {
+  title: string;
+  areaId?: string | null;
+  startsAt: number;
+  endsAt: number;
+  allDay?: boolean;
+  rrule?: Recurrence | null;
+  recurrenceEnd?: number | null;
+  location?: string | null;
+  category?: string | null;
+}) => call<CalendarEvent>("create_event", { event: e });
+
+export const getEvent = (id: string) => call<CalendarEvent>("get_event", { id });
+
+/** A tela do calendário: tudo que cai entre dois dias locais, numa query. */
+export const eventsRange = (fromDay: string, toDay: string) =>
+  call<Occurrence[]>("events_range", { fromDay, toDay });
+
+/**
+ * Patch parcial de evento. Chave ausente = não mexer; `null` = limpar. Por isso
+ * o objeto é repassado como veio — montar com `?? null` viraria "apagar".
+ *
+ * Sem `title`: renomear é o `renameNode`, que já grava no ledger.
+ */
+export const updateEvent = (
+  id: string,
+  patch: { location?: string | null; category?: string | null },
+) => call<CalendarEvent>("update_event", { id, patch });
+
+/**
+ * Arrasta UMA ocorrência (timeblocking).
+ *
+ * Mover uma ocorrência de uma série marca só aquela como `moved` — a regra não
+ * é reescrita. `occurrenceStart` é a metade da chave que diz qual delas.
+ */
+export const moveEvent = (
+  id: string,
+  occurrenceStart: number,
+  newStart: number,
+) => call<Occurrence>("move_event", { id, occurrenceStart, newStart });
+
+/** "Toda terça, MENOS a de 25/11." */
+export const cancelOccurrence = (id: string, occurrenceStart: number) =>
+  call<void>("cancel_occurrence", { id, occurrenceStart });
+
+/** Apaga o evento inteiro, com série e tudo. */
+export const deleteEvent = (id: string) => call<void>("delete_event", { id });
+
+/**
+ * Os choques de horário de uma janela (epoch ms).
+ *
+ * Detecção pura: o usuário PODE marcar duas coisas às 15h. Isto pinta o aviso,
+ * não bloqueia o salvamento.
+ */
+export const eventConflicts = (fromMs: number, toMs: number) =>
+  call<Conflict[]>("event_conflicts", { fromMs, toMs });
+
+/* ===== metas & sub-desafios ===== */
+
+export type Direction = "increase" | "decrease";
+
+/** Qual barra manda. Espelha o CHECK de `goal_details.progress_source` (0007). */
+export type ProgressSource = "metric" | "milestones";
+
+export type MilestoneKind = "simple" | "counter";
+
+export interface Goal {
+  id: string;
+  title: string;
+  areaId: string | null;
+  status: string;
+  metricName: string;
+  startValue: number;
+  targetValue: number;
+  unit: string;
+  direction: Direction;
+  deadline: number | null;
+  progressSource: ProgressSource;
+}
+
+export interface GoalCheckpoint {
+  id: string;
+  goalId: string;
+  value: number;
+  notedAt: number;
+  note: string | null;
+}
+
+/** Um sub-desafio. `status === "done"` É o checkbox. */
+export interface Milestone {
+  id: string;
+  goalId: string;
+  title: string;
+  status: string;
+  kind: MilestoneKind;
+  habitId: string | null;
+  targetCount: number | null;
+  weight: number;
+  sortOrder: number;
+  /** Ticks 'done' do hábito ligado. `null` num 'simple'. Vem de query. */
+  currentCount: number | null;
+}
+
+/** `Milestone` achatado com a fração dele — mirrors `MilestoneView`. */
+export interface MilestoneView extends Milestone {
+  /** 0..=1. Num 'counter', contador ÷ alvo; num 'simple', o checkbox. */
+  ratio: number;
+}
+
+export interface GoalProgress {
+  ratio: number;
+  source: ProgressSource;
+  /** A conta por extenso — o "ⓘ como calculamos". */
+  formula: string;
+}
+
+/**
+ * A projeção linear.
+ *
+ * `null` (o campo inteiro) com menos de 2 checkpoints: uma reta precisa de dois
+ * pontos, e o NEXUS não chuta. `eta` null com 2+ pontos significa que o ritmo
+ * medido não leva ao alvo — e isso é uma resposta, não uma falha.
+ */
+export interface Projection {
+  ratePerDay: number;
+  eta: string | null;
+  sampleSize: number;
+  formula: string;
+}
+
+/** `Goal` achatada com tudo que a tela precisa — mirrors `GoalWithProgress`. */
+export interface GoalWithProgress extends Goal {
+  progress: GoalProgress;
+  /** `null` = nunca mediu. Não é o mesmo que ter medido o valor inicial. */
+  currentValue: number | null;
+  checkpoints: GoalCheckpoint[];
+  milestones: MilestoneView[];
+  projection: Projection | null;
+}
+
+export const createGoal = (g: {
+  title: string;
+  areaId?: string | null;
+  metricName: string;
+  startValue: number;
+  targetValue: number;
+  unit: string;
+  direction: Direction;
+  deadline?: number | null;
+  progressSource?: ProgressSource;
+}) => call<Goal>("create_goal", { goal: g });
+
+export const listGoals = (areaId?: string | null) =>
+  call<Goal[]>("list_goals", { areaId: areaId ?? null });
+
+/** A tela de uma meta inteira: barra, série, sub-desafios e projeção. */
+export const goalWithProgress = (id: string) =>
+  call<GoalWithProgress>("goal_with_progress", { id });
+
+export const addGoalCheckpoint = (
+  id: string,
+  value: number,
+  note?: string | null,
+) => call<GoalCheckpoint>("add_goal_checkpoint", { id, value, note: note ?? null });
+
+export const addMilestone = (m: {
+  goalId: string;
+  title: string;
+  kind?: MilestoneKind;
+  /** Obrigatório num 'counter': é ele que preenche o contador. */
+  habitId?: string | null;
+  targetCount?: number | null;
+  weight?: number;
+}) => call<Milestone>("add_milestone", { milestone: m });
+
+/**
+ * Marca/desmarca um sub-desafio.
+ *
+ * O backend recusa os 'counter': eles se preenchem pelos ticks do hábito
+ * ligado, e um número manual discordaria do contado.
+ */
+export const setMilestoneDone = (id: string, done: boolean) =>
+  call<Milestone>("set_milestone_done", { id, done });

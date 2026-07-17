@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use rusqlite::{params, OptionalExtension, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 
 use crate::application::ports::{NewNode, NodeFilter, NodePatch, NodeRepository};
 use crate::domain::entities::{Kind, Node, Status};
@@ -24,9 +24,31 @@ impl SqliteNodeRepository {
     }
 }
 
-const SELECT: &str =
+pub const SELECT: &str =
     "SELECT id, kind, title, area_id, parent_id, status, created_at, updated_at, archived_at
      FROM nodes";
+
+/// Insere um node usando uma conexão/transação já existente.
+///
+/// Livre — e não método — pelo mesmo motivo de `append_in_tx`: é isto que
+/// permite a um satélite gravar node, detalhes e história DENTRO da mesma
+/// transação. Um repositório com pool próprio pegaria outra conexão, e a
+/// atomicidade que a assinatura de `create_with_event` promete se perderia.
+pub fn insert_in_tx(conn: &Connection, id: &str, node: &NewNode, now: i64) -> Result<()> {
+    conn.execute(
+        "INSERT INTO nodes (id, kind, title, area_id, parent_id, status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, 'active', ?6, ?6)",
+        params![
+            id,
+            node.kind.as_str(),
+            node.title,
+            node.area_id,
+            node.parent_id,
+            now
+        ],
+    )?;
+    Ok(())
+}
 
 fn map_node(row: &Row) -> rusqlite::Result<Node> {
     let kind: String = row.get(1)?;
@@ -90,18 +112,14 @@ impl NodeRepository for SqliteNodeRepository {
         self.db.with_write(|conn| {
             let tx = conn.transaction()?;
 
-            let now = event.ts;
-            tx.execute(
-                "INSERT INTO nodes (id, kind, title, area_id, parent_id, status, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, 'active', ?6, ?6)",
-                params![id, node.kind.as_str(), node.title, node.area_id, node.parent_id, now],
-            )?;
+            insert_in_tx(&tx, id, node, event.ts)?;
 
             // Mesma transação. Ou os dois acontecem, ou nenhum — nunca um node
             // sem história nem história sem node.
             append_in_tx(&tx, event)?;
 
-            let created = tx.query_row(&format!("{SELECT} WHERE id = ?1"), params![id], map_node)?;
+            let created =
+                tx.query_row(&format!("{SELECT} WHERE id = ?1"), params![id], map_node)?;
             tx.commit()?;
             Ok(created)
         })

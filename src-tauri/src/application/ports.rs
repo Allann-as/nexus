@@ -4,9 +4,12 @@
 //! falam com estes traits, nunca com o SQLite. Trocar o storage é implementar
 //! estes traits de novo, sem tocar em uma linha de regra de negócio.
 
-use crate::domain::entities::{Area, Kind, Node, Status, Template};
+use crate::domain::entities::{
+    Area, Direction, Kind, MilestoneKind, Node, ProgressSource, Status, Template,
+};
 use crate::domain::errors::Result;
 use crate::domain::ledger::{LedgerEntry, NewLedgerEvent};
+use crate::domain::recurrence::Recurrence;
 use crate::domain::schedule::Schedule;
 use crate::domain::streak::TickStatus;
 
@@ -318,4 +321,290 @@ pub trait TaskRepository: Send + Sync {
 
     /// Contagem de tarefas planejadas/concluídas num dia — entrada do score.
     fn day_counts(&self, from_ms: i64, to_ms: i64) -> Result<(u32, u32)>;
+}
+
+/* ===== Eventos (o Calendário) ===== */
+
+#[derive(Debug, Clone)]
+pub struct NewEventDetails {
+    pub starts_at: i64,
+    pub ends_at: i64,
+    pub all_day: bool,
+    /// A regra. `None` = evento único — que **também** ganha uma ocorrência.
+    pub rrule: Option<Recurrence>,
+    /// Até quando a regra vale. `None` = para sempre (a materialização ainda
+    /// para no horizonte de 18 meses; ver `EventService`).
+    pub recurrence_end: Option<i64>,
+    pub location: Option<String>,
+    /// Exame, consulta, reunião… O rótulo que distingue um compromisso do
+    /// outro sem exigir uma tabela por tipo. Ver a §2 da 0007.
+    pub category: Option<String>,
+}
+
+/// Tudo que criar um evento precisa, num pacote só.
+///
+/// Struct e não sete parâmetros soltos: a assinatura passaria do teto do
+/// `too_many_arguments`, e uma lista de `Option<i64>` em sequência é o tipo de
+/// coisa que se troca de lugar em silêncio.
+#[derive(Debug, Clone)]
+pub struct NewEvent {
+    pub title: String,
+    pub area_id: Option<String>,
+    pub details: NewEventDetails,
+}
+
+/// Um evento: o node + o satélite, já juntos. É a REGRA, não o que o calendário
+/// desenha — para isso existe `Occurrence`.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Event {
+    pub id: String,
+    pub title: String,
+    pub area_id: Option<String>,
+    pub status: String,
+    pub starts_at: i64,
+    pub ends_at: i64,
+    pub all_day: bool,
+    pub rrule: Option<Recurrence>,
+    pub recurrence_end: Option<i64>,
+    pub location: Option<String>,
+    pub category: Option<String>,
+}
+
+/// Alteração parcial de um evento. `None` = não mexer.
+///
+/// Sem `rrule`: trocar a regra de uma série é reescrever ocorrências que o
+/// usuário já remarcou ou cancelou à mão. Enquanto não houver uma resposta para
+/// "o que acontece com as exceções", a operação não existe.
+///
+/// Sem `title`: renomear é do `NodeService`, que já grava o evento de ledger.
+/// Um segundo caminho para o mesmo fato seria um rename fora da história.
+#[derive(Debug, Clone, Default)]
+pub struct EventPatch {
+    pub location: Option<Option<String>>,
+    pub category: Option<Option<String>>,
+}
+
+/// Uma ocorrência a materializar.
+#[derive(Debug, Clone)]
+pub struct NewOccurrence {
+    pub starts_at: i64,
+    pub ends_at: i64,
+    /// 'YYYY-MM-DD' LOCAL. Redundante com `starts_at` de propósito — ver a §3
+    /// da 0007.
+    pub day: String,
+}
+
+/// O que o calendário desenha: uma ocorrência, já com o que ela herda do node.
+///
+/// O evento único também tem uma — é o que permite ao calendário ler UMA tabela
+/// em vez de unir "avulsos" com "séries" a cada troca de mês.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Occurrence {
+    pub event_id: String,
+    pub title: String,
+    pub area_id: Option<String>,
+    pub starts_at: i64,
+    pub ends_at: i64,
+    pub day: String,
+    /// 'scheduled' | 'cancelled' | 'moved'.
+    pub status: String,
+    pub all_day: bool,
+    pub location: Option<String>,
+    pub category: Option<String>,
+    /// A ocorrência pertence a uma série. A UI mostra o ícone de repetição, e
+    /// arrastar uma delas avisa que só aquela se move.
+    pub is_recurring: bool,
+}
+
+/// Uma ocorrência mudando de lugar (o arrasto do timeblocking).
+///
+/// A chave é (event_id, starts_at) — a PK da tabela. `event_id` sozinho não
+/// identifica ocorrência nenhuma numa série de 78 terças.
+#[derive(Debug, Clone)]
+pub struct OccurrenceMove<'a> {
+    pub event_id: &'a str,
+    pub from_start: i64,
+    pub to_start: i64,
+    pub to_end: i64,
+    pub to_day: &'a str,
+    /// Uma ocorrência remarcada solta-se da série ('moved'); um evento único
+    /// não tem série de que se soltar e segue 'scheduled'.
+    pub detach: bool,
+}
+
+pub trait EventRepository: Send + Sync {
+    /// Cria o node, o satélite, as ocorrências E o evento de ledger — tudo na
+    /// MESMA transação.
+    ///
+    /// A assinatura força isso: um evento cujo node existe mas cujas
+    /// ocorrências não seria um compromisso invisível no calendário, e o
+    /// usuário só descobriria no dia em que ele não tocou.
+    fn create_with_event(
+        &self,
+        id: &str,
+        node: &NewNode,
+        details: &NewEventDetails,
+        occurrences: &[NewOccurrence],
+        event: &NewLedgerEvent,
+    ) -> Result<Event>;
+
+    fn get(&self, id: &str) -> Result<Event>;
+
+    /// Tudo que cai entre dois dias LOCAIS — a leitura do mês. UMA query.
+    fn range(&self, from_day: &str, to_day: &str) -> Result<Vec<Occurrence>>;
+
+    /// Ocorrências que tocam a janela epoch-ms — a entrada da detecção de
+    /// conflito. Por ms e não por dia: um evento das 23h às 1h pertence a dois
+    /// dias e a uma única janela.
+    fn overlapping_window(&self, from_ms: i64, to_ms: i64) -> Result<Vec<Occurrence>>;
+
+    fn update(&self, id: &str, patch: &EventPatch, updated_at: i64) -> Result<Event>;
+
+    /// Remarca UMA ocorrência e grava o evento, na mesma transação.
+    fn move_occurrence_with_event(
+        &self,
+        m: &OccurrenceMove<'_>,
+        event: &NewLedgerEvent,
+    ) -> Result<Occurrence>;
+
+    /// "Toda terça, MENOS a de 25/11."
+    fn cancel_occurrence_with_event(
+        &self,
+        event_id: &str,
+        starts_at: i64,
+        event: &NewLedgerEvent,
+    ) -> Result<()>;
+}
+
+/* ===== Metas e sub-desafios ===== */
+
+#[derive(Debug, Clone)]
+pub struct NewGoalDetails {
+    pub metric_name: String,
+    pub start_value: f64,
+    pub target_value: f64,
+    pub unit: String,
+    pub direction: Direction,
+    pub deadline: Option<i64>,
+    pub progress_source: ProgressSource,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewGoal {
+    pub title: String,
+    pub area_id: Option<String>,
+    pub details: NewGoalDetails,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Goal {
+    pub id: String,
+    pub title: String,
+    pub area_id: Option<String>,
+    pub status: String,
+    pub metric_name: String,
+    pub start_value: f64,
+    pub target_value: f64,
+    pub unit: String,
+    pub direction: Direction,
+    pub deadline: Option<i64>,
+    pub progress_source: ProgressSource,
+}
+
+/// Uma medição da métrica, com a data em que foi tomada.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Checkpoint {
+    pub id: String,
+    pub goal_id: String,
+    pub value: f64,
+    pub noted_at: i64,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewCheckpoint {
+    pub goal_id: String,
+    pub value: f64,
+    pub noted_at: i64,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewMilestone {
+    pub title: String,
+    pub goal_id: String,
+    pub kind: MilestoneKind,
+    /// O hábito que alimenta o contador. Obrigatório em 'counter'.
+    pub habit_id: Option<String>,
+    pub target_count: Option<i64>,
+    pub weight: f64,
+}
+
+/// Um sub-desafio. `status == "done"` É o checkbox — ver a §4 da 0007.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Milestone {
+    pub id: String,
+    pub goal_id: String,
+    pub title: String,
+    pub status: String,
+    pub kind: MilestoneKind,
+    pub habit_id: Option<String>,
+    pub target_count: Option<i64>,
+    pub weight: f64,
+    pub sort_order: f64,
+    /// Ticks 'done' do hábito ligado. `None` num 'simple' — ele não conta nada.
+    /// Vem de query: nunca é um número que o usuário digitou.
+    pub current_count: Option<i64>,
+}
+
+pub trait GoalRepository: Send + Sync {
+    /// Node + satélite + ledger, na mesma transação.
+    fn create_with_event(
+        &self,
+        id: &str,
+        node: &NewNode,
+        details: &NewGoalDetails,
+        event: &NewLedgerEvent,
+    ) -> Result<Goal>;
+
+    fn get(&self, id: &str) -> Result<Goal>;
+    fn list(&self, area_id: Option<&str>) -> Result<Vec<Goal>>;
+
+    /// Registra a medição E o evento de ledger, na mesma transação.
+    fn add_checkpoint_with_event(
+        &self,
+        id: &str,
+        cp: &NewCheckpoint,
+        event: &NewLedgerEvent,
+    ) -> Result<Checkpoint>;
+
+    /// A série inteira, do mais antigo ao mais recente — a entrada da projeção.
+    fn checkpoints(&self, goal_id: &str) -> Result<Vec<Checkpoint>>;
+
+    fn add_milestone_with_event(
+        &self,
+        id: &str,
+        node: &NewNode,
+        milestone: &NewMilestone,
+        event: &NewLedgerEvent,
+    ) -> Result<Milestone>;
+
+    /// Os sub-desafios da meta, com o contador dos 'counter' já preenchido.
+    /// UMA query: uma meta com 12 sub-desafios não pode virar 13 idas ao banco.
+    fn list_milestones(&self, goal_id: &str) -> Result<Vec<Milestone>>;
+
+    fn get_milestone(&self, id: &str) -> Result<Milestone>;
+
+    /// Marca/desmarca o checkbox e grava o evento, na mesma transação.
+    fn set_milestone_done_with_event(
+        &self,
+        id: &str,
+        done: bool,
+        event: &NewLedgerEvent,
+    ) -> Result<Milestone>;
 }

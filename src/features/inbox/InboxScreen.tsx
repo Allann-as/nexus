@@ -243,6 +243,7 @@ const KIND_LABEL: Record<Kind, string> = {
   event: "Evento",
   file: "Arquivo",
   inbox_item: "Inbox",
+  milestone: "Sub-desafio",
 };
 
 function isAgeing(item: Node): boolean {

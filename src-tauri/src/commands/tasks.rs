@@ -91,7 +91,7 @@ pub struct TaskPatchDto {
 ///   campo ausente     -> None            (não mexer)
 ///   `"dueAt": null`   -> Some(None)      (limpar)
 ///   `"dueAt": 123`    -> Some(Some(123)) (definir)
-fn double_option<'de, T, D>(de: D) -> std::result::Result<Option<Option<T>>, D::Error>
+pub(crate) fn double_option<'de, T, D>(de: D) -> std::result::Result<Option<Option<T>>, D::Error>
 where
     T: Deserialize<'de>,
     D: serde::Deserializer<'de>,

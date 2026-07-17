@@ -17,6 +17,7 @@ import {
   Target,
   Repeat,
   Calendar as CalendarIcon,
+  Flag,
   Paperclip,
   Inbox as InboxIcon,
   Search as SearchIcon,
@@ -51,6 +52,7 @@ const KIND_ICON: Record<Kind, LucideIcon> = {
   event: CalendarIcon,
   file: Paperclip,
   inbox_item: InboxIcon,
+  milestone: Flag,
 };
 
 const KIND_LABEL: Record<Kind, string> = {
@@ -63,6 +65,7 @@ const KIND_LABEL: Record<Kind, string> = {
   event: "Evento",
   file: "Arquivo",
   inbox_item: "Inbox",
+  milestone: "Sub-desafio",
 };
 
 export function CommandPalette({

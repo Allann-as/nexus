@@ -5,7 +5,7 @@
 -- Três coisas, nesta ordem porque a primeira é a arriscada:
 --
 --   1. `nodes.kind` ganha 'milestone' (exige recriar a tabela — ver abaixo).
---   2. `event_details` ganha `category` e `parent_event_id`.
+--   2. `event_details` ganha `category`.
 --   3. `event_occurrences` — as recorrências materializadas.
 
 -- =====================================================================
@@ -126,9 +126,14 @@ CREATE INDEX idx_event_category ON event_details(category)
 -- `starts_at` — o custo depende do mês pedido, não de quantas regras existem
 -- nem de há quanto tempo elas existem.
 --
--- O preço é a janela: materializamos 18 meses à frente (§7 do plano). Além
--- disso a série não existe ainda, e é o `EventService` que a estende quando o
--- usuário navega para perto da borda.
+-- O preço é a janela: materializamos 18 meses à frente da âncora (§7 do plano).
+-- Além disso a série simplesmente não existe — navegar para o mês 19 mostra um
+-- mês vazio, não uma projeção.
+--
+-- Estender a janela conforme o usuário navega para perto da borda é o passo que
+-- fecha isso, e ele NÃO existe ainda. Ele não pode morar na leitura do
+-- calendário (seria uma escrita durante um read, no pool que é `query_only`);
+-- o lugar é um comando explícito que a UI chama ao navegar. Ver o backlog.
 --
 -- `WITHOUT ROWID`: a PK é (event_id, starts_at) e a tabela vira uma B-tree
 -- clusterizada por ela. "As ocorrências deste evento" é um range scan
