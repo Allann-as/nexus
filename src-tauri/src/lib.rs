@@ -66,6 +66,7 @@ pub fn run() {
             commands::areas::get_area,
             commands::areas::update_area,
             commands::areas::archive_area,
+            commands::spheres::sphere_overview,
             commands::nodes::create_node,
             commands::nodes::capture_inbox,
             commands::nodes::triage_inbox_item,

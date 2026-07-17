@@ -1,20 +1,18 @@
 /**
- * M0 module screens.
+ * As telas de módulo que ainda não têm conteúdo.
  *
- * Each module owns a route, a header and a designed empty state from day one,
- * so the shell is navigable and honest about what is not built yet. As each
- * milestone lands, its screen moves out into `features/<module>/` and gains
- * real content. The Dashboard is already live against the backend.
+ * Cada módulo é dono de uma rota, um header e um empty state desenhado desde o
+ * primeiro dia, para o shell ser navegável e honesto sobre o que ainda não
+ * existe. Conforme cada marco entrega, a tela sai daqui para
+ * `features/<módulo>/` e ganha conteúdo de verdade — foi o caminho do Dashboard
+ * (M2, e agora do Hub) e dos Hábitos.
+ *
+ * `TodayScreen` morreu no M2.5: a pergunta "o que tenho hoje?" é respondida pelo
+ * Hub, que é a tela inicial. Manter um item de menu para uma segunda versão dela
+ * seria o app perguntando ao usuário qual das duas telas de hoje ele quis.
  */
 
-import {
-  Sun,
-  Calendar,
-  FileText,
-  History,
-  Sparkles,
-  type LucideIcon,
-} from "lucide-react";
+import { Calendar, FileText, History, Sparkles, type LucideIcon } from "lucide-react";
 
 import { EmptyState, PageHeader } from "../design-system/primitives";
 
@@ -32,7 +30,7 @@ function Module({
   hint: string;
 }) {
   return (
-    <div className="flex h-full flex-col">
+    <div className="nx-page nx-enter flex h-full flex-col overflow-y-auto">
       <PageHeader title={title} subtitle={subtitle} />
       <div className="min-h-0 flex-1 pb-16">
         <EmptyState icon={icon} title={emptyTitle} hint={hint} />
@@ -40,16 +38,6 @@ function Module({
     </div>
   );
 }
-
-export const TodayScreen = () => (
-  <Module
-    title="Hoje"
-    subtitle="Seus eventos, tarefas e hábitos de hoje"
-    icon={Sun}
-    emptyTitle="Nada agendado"
-    hint="Eventos, tarefas com horário e hábitos do dia aparecem aqui em ordem cronológica, a partir do M2."
-  />
-);
 
 export const CalendarScreen = () => (
   <Module

@@ -67,12 +67,34 @@ export type Kind =
 
 export type Status = "active" | "done" | "archived" | "dropped";
 
+/**
+ * O template de uma Esfera: QUE tela ela abre.
+ *
+ * Espelha `domain::entities::Template` e o CHECK de `areas.template` (0005).
+ */
+export type Template =
+  | "health"
+  | "finance"
+  | "fin_goals"
+  | "career"
+  | "studies"
+  | "simple";
+
+/**
+ * Uma Esfera da vida.
+ *
+ * Chamada `Area` porque é isso que o banco e o backend chamam — `areas` está
+ * gravado em cinco migrations imutáveis. "Esfera" é o nome na UI. Ver ADR-0005.
+ */
 export interface Area {
   id: string;
   name: string;
   icon: string;
   color: string;
   sortOrder: number;
+  template: Template;
+  /** Uma das 5 que o NEXUS instala. Editável; só não é duplicável. */
+  isSystem: boolean;
   archivedAt: number | null;
 }
 
@@ -124,8 +146,19 @@ export const systemInfo = () => call<SystemInfo>("system_info");
 
 /* ===== areas ===== */
 
-export const createArea = (name: string, icon: string, color: string) =>
-  call<Area>("create_area", { name, icon, color });
+/**
+ * Cria uma Esfera.
+ *
+ * `template` aceita só 'simple' hoje: os cinco templates especializados são
+ * instalados pela migration, não criados à mão. O backend recusa o resto — esta
+ * assinatura documenta a regra, ela não a implementa.
+ */
+export const createArea = (
+  name: string,
+  icon: string,
+  color: string,
+  template: Template = "simple",
+) => call<Area>("create_area", { name, icon, color, template });
 
 export const listAreas = (includeArchived = false) =>
   call<Area[]>("list_areas", { includeArchived });
@@ -449,3 +482,23 @@ export interface Today {
 }
 
 export const dashboardToday = () => call<Today>("dashboard_today");
+
+/* ===== esferas (o Hub) ===== */
+
+/** Um card do Hub. Espelha `use_cases::spheres::SphereCard` (que faz flatten da Area). */
+export interface SphereCard extends Area {
+  habitsTodayDone: number;
+  habitsTodayTotal: number;
+  /** O maior streak VIVO da Esfera. */
+  bestStreak: number;
+  bestStreakTitle: string | null;
+  openTasks: number;
+  openProjects: number;
+  /** Razão de conclusão por dia, 30 dias, do mais antigo ao mais recente. */
+  spark: number[];
+  /** Nada ligado a esta Esfera ainda — a UI convida em vez de mostrar zeros. */
+  isEmpty: boolean;
+}
+
+/** Todos os cards do Hub, com estatística real. Uma chamada para a tela toda. */
+export const sphereOverview = () => call<SphereCard[]>("sphere_overview");

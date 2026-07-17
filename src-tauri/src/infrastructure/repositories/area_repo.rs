@@ -5,7 +5,7 @@ use std::sync::Arc;
 use rusqlite::{params, OptionalExtension, Row};
 
 use crate::application::ports::{AreaPatch, AreaRepository, NewArea};
-use crate::domain::entities::Area;
+use crate::domain::entities::{Area, Template};
 use crate::domain::errors::{NexusError, Result};
 use crate::infrastructure::db::Db;
 
@@ -19,16 +19,24 @@ impl SqliteAreaRepository {
     }
 }
 
-const SELECT: &str = "SELECT id, name, icon, color, sort_order, archived_at FROM areas";
+const SELECT: &str =
+    "SELECT id, name, icon, color, sort_order, template, is_system, archived_at FROM areas";
 
 fn map_area(row: &Row) -> rusqlite::Result<Area> {
+    let template: String = row.get(5)?;
     Ok(Area {
         id: row.get(0)?,
         name: row.get(1)?,
         icon: row.get(2)?,
         color: row.get(3)?,
         sort_order: row.get(4)?,
-        archived_at: row.get(5)?,
+        // O CHECK da coluna já garante o vocabulário; um valor fora dele só
+        // existiria por escrita manual no arquivo .db. Cair no `Simple` mostra
+        // a Esfera com a tela genérica em vez de derrubar a listagem inteira —
+        // dado preservado, tela degradada.
+        template: Template::parse(&template).unwrap_or(Template::Simple),
+        is_system: row.get::<_, i64>(6)? != 0,
+        archived_at: row.get(7)?,
     })
 }
 
@@ -44,8 +52,16 @@ impl AreaRepository for SqliteAreaRepository {
             )?;
 
             c.execute(
-                "INSERT INTO areas (id, name, icon, color, sort_order) VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![id, area.name, area.icon, area.color, next],
+                "INSERT INTO areas (id, name, icon, color, sort_order, template, is_system)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0)",
+                params![
+                    id,
+                    area.name,
+                    area.icon,
+                    area.color,
+                    next,
+                    area.template.as_str()
+                ],
             )?;
 
             Ok(Area {
@@ -54,6 +70,11 @@ impl AreaRepository for SqliteAreaRepository {
                 icon: area.icon.clone(),
                 color: area.color.clone(),
                 sort_order: next,
+                template: area.template,
+                // `is_system` é fixo em 0: as Esferas do sistema nascem no seed
+                // da 0005, nunca por esta rota. Nada que o usuário cria em
+                // runtime pode se declarar do sistema.
+                is_system: false,
                 archived_at: None,
             })
         })

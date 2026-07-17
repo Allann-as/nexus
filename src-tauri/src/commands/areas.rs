@@ -2,7 +2,7 @@
 
 use tauri::State;
 
-use crate::domain::entities::Area;
+use crate::domain::entities::{Area, Template};
 use crate::domain::errors::Result;
 use crate::state::AppState;
 
@@ -12,8 +12,11 @@ pub fn create_area(
     name: String,
     icon: String,
     color: String,
+    template: String,
 ) -> Result<Area> {
-    state.areas.create(&name, &icon, &color)
+    state
+        .areas
+        .create(&name, &icon, &color, Template::parse(&template)?)
 }
 
 #[tauri::command]

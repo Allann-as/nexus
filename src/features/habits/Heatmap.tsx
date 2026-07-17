@@ -10,9 +10,18 @@ import { useMemo } from "react";
 
 import type { HeatmapCell } from "../../lib/ipc";
 
-const CELL = 11;
+const CELL = 12;
 const GAP = 3;
 const WEEKDAY_LABELS = ["", "Seg", "", "Qua", "", "Sex", ""];
+
+/**
+ * A rampa da cor da Esfera, em 5 passos.
+ *
+ * Mistura com `--bg-base` e não com `--bg-raised`: o passo mais fraco tem que
+ * sumir NO FUNDO da página, senão o ano inteiro fica com uma névoa colorida por
+ * cima dos dias em que nada aconteceu.
+ */
+const SCALE = [20, 40, 60, 80, 100];
 
 export function Heatmap({
   cells,
@@ -23,7 +32,7 @@ export function Heatmap({
 }) {
   // Agrupa em colunas semanais começando no domingo — a leitura que todo mundo
   // já conhece do GitHub.
-  const { columns, months } = useMemo(() => {
+  const { columns, months, maxValue } = useMemo(() => {
     const columns: HeatmapCell[][] = [];
     let current: HeatmapCell[] = [];
 
@@ -59,7 +68,12 @@ export function Heatmap({
       }
     });
 
-    return { columns, months };
+    // A intensidade de um hábito quantitativo é relativa ao MELHOR dia do
+    // próprio hábito: 2L de água e 10km de corrida não têm escala em comum, e
+    // o único teto honesto que existe aqui é o que o usuário já alcançou.
+    const maxValue = cells.reduce((m, c) => Math.max(m, c.value ?? 0), 0);
+
+    return { columns, months, maxValue };
   }, [cells]);
 
   const width = columns.length * (CELL + GAP);
@@ -105,11 +119,14 @@ export function Heatmap({
                 y={20 + ri * (CELL + GAP)}
                 width={CELL}
                 height={CELL}
-                rx={2}
-                fill={colourFor(cell)}
+                rx={3}
+                fill={colourFor(cell, maxValue)}
                 stroke={cell.scheduled ? "var(--border-subtle)" : "none"}
                 strokeWidth={0.5}
               >
+                {/* `<title>` e não um tooltip próprio: são 365 células, e um
+                    listener de hover por célula custaria mais que o desenho
+                    inteiro para dizer a mesma frase. */}
                 <title>{tooltip(cell, unit)}</title>
               </rect>
             );
@@ -117,25 +134,35 @@ export function Heatmap({
         )}
       </svg>
 
-      <div className="mt-2 flex items-center gap-2 text-[10px] text-[var(--text-tertiary)]">
-        <span>menos</span>
-        <span className="size-[9px] rounded-[2px] bg-[var(--bg-raised)]" />
-        <span className="size-[9px] rounded-[2px]" style={{ background: shade(0.35) }} />
-        <span className="size-[9px] rounded-[2px]" style={{ background: shade(0.7) }} />
-        <span className="size-[9px] rounded-[2px]" style={{ background: shade(1) }} />
-        <span>mais</span>
+      <div className="mt-2 flex items-center gap-1.5 text-[10px] text-[var(--text-tertiary)]">
+        <span className="mr-0.5">menos</span>
+        {SCALE.map((_, i) => (
+          <span
+            key={i}
+            className="size-[10px] rounded-[3px]"
+            style={{ background: shade(i) }}
+          />
+        ))}
+        <span className="ml-0.5">mais</span>
       </div>
     </div>
   );
 }
 
-function shade(alpha: number): string {
-  return `color-mix(in srgb, var(--success) ${alpha * 100}%, var(--bg-raised))`;
+/** `step` é um índice em `SCALE`, não uma fração: a rampa tem 5 degraus e nada entre eles. */
+function shade(step: number): string {
+  return `color-mix(in srgb, var(--sphere) ${SCALE[step]}%, var(--bg-base))`;
 }
 
-function colourFor(cell: HeatmapCell): string {
-  if (cell.status === "done") return shade(1);
-  if (cell.status === "failed") return "color-mix(in srgb, var(--danger) 55%, var(--bg-raised))";
+function colourFor(cell: HeatmapCell, maxValue: number): string {
+  if (cell.status === "done") {
+    // Hábito binário (meditei?) não tem intensidade: feito é feito, e vai no
+    // topo da rampa. Só o quantitativo distribui pelos degraus.
+    if (cell.value == null || maxValue <= 0) return shade(SCALE.length - 1);
+    const step = Math.ceil((cell.value / maxValue) * SCALE.length) - 1;
+    return shade(Math.min(SCALE.length - 1, Math.max(0, step)));
+  }
+  if (cell.status === "failed") return "color-mix(in srgb, var(--danger) 55%, var(--bg-base))";
   if (cell.status === "skipped") return "var(--bg-hover)";
   // Um dia sem tick E sem agendamento é mais apagado que uma falta de verdade:
   // não fazer o que não era para fazer não é uma falha.

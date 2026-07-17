@@ -58,7 +58,7 @@ export function QuickCapture({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-[22vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-[color-mix(in_srgb,var(--bg-void)_55%,transparent)] pt-[22vh]"
       onMouseDown={onClose}
     >
       <div
@@ -66,8 +66,7 @@ export function QuickCapture({
         aria-modal="true"
         aria-label="Captura rápida"
         onMouseDown={(e) => e.stopPropagation()}
-        className="w-[520px] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-strong)] bg-[var(--bg-raised)]"
-        style={{ boxShadow: "var(--shadow-float)" }}
+        className="nx-glass nx-enter w-[520px] overflow-hidden rounded-[var(--radius-lg)]"
       >
         <div className="flex items-center gap-2.5 px-4 pt-3.5">
           <Inbox size={13} className="text-[var(--text-tertiary)]" />

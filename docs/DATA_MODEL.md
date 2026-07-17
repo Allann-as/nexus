@@ -25,8 +25,9 @@ de cada tipo vivem em tabelas-satélite 1:1 onde **PK = FK**.
 
 ```
                     ┌──────────┐
-                    │  areas   │
-                    └────┬─────┘
+                    │  areas   │  ← as "Esferas" da UI (ADR-0013)
+                    │ template │    template = que tela abrir
+                    └────┬─────┘    is_system = uma das 5 instaladas
                          │ area_id
                     ┌────▼─────┐         ┌──────────┐
        parent_id ──►│  nodes   │◄────────┤  links   │ (N:N universal)
@@ -62,6 +63,7 @@ e backlinks.
 | `idx_event_range` | Overlap scan para detecção de conflito. |
 | `idx_links_target` | Backlinks (`links` já tem PK em `source_id`). |
 | `idx_file_sha` | Dedup de anexos por conteúdo. |
+| `idx_ticks_day` | O Hub (0005). A PK de `habit_ticks` é `(habit_id, day)`, ótima para "o ano do hábito X" — e inútil para a pergunta transposta que o Hub faz, "os ticks de TODOS os hábitos nos últimos 30 dias". Sem ele, a tela que abre a cada cold start varreria a tabela inteira, que cresce para sempre. |
 
 ## 3. A Máquina do Tempo — ledger imutável
 
@@ -207,6 +209,25 @@ pares — queries baratas em background. SQL de referência no prompt mestre §5
 | Tendência de metas | Regressão linear sobre `goal_checkpoints` → projeção da data de atingimento. |
 | **Nexus Score** | 40% hábitos agendados cumpridos + 30% tarefas planejadas + 20% rotina matinal + 10% inbox zerada. Série própria no ledger. |
 | Neste dia | Ledger em `day` de 1/2/5 anos atrás. |
+
+## 5.5 As Esferas da Vida (0005)
+
+Uma Esfera **é** uma linha de `areas` — não uma tabela nova. O motivo, a
+alternativa recusada e o custo (um conceito com dois nomes) estão no **ADR-0013**.
+
+| Coluna | Papel |
+|---|---|
+| `template` | Que tela a Esfera abre: `health`, `finance`, `fin_goals`, `career`, `studies`, `simple`. **Não é o id nem o nome**: renomear "Saúde" para "Corpo" não pode apagar a tela, e um id não diz nada sobre comportamento. Imutável depois de criada — virar uma Esfera de Saúde em agenda simples deixaria checkpoints e histórico de treino órfãos, vivos e sem tela. |
+| `is_system` | As 5 que o NEXUS instala. **Não** impede editar nem arquivar (a vida do usuário é dele); serve para o wizard não oferecer uma segunda "Finanças", que partiria o patrimônio em duas telas que nunca somam. |
+
+A migration **é** o seed: as 5 Esferas e os 6 bancos nascem com ids fixos e
+legíveis (`sphere-health`, `acct-nubank`), com `INSERT OR IGNORE`. Ver ADR-0014.
+
+`accounts` chega junto, antes dos aportes do M3.5, porque `contributions` vai
+referenciá-la — criar o alvo da FK antes da FK — e porque a Esfera Finanças
+precisa listar os bancos desde o primeiro boot. Ela não tem `created_at`: uma
+conta não é um acontecimento, é uma gaveta. O ledger conta o que você fez (o
+aporte), não onde você guardou.
 
 ## 6. Integridade e migrations
 

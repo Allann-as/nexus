@@ -10,7 +10,7 @@ use nexus_lib::application::ports::{
     LedgerRepository, NodeFilter, NodeRepository, SearchRepository,
 };
 use nexus_lib::application::use_cases::{areas::AreaService, nodes::NodeService};
-use nexus_lib::domain::entities::{Kind, Status};
+use nexus_lib::domain::entities::{Kind, Status, Template};
 use nexus_lib::infrastructure::clock::{SystemClock, Uuid7Gen};
 use nexus_lib::infrastructure::db::Db;
 use nexus_lib::infrastructure::fts::SqliteSearchRepository;
@@ -180,7 +180,10 @@ fn title_snapshot_does_not_follow_later_renames() {
 #[test]
 fn triage_converts_kind_and_keeps_identity() {
     let h = harness();
-    let area = h.areas.create("Saúde", "heart", "#4ADE80").unwrap();
+    let area = h
+        .areas
+        .create("Saúde", "heart", "#4ADE80", Template::Simple)
+        .unwrap();
     let item = h.nodes.capture_inbox("marcar check-up").unwrap();
     let original_id = item.id.clone();
 
@@ -234,23 +237,77 @@ fn triage_rejects_a_nonexistent_area() {
 #[test]
 fn areas_are_archived_never_deleted() {
     let h = harness();
-    let area = h.areas.create("Carreira", "briefcase", "#7C8CF8").unwrap();
+    // Contagens relativas, não absolutas: a migration 0005 semeia as 5 Esferas
+    // do sistema, então nenhum banco novo começa vazio. O que este teste afirma
+    // é o DELTA de arquivar uma Esfera — e isso vale com 5 vizinhas ou 500.
+    let before_active = h.areas.list(false).unwrap().len();
+    let before_all = h.areas.list(true).unwrap().len();
+
+    let area = h
+        .areas
+        .create("Carreira", "briefcase", "#7C8CF8", Template::Simple)
+        .unwrap();
+    assert_eq!(h.areas.list(false).unwrap().len(), before_active + 1);
 
     h.areas.archive(&area.id).unwrap();
 
-    assert_eq!(h.areas.list(false).unwrap().len(), 0, "some da lista ativa");
+    assert_eq!(
+        h.areas.list(false).unwrap().len(),
+        before_active,
+        "some da lista ativa"
+    );
     assert_eq!(
         h.areas.list(true).unwrap().len(),
-        1,
+        before_all + 1,
         "mas continua existindo — dados são sagrados"
     );
     assert!(h.areas.get(&area.id).unwrap().archived_at.is_some());
 }
 
 #[test]
+fn the_system_spheres_are_available_from_the_first_boot() {
+    // O Hub abre no primeiro boot mostrando as 5 Esferas. Sem seed, a primeira
+    // tela do app seria uma tela vazia pedindo cadastro — o oposto do produto.
+    let h = harness();
+    let spheres = h.areas.list(false).unwrap();
+
+    let mut templates: Vec<&str> = spheres
+        .iter()
+        .filter(|a| a.is_system)
+        .map(|a| a.template.as_str())
+        .collect();
+    templates.sort_unstable();
+
+    assert_eq!(
+        templates,
+        ["career", "fin_goals", "finance", "health", "studies"]
+    );
+}
+
+#[test]
+fn a_specialised_template_cannot_be_created_by_hand() {
+    // O wizard só oferece 'simple', mas o IPC é uma fronteira pública: um
+    // `invoke` no console não pode criar uma segunda Esfera Finanças e partir o
+    // patrimônio em duas telas que nunca somam.
+    let h = harness();
+    let err = h
+        .areas
+        .create("Finanças 2", "wallet", "#4D8DFF", Template::Finance)
+        .unwrap_err();
+
+    assert!(
+        err.to_string().contains("instalado pelo NEXUS"),
+        "veio: {err}"
+    );
+}
+
+#[test]
 fn archiving_twice_is_reported_honestly() {
     let h = harness();
-    let area = h.areas.create("Carreira", "briefcase", "#7C8CF8").unwrap();
+    let area = h
+        .areas
+        .create("Carreira", "briefcase", "#7C8CF8", Template::Simple)
+        .unwrap();
     h.areas.archive(&area.id).unwrap();
 
     let err = h.areas.archive(&area.id).unwrap_err();
@@ -263,7 +320,10 @@ fn archiving_twice_is_reported_honestly() {
 #[test]
 fn area_colors_are_normalised() {
     let h = harness();
-    let area = h.areas.create("Finanças", "wallet", "#4ade80").unwrap();
+    let area = h
+        .areas
+        .create("Finanças", "wallet", "#4ade80", Template::Simple)
+        .unwrap();
     assert_eq!(area.color, "#4ADE80");
 }
 
@@ -271,15 +331,21 @@ fn area_colors_are_normalised() {
 fn invalid_area_input_is_rejected() {
     let h = harness();
     assert!(
-        h.areas.create("", "circle", "#7C8CF8").is_err(),
+        h.areas
+            .create("", "circle", "#7C8CF8", Template::Simple)
+            .is_err(),
         "nome vazio"
     );
     assert!(
-        h.areas.create("X", "circle", "vermelho").is_err(),
+        h.areas
+            .create("X", "circle", "vermelho", Template::Simple)
+            .is_err(),
         "cor inválida"
     );
     assert!(
-        h.areas.create("X", "Circle!", "#7C8CF8").is_err(),
+        h.areas
+            .create("X", "Circle!", "#7C8CF8", Template::Simple)
+            .is_err(),
         "ícone inválido"
     );
 }
@@ -429,7 +495,10 @@ fn rebuild_reconstructs_the_index_from_current_state() {
 #[test]
 fn nodes_can_be_filtered_by_kind_and_status() {
     let h = harness();
-    let area = h.areas.create("Trabalho", "briefcase", "#7C8CF8").unwrap();
+    let area = h
+        .areas
+        .create("Trabalho", "briefcase", "#7C8CF8", Template::Simple)
+        .unwrap();
     h.nodes
         .create(Kind::Task, "t1", Some(&area.id), None)
         .unwrap();

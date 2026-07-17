@@ -19,11 +19,14 @@ export function Toaster() {
         <div
           key={t.id}
           className={cx(
-            "pointer-events-auto flex items-start gap-2.5 rounded-[var(--radius-md)] border p-3",
+            "nx-enter pointer-events-auto flex items-start gap-2.5 rounded-[var(--radius-md)] border p-3",
+            // Sem `nx-glass`: o toast pode aparecer COM a palette aberta, e o
+            // orçamento é de UM backdrop-filter na tela (ver styles.css). O
+            // fundo opaco custa zero e some em 4s de qualquer jeito.
             "bg-[var(--bg-raised)]",
             t.kind === "error"
               ? "border-[var(--danger)]"
-              : "border-[var(--border-strong)]",
+              : "border-[color-mix(in_srgb,var(--success)_40%,transparent)]",
           )}
           style={{ boxShadow: "var(--shadow-float)" }}
         >

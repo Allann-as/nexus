@@ -16,7 +16,7 @@ use nexus_lib::application::ports::Clock;
 use nexus_lib::application::use_cases::{
     areas::AreaService, habits::HabitService, nodes::NodeService, tasks::TaskService,
 };
-use nexus_lib::domain::entities::Kind;
+use nexus_lib::domain::entities::{Kind, Template};
 use nexus_lib::domain::schedule::{format_day, parse_day, Schedule};
 use nexus_lib::domain::streak::TickStatus;
 use nexus_lib::infrastructure::clock::{SystemClock, Uuid7Gen};
@@ -65,18 +65,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         clock: clock.clone(),
     };
 
-    // ===== Áreas =====
-    for (name, icon, color) in [
-        ("Saúde", "heart", "#4ADE80"),
-        ("Carreira", "briefcase", "#7C8CF8"),
-        ("Finanças", "wallet", "#FBBF24"),
-    ] {
-        areas.create(name, icon, color)?;
-    }
+    // ===== Esferas =====
+    //
+    // Não criamos nenhuma: as 5 do sistema já nasceram com a migration 0005.
+    // Semear uma "Saúde" própria daria ao usuário duas Esferas de mesmo nome e
+    // um Hub com cards duplicados — o seed tem que povoar o app que existe, não
+    // um paralelo.
+    //
+    // O que o seed cria de Esfera é uma 'simple', para o Hub mostrar também o
+    // caso do template do usuário.
     let all_areas = areas.list(false)?;
-    let saude = all_areas.iter().find(|a| a.name == "Saúde").unwrap();
-    let carreira = all_areas.iter().find(|a| a.name == "Carreira").unwrap();
-    println!("  {} áreas", all_areas.len());
+    let saude = all_areas
+        .iter()
+        .find(|a| a.template == Template::Health)
+        .expect("a Esfera Saúde é semeada pela migration 0005");
+    let carreira = all_areas
+        .iter()
+        .find(|a| a.template == Template::Career)
+        .expect("a Esfera Carreira é semeada pela migration 0005");
+
+    if !all_areas.iter().any(|a| a.name == "Casa") {
+        areas.create("Casa", "home", "#F472B6", Template::Simple)?;
+    }
+    println!("  {} esferas", areas.list(false)?.len());
 
     // ===== Rotina matinal =====
     let routine = habits.create_routine("Rotina matinal", Some(&saude.id))?;

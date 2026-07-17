@@ -128,53 +128,61 @@ export function InboxScreen() {
   const ageing = items.filter((i) => isAgeing(i)).length;
 
   return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        title="Inbox"
-        subtitle={
-          isPending
-            ? "Carregando…"
-            : items.length === 0
-              ? "Inbox zerada"
-              : `${items.length} ${items.length === 1 ? "item" : "itens"} para triar`
-        }
-        actions={
-          ageing > 0 ? (
-            <span className="flex items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--warning)] px-2.5 py-1 text-[11px] text-[var(--warning)]">
-              <Clock size={12} />
-              {ageing} há mais de {AGEING_DAYS} dias
-            </span>
-          ) : undefined
-        }
-      />
+    <div className="nx-page nx-enter h-full overflow-y-auto">
+      <div className="mx-auto flex min-h-full max-w-[1100px] flex-col">
+        <PageHeader
+          title="Inbox"
+          subtitle={
+            isPending
+              ? "Carregando…"
+              : items.length === 0
+                ? "Inbox zerada"
+                : `${items.length} ${items.length === 1 ? "item" : "itens"} para triar`
+          }
+          actions={
+            ageing > 0 ? (
+              <span
+                className="tabular flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium text-[var(--warning)]"
+                style={{
+                  background: "color-mix(in srgb, var(--warning) 12%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--warning) 35%, transparent)",
+                }}
+              >
+                <Clock size={12} />
+                {ageing} há mais de {AGEING_DAYS} dias
+              </span>
+            ) : undefined
+          }
+        />
 
-      {items.length === 0 && !isPending ? (
-        <div className="min-h-0 flex-1 pb-16">
-          <EmptyState
-            icon={InboxIcon}
-            title="Inbox zerada"
-            hint="Nada esperando decisão. Ctrl+Shift+N captura qualquer coisa, de qualquer tela."
-          />
-        </div>
-      ) : (
-        <>
-          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-8">
-            {items.map((item, i) => (
-              <Row
-                key={item.id}
-                item={item}
-                index={i}
-                selected={i === selected}
-                areaCount={areas.length}
-                onHover={() => setSelected(i)}
-                onTriage={(into) => !busy && triage.mutate({ id: item.id, into })}
-                onDiscard={() => !busy && discard.mutate(item.id)}
-              />
-            ))}
+        {items.length === 0 && !isPending ? (
+          <div className="min-h-0 flex-1 pb-16">
+            <EmptyState
+              icon={InboxIcon}
+              title="Inbox zerada"
+              hint="Nada esperando decisão. Ctrl+Shift+N captura qualquer coisa, de qualquer tela."
+            />
           </div>
-          <Legend />
-        </>
-      )}
+        ) : (
+          <>
+            <div ref={listRef} className="flex-1 px-8 pb-4">
+              {items.map((item, i) => (
+                <Row
+                  key={item.id}
+                  item={item}
+                  index={i}
+                  selected={i === selected}
+                  areaCount={areas.length}
+                  onHover={() => setSelected(i)}
+                  onTriage={(into) => !busy && triage.mutate({ id: item.id, into })}
+                  onDiscard={() => !busy && discard.mutate(item.id)}
+                />
+              ))}
+            </div>
+            <Legend />
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -234,11 +242,11 @@ function Row({
       data-index={index}
       onMouseMove={onHover}
       className={cx(
-        "group flex items-center gap-3 rounded-[var(--radius-md)] border-l-2 px-3",
-        "transition-colors duration-[var(--dur-fast)]",
+        "group flex items-center gap-3 rounded-[var(--radius-md)] border border-l-2 px-3",
+        "transition-[background-color,border-color] duration-[var(--dur-fast)] ease-[var(--ease)]",
         selected
-          ? "border-l-[var(--accent)] bg-[var(--bg-hover)]"
-          : "border-l-transparent hover:bg-[var(--bg-surface)]",
+          ? "border-[var(--border-subtle)] border-l-[var(--sphere)] bg-[var(--bg-surface)]"
+          : "border-transparent hover:border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]",
       )}
       style={{ minHeight: "var(--row-list)" }}
     >
@@ -248,7 +256,7 @@ function Row({
 
       <span
         className={cx(
-          "shrink-0 text-[11px]",
+          "tabular shrink-0 text-[11px]",
           ageing ? "text-[var(--warning)]" : "text-[var(--text-tertiary)]",
         )}
       >
@@ -267,7 +275,7 @@ function Row({
         <button
           onClick={onDiscard}
           title="Descartar (Backspace)"
-          className="rounded-[var(--radius-sm)] px-2 py-1 text-[11px] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-raised)] hover:text-[var(--danger)]"
+          className="rounded-[var(--radius-sm)] px-2 py-1 text-[11px] text-[var(--text-tertiary)] transition-colors duration-[var(--dur-fast)] hover:bg-[color-mix(in_srgb,var(--danger)_12%,transparent)] hover:text-[var(--danger)]"
         >
           Descartar
         </button>
@@ -275,7 +283,7 @@ function Row({
 
       {areaCount === 0 && selected && (
         <span className="shrink-0 text-[10px] text-[var(--text-tertiary)]">
-          crie Áreas para organizar
+          crie Esferas para organizar
         </span>
       )}
     </div>
@@ -295,7 +303,7 @@ function TriageButton({
     <button
       onClick={onClick}
       title={`${label} (${hint})`}
-      className="flex items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-1 text-[11px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-raised)] hover:text-[var(--text-primary)]"
+      className="flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-transparent px-2 py-1 text-[11px] text-[var(--text-secondary)] transition-[background-color,border-color,color] duration-[var(--dur-fast)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-raised)] hover:text-[var(--text-primary)]"
     >
       {label}
       <span className="font-mono text-[9px] text-[var(--text-tertiary)]">{hint}</span>
@@ -303,9 +311,14 @@ function TriageButton({
   );
 }
 
+/**
+ * A régua de atalhos. `sticky`: a tela inteira rola agora (o Shell não rola
+ * mais), e um rodapé que sobe junto com a lista some justo quando a fila é
+ * longa — que é quando as teclas importam.
+ */
 function Legend() {
   return (
-    <div className="flex shrink-0 items-center gap-4 border-t border-[var(--border-subtle)] px-8 py-2.5 text-[11px] text-[var(--text-tertiary)]">
+    <div className="sticky bottom-0 mt-auto flex shrink-0 items-center gap-4 border-t border-[var(--border-subtle)] bg-[var(--bg-base)] px-8 py-2.5 text-[11px] text-[var(--text-tertiary)]">
       <span className="flex items-center gap-1.5">
         <Kbd>T</Kbd> tarefa
       </span>

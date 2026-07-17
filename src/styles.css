@@ -6,6 +6,8 @@
 @import "@fontsource-variable/inter/index.css";
 @import "@fontsource/jetbrains-mono/400.css";
 @import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/600.css";
+@import "@fontsource/jetbrains-mono/700.css";
 
 @import "./design-system/tokens.css";
 
@@ -21,7 +23,7 @@
   }
 
   body {
-    background: var(--bg-base);
+    background: var(--bg-void);
     color: var(--text-primary);
     font-family: var(--font-sans);
     font-size: 14px;
@@ -48,11 +50,13 @@
   h1,
   h2,
   h3 {
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
     font-weight: 600;
   }
 
-  /* Statistics use tabular figures so digits never jitter as values change. */
+  /* Statistics use tabular figures so digits never jitter as values change.
+     Mono + tabular não é preciosismo tipográfico: sem isso, um count-up
+     empurra o layout dezena por dezena enquanto conta. */
   .tabular {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
@@ -80,5 +84,93 @@
   ::-webkit-scrollbar-thumb:hover {
     background: var(--text-tertiary);
     background-clip: content-box;
+  }
+}
+
+/* ============================================================
+   O FUNDO — três camadas, custo ~zero
+   ------------------------------------------------------------
+   A regra do Midnight: nenhum container de página é chapado.
+   Toda tela empilha, de baixo para cima:
+
+     1. --bg-base sólido        (o navy)
+     2. dot grid                (a textura)
+     3. aurora radial           (a identidade — na cor da Esfera)
+
+   Tudo `background-image` ESTÁTICO no mesmo elemento. Zero
+   elementos extras no DOM, zero canvas, zero partícula, zero
+   frame de animação. O fundo não custa nada porque não faz nada:
+   quem se move são os DADOS.
+
+   A cor da aurora vem de `--sphere`, que a tela define. Uma
+   propriedade, e a Esfera Saúde fica verde inteira.
+   ============================================================ */
+@layer components {
+  .nx-page {
+    position: relative;
+    background-color: var(--bg-base);
+
+    /* Ordem importa: o primeiro é o mais alto da pilha.
+       - Aurora 1: o brilho principal, no alto à direita.
+       - Aurora 2: um eco frio no canto oposto, para o fundo não
+         ficar simétrico demais (simetria lê como wallpaper).
+       - Dot grid: a textura por baixo de tudo. */
+    background-image:
+      radial-gradient(
+        900px 420px at 80% -10%,
+        color-mix(in srgb, var(--sphere) calc(var(--aurora-alpha) * 100%), transparent),
+        transparent 70%
+      ),
+      radial-gradient(
+        700px 380px at 5% 0%,
+        color-mix(in srgb, var(--accent-deep) calc(var(--aurora-alpha) * 55%), transparent),
+        transparent 72%
+      ),
+      radial-gradient(
+        circle,
+        rgb(255 255 255 / var(--dot-alpha)) 1px,
+        transparent 1px
+      );
+    background-size:
+      100% 100%,
+      100% 100%,
+      26px 26px;
+    background-repeat: no-repeat, no-repeat, repeat;
+    background-attachment: local, local, local;
+  }
+
+  /* O dot grid do tema claro precisa ser escuro sobre branco —
+     pontos brancos sobre #f4f6fb são invisíveis. */
+  :root[data-theme="light"] .nx-page {
+    background-image:
+      radial-gradient(
+        900px 420px at 80% -10%,
+        color-mix(in srgb, var(--sphere) calc(var(--aurora-alpha) * 100%), transparent),
+        transparent 70%
+      ),
+      radial-gradient(
+        700px 380px at 5% 0%,
+        color-mix(in srgb, var(--accent-deep) calc(var(--aurora-alpha) * 55%), transparent),
+        transparent 72%
+      ),
+      radial-gradient(circle, rgb(12 20 36 / var(--dot-alpha)) 1px, transparent 1px);
+  }
+
+  /* A entrada de uma tela: fade + 12px. Só na montagem. */
+  .nx-enter {
+    animation: nexus-enter 160ms var(--ease) both;
+  }
+
+  /* O painel de vidro dos overlays (palette, modais).
+     MÁXIMO UM VISÍVEL POR VEZ. O backdrop-filter é o efeito mais
+     caro do arsenal: ele força o compositor a reamostrar tudo que
+     está atrás, todo frame. Dois empilhados fazem o custo
+     compor. Por isso a palette e a captura são mutuamente
+     exclusivas no Shell — não é só sobre foco de teclado. */
+  .nx-glass {
+    background: color-mix(in srgb, var(--bg-raised) 75%, transparent);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-float);
   }
 }

@@ -1,6 +1,11 @@
 /**
- * Aurora primitives. Deliberately few: every screen composes from these, so
- * consistency is structural rather than a thing to remember.
+ * Os primitives base do Midnight. Deliberadamente poucos: toda tela compõe a
+ * partir daqui, então a consistência é estrutural em vez de ser uma coisa a
+ * lembrar.
+ *
+ * As receitas de card (HeroCard, StatCard, SummaryCard, GlassPanel) moram em
+ * `cards.tsx`, e os gráficos em `charts.tsx`. Aqui ficam só as peças que toda
+ * tela usa, inclusive as que não têm dado nenhum para mostrar.
  */
 
 import type { ReactNode, ButtonHTMLAttributes } from "react";
@@ -19,14 +24,17 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const BUTTON_VARIANTS: Record<string, string> = {
+  // O gradiente + glow do botão primário é o que o distingue à distância. O
+  // glow é estático e só a opacidade muda no hover: sombra animada em loop é
+  // justamente o que a §6 proíbe.
   primary:
-    "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] border border-transparent",
+    "bg-gradient-to-b from-[var(--accent)] to-[var(--accent-deep)] text-white border border-[color-mix(in_srgb,var(--accent-bright)_40%,transparent)] shadow-[0_2px_16px_color-mix(in_srgb,var(--accent)_35%,transparent)] hover:brightness-110",
   secondary:
-    "bg-[var(--bg-raised)] text-[var(--text-primary)] border border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] hover:border-[var(--border-strong)]",
+    "bg-[var(--bg-raised)] text-[var(--text-primary)] border border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] hover:border-[var(--border-glow)]",
   ghost:
-    "bg-transparent text-[var(--text-secondary)] border border-transparent hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]",
+    "bg-transparent text-[var(--text-secondary)] border border-transparent hover:bg-[var(--bg-raised)] hover:text-[var(--text-primary)]",
   danger:
-    "bg-transparent text-[var(--danger)] border border-[var(--border-subtle)] hover:bg-[color-mix(in_srgb,var(--danger)_12%,transparent)]",
+    "bg-transparent text-[var(--danger)] border border-[var(--border-subtle)] hover:bg-[color-mix(in_srgb,var(--danger)_12%,transparent)] hover:border-[var(--danger)]",
 };
 
 export function Button({
@@ -60,16 +68,22 @@ export function Button({
 export function Card({
   children,
   className,
+  hover = false,
 }: {
   children: ReactNode;
   className?: string;
+  /** Liga a resposta de hover. Só para card que É clicável — elevar um card
+   *  inerte promete uma ação que não existe. */
+  hover?: boolean;
 }) {
-  // Elevation via border + background delta, never a diffuse shadow. Shadows
-  // are reserved for genuinely floating layers (palette, dialogs).
+  // Elevação por borda + delta de fundo, nunca por sombra difusa. Sombra fica
+  // reservada para o que flutua de verdade (palette, diálogos).
   return (
     <div
       className={cx(
         "rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)]",
+        hover &&
+          "transition-[transform,border-color,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease)] hover:-translate-y-0.5 hover:border-[var(--border-glow)] hover:shadow-[var(--glow-accent)]",
         className,
       )}
     >
@@ -107,8 +121,11 @@ export function EmptyState({
 }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
-      <div className="flex size-12 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
-        <Icon size={20} className="text-[var(--text-tertiary)]" strokeWidth={1.75} />
+      <div
+        className="flex size-14 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)]"
+        style={{ boxShadow: "0 0 40px color-mix(in srgb, var(--sphere) 12%, transparent)" }}
+      >
+        <Icon size={22} className="text-[var(--sphere)] opacity-70" strokeWidth={1.75} />
       </div>
       <div className="space-y-1">
         <h2 className="text-[15px] font-medium text-[var(--text-primary)]">{title}</h2>
@@ -133,13 +150,13 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <header className="flex items-start justify-between gap-4 px-8 pt-8 pb-6">
+    <header className="flex items-start justify-between gap-4 px-8 pt-9 pb-6">
       <div>
-        <h1 className="text-[20px] leading-[28px] font-semibold tracking-[-0.01em]">
+        <h1 className="text-[26px] leading-[32px] font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
           {title}
         </h1>
         {subtitle && (
-          <p className="mt-0.5 text-[13px] text-[var(--text-tertiary)]">{subtitle}</p>
+          <p className="mt-1 text-[13px] text-[var(--text-tertiary)]">{subtitle}</p>
         )}
       </div>
       {actions && <div className="flex items-center gap-2 pt-1">{actions}</div>}

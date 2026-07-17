@@ -23,8 +23,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { NAV_ITEMS } from "../../app/navigation";
-import { search, type Kind } from "../../lib/ipc";
+import { NAV_ITEMS, SECONDARY_ROUTES } from "../../app/navigation";
+import { listAreas, search, type Kind } from "../../lib/ipc";
+import { sphereIcon } from "../hub/SphereIcon";
 import { cx, Kbd } from "../../design-system/primitives";
 
 /** Espera o suficiente para não consultar a cada tecla, curto o bastante para
@@ -40,13 +41,26 @@ interface Row {
 }
 
 /**
+ * Tira acento e caixa: 'saúde' e 'Saude' viram a mesma coisa.
+ *
+ * Sem isto, num app em português, a paleta é quase inútil: ninguém digita acento
+ * numa caixa de busca, e 'calendario' NÃO casava 'Calendário' — o 'a' procurado
+ * não é o 'á' do texto, são codepoints diferentes. O mesmo valia para 'saude',
+ * 'financas', 'habitos'. NFD separa a letra do diacrítico; o range U+0300–U+036F
+ * é o bloco dos diacríticos combinantes, que então se joga fora.
+ */
+function fold(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
+/**
  * Fuzzy por subsequência: 'cal' casa 'Calendário', 'mp' casa 'Metas & Projetos'.
  * Menor é melhor — casamentos consecutivos e no começo pontuam mais.
  */
 function fuzzyScore(needle: string, haystack: string): number | null {
   if (!needle) return 0;
-  const n = needle.toLowerCase();
-  const h = haystack.toLowerCase();
+  const n = fold(needle);
+  const h = fold(haystack);
 
   let score = 0;
   let hi = 0;
@@ -114,16 +128,41 @@ export function CommandPalette({
     staleTime: 5_000,
   });
 
+  // As Esferas saíram da sidebar e agora moram no Hub. Isso deixaria o teclado
+  // sem caminho até elas: `G+<tecla>` só alcança rota fixa, e as Esferas vêm do
+  // banco (o usuário cria as dele). A paleta é o caminho — e "teclado-primeiro"
+  // é regra da constituição, não preferência.
+  const { data: areas = [] } = useQuery({
+    queryKey: ["areas"],
+    queryFn: () => listAreas(false),
+    enabled: open,
+  });
+
   const actions = useMemo<Row[]>(
-    () =>
-      NAV_ITEMS.map((item) => ({
+    () => [
+      ...NAV_ITEMS.map((item) => ({
         id: `nav:${item.path}`,
         label: `Ir para ${item.label}`,
         hint: `G ${item.jumpKey.toUpperCase()}`,
         icon: item.icon,
         run: () => navigate(item.path),
       })),
-    [navigate],
+      ...SECONDARY_ROUTES.map((item) => ({
+        id: `nav:${item.path}`,
+        label: `Ir para ${item.label}`,
+        hint: `G ${item.jumpKey.toUpperCase()}`,
+        icon: item.icon,
+        run: () => navigate(item.path),
+      })),
+      ...areas.map((area) => ({
+        id: `sphere:${area.id}`,
+        label: `Ir para ${area.name}`,
+        hint: "Esfera",
+        icon: sphereIcon(area.icon),
+        run: () => navigate(`/sphere/${area.id}`),
+      })),
+    ],
+    [areas, navigate],
   );
 
   const matchedActions = useMemo(() => {
@@ -131,7 +170,7 @@ export function CommandPalette({
       .map((a) => ({ a, score: fuzzyScore(query, a.label) }))
       .filter((r): r is { a: Row; score: number } => r.score !== null)
       .sort((x, y) => x.score - y.score)
-      .slice(0, 5)
+      .slice(0, 6)
       .map((r) => r.a);
   }, [actions, query]);
 
@@ -202,7 +241,7 @@ export function CommandPalette({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-[12vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-[color-mix(in_srgb,var(--bg-void)_55%,transparent)] pt-[12vh]"
       onMouseDown={onClose}
     >
       <div
@@ -211,8 +250,7 @@ export function CommandPalette({
         aria-label="Paleta de comandos"
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={onKeyDown}
-        className="w-[560px] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-strong)] bg-[var(--bg-raised)]"
-        style={{ boxShadow: "var(--shadow-float)" }}
+        className="nx-glass nx-enter w-[560px] overflow-hidden rounded-[var(--radius-lg)]"
       >
         <div className="flex items-center gap-2.5 border-b border-[var(--border-subtle)] px-4">
           <SearchIcon size={14} className="shrink-0 text-[var(--text-tertiary)]" />

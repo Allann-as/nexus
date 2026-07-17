@@ -323,3 +323,116 @@ na prática — recusou o primeiro clique porque o editor estava por cima.
 **Limite honesto.** Continua sendo automação de SO, não E2E de verdade. Para
 suíte de regressão o caminho é `tauri-driver` (WebDriver), que fala com o WebView
 em vez de disputar a mesa do Windows.
+
+---
+
+## ADR-0013 — Esferas SÃO `areas`: um conceito, dois nomes
+
+**Data:** 2026-07-17 · **Status:** aceito
+
+**Contexto.** O M2.5 reorganiza o produto em torno de **Esferas da Vida**. A
+tentação era criar uma tabela `spheres` e um conceito novo. Mas o que uma Esfera
+faz — agrupar nodes, ter cor e ícone, arquivar sem apagar — é exatamente o que
+`areas` faz desde a migration 0001, e `areas.id` é FK em `nodes` e em todo
+satélite.
+
+**Decisão.** Uma Esfera é uma linha de `areas`. A tabela **não** é renomeada:
+`areas` está em cinco migrations imutáveis. "Esfera" é o nome na UI; `Area` é o
+nome no código e no banco. Duas colunas novas (0005): `template` (que tela abrir)
+e `is_system` (as 5 instaladas).
+
+**Consequência.** Zero migração de dados, zero FK reescrita, e todo node que já
+tinha `area_id` já pertence a uma Esfera. O custo é um nome duplo, documentado
+em `entities.rs` e em `ipc.ts` — o glossário vive nos dois pontos de entrada.
+
+**Alternativa recusada.** Renomear a tabela via recriação (`CREATE TABLE spheres`
++ copiar + dropar): uma migration destrutiva sobre a tabela mais referenciada do
+schema, em troca de um ganho puramente cosmético.
+
+---
+
+## ADR-0014 — Ids fixos e legíveis no seed das 5 Esferas
+
+**Data:** 2026-07-17 · **Status:** aceito
+
+**Contexto.** A convenção do 0001 é UUIDv7 para todo id. Mas as 5 Esferas do
+sistema nascem numa migration SQL, onde não há gerador de UUID.
+
+**Decisão.** Ids fixos e legíveis (`sphere-health`, `sphere-finance`, …) para
+essas 5 linhas e para os 6 bancos. O UUIDv7 continua valendo para tudo que o
+usuário cria em runtime, onde a ordenação temporal mantém os inserts no fim da
+B-tree.
+
+**Consequência.** A migration É o seed: uma fonte só, sem um segundo seed em Rust
+que possa divergir dela. `INSERT OR IGNORE` faz a operação ser idempotente.
+Nenhum código busca por esses ids — a UI decide comportamento por `template`,
+nunca por id, senão renomear "Saúde" quebraria a tela.
+
+---
+
+## ADR-0015 — Aurora → Midnight, e o tema claro derivado em vez de removido
+
+**Data:** 2026-07-17 · **Status:** aceito · **supersede o design system do M0**
+
+**Contexto.** O Aurora (M0) escolheu explicitamente buscar o "uau" só em
+tipografia e hierarquia — "nunca de gradientes ou sombras pesadas", dizia o
+`tokens.css`. O resultado, com o app cheio: fundo preto chapado, cards planos,
+dado sem protagonismo. O usuário resumiu como "projeto de iniciante". A premissa
+do Aurora estava errada, não a execução dela.
+
+**Decisão.** Reescrever os tokens como **Midnight**: navy profundo (nunca #000),
+fundo em três camadas (base + dot grid + aurora radial), números mono/tabular
+grandes como protagonistas, e cor por Esfera tingindo cada tela via `--sphere`.
+Os arquivos ficam onde estavam — renomear `design-system/` só produziria um diff
+de imports.
+
+**Sobre o tema claro:** o plano do Midnight especifica apenas o escuro. O claro
+existe desde o M0, com toggle em Configurações. Ele foi **derivado** (as mesmas
+camadas, com `--dot-alpha`/`--aurora-alpha` menores, porque sobre branco o mesmo
+alfa vira sujeira em vez de brilho), não removido: apagar um recurso que funciona
+por omissão de um documento seria uma decisão tomada por descuido.
+
+**Consequência.** "Aurora" agora nomeia só a camada de gradiente radial do fundo
+— o que aliás era mais uma razão para o design system deixar de se chamar assim.
+
+---
+
+## ADR-0016 — Sem ECharts no M2.5: SVG onde SVG é a ferramenta certa
+
+**Data:** 2026-07-17 · **Status:** aceito
+
+**Contexto.** O plano lista `nexusTheme.ts` (tema do ECharts) como entrega do
+M2.5. Mas os únicos gráficos do M2.5 são 6 sparklines de 30 pontos e dois arcos
+de progresso.
+
+**Decisão.** Adiar ECharts (e o tema) para o M3, quando entram calendário e
+gráficos com eixo, tooltip e zoom. No M2.5, `design-system/charts.tsx` em SVG.
+
+**Consequência.** Uma instância de engine de gráficos por card do Hub custaria
+uma ordem de grandeza mais de RAM e de tempo de montagem que as ~20 linhas de
+`path` que ela desenharia — na tela que abre a cada cold start, contra um
+orçamento de 1,5s e 300MB. Um tema escrito sem nenhum gráfico na tela para
+conferir também seria um tema escrito no escuro.
+
+---
+
+## ADR-0017 — A cor da Esfera nunca é a única pista
+
+**Data:** 2026-07-17 · **Status:** aceito
+
+**Contexto.** A paleta das Esferas veio especificada no plano e está semeada na
+0005. Rodada no validador de paletas (OKLab + simulação de daltonismo), ela
+falha: Carreira `#A78BFA` × Finanças `#4D8DFF` ficam a ΔE 11 em visão **normal**
+e ΔE 2,5 em protanopia — indistinguíveis por cor sozinha.
+
+**Decisão.** Manter a paleta (é a identidade escolhida pelo usuário, e
+`areas.color` é editável no banco) e tratar a cor como **tingimento, nunca como
+codificação**. Todo lugar que mostra uma Esfera mostra também o ícone e o nome.
+
+**Consequência.** Uma regra dura para o resto do produto: nenhum gráfico pode
+plotar Esferas como séries distinguíveis só por cor com legenda de bolinha. Onde
+isso for preciso (BI do M4.5), a série carrega rótulo direto.
+
+**Nota.** Isto **não** vale para paletas categóricas de dados (ex.: alocação por
+classe de ativo, M3.5) — essas nascem para codificar por cor e devem passar no
+validador antes de entrar.

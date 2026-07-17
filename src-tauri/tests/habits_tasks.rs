@@ -7,6 +7,7 @@ use nexus_lib::application::use_cases::{
     areas::AreaService, dashboard::DashboardService, habits::HabitService, nodes::NodeService,
     tasks::TaskService,
 };
+use nexus_lib::domain::entities::Template;
 use nexus_lib::domain::schedule::Schedule;
 use nexus_lib::domain::streak::TickStatus;
 use nexus_lib::infrastructure::clock::{SystemClock, Uuid7Gen};
@@ -816,7 +817,10 @@ fn a_habit_in_a_nonexistent_area_is_rejected() {
 #[test]
 fn habits_can_be_filtered_by_area() {
     let h = harness();
-    let saude = h.areas.create("Saúde", "heart", "#4ADE80").unwrap();
+    let saude = h
+        .areas
+        .create("Saúde", "heart", "#4ADE80", Template::Simple)
+        .unwrap();
     h.habits
         .create(
             "Correr",

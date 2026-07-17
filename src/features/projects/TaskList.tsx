@@ -7,7 +7,7 @@
  * que o nó arrastado esteja entre eles enquanto estiver visível.
  */
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   DndContext,
@@ -24,8 +24,9 @@ import {
 } from "@dnd-kit/sortable";
 import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Check } from "lucide-react";
+import { GripVertical } from "lucide-react";
 
+import { Checkbox } from "../../design-system/Checkbox";
 import { cx } from "../../design-system/primitives";
 import type { Task } from "../../lib/ipc";
 
@@ -41,7 +42,15 @@ export function TaskList({
   onReorder: (id: string, toIndex: number) => void;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
-  const ids = useMemo(() => tasks.map((t) => t.id), [tasks]);
+
+  // Só as ABERTAS entram na ordenação. `sort_order` é uma propriedade de quem
+  // ainda está em aberto: o backend resolve os vizinhos de um arrasto contra a
+  // lista sem concluídas (`neighbours`, task_repo.rs). A concluída continua
+  // aqui, no lugar e riscada — ela só não tem posição a negociar.
+  const openIds = useMemo(
+    () => tasks.filter((t) => t.completedAt == null).map((t) => t.id),
+    [tasks],
+  );
 
   const virtualizer = useVirtualizer({
     count: tasks.length,
@@ -61,7 +70,10 @@ export function TaskList({
   const onDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
-    const toIndex = tasks.findIndex((t) => t.id === over.id);
+    // O índice é o da lista de ABERTAS, e não o da lista visível: é nessa
+    // lista que o backend conta as posições. Passar o índice visível faria uma
+    // concluída no meio deslocar o destino silenciosamente.
+    const toIndex = openIds.indexOf(String(over.id));
     if (toIndex >= 0) onReorder(String(active.id), toIndex);
   };
 
@@ -72,13 +84,20 @@ export function TaskList({
       onDragEnd={onDragEnd}
       modifiers={[restrictToVerticalAxis, restrictToParentElement]}
     >
-      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+      <SortableContext items={openIds} strategy={verticalListSortingStrategy}>
         <div ref={parentRef} className="max-h-[520px] overflow-y-auto">
           <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
             {virtualizer.getVirtualItems().map((v) => {
               const task = tasks[v.index];
-              return (
-                <Row
+              return task.completedAt != null ? (
+                <DoneRow
+                  key={task.id}
+                  task={task}
+                  top={v.start}
+                  onToggle={() => onToggle(task)}
+                />
+              ) : (
+                <SortableRow
                   key={task.id}
                   task={task}
                   top={v.start}
@@ -99,7 +118,8 @@ const PRIORITY: Record<number, { label: string; colour: string }> = {
   3: { label: "baixa", colour: "var(--text-tertiary)" },
 };
 
-function Row({
+/** A tarefa em aberto: arrastável, com alça que aparece no hover. */
+function SortableRow({
   task,
   top,
   onToggle,
@@ -111,9 +131,6 @@ function Row({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: task.id });
 
-  const done = task.completedAt != null;
-  const priority = PRIORITY[task.priority] ?? PRIORITY[2];
-
   return (
     <div
       ref={setNodeRef}
@@ -121,6 +138,7 @@ function Row({
         // `group` é o que faz a alça aparecer no hover — sem ela, o
         // `group-hover:` abaixo nunca casa e a alça fica invisível.
         "group absolute inset-x-0 flex items-center gap-2.5 px-2",
+        "transition-colors duration-[var(--dur-fast)] hover:bg-[var(--bg-hover)]",
         isDragging && "z-10",
       )}
       style={{
@@ -133,38 +151,82 @@ function Row({
         opacity: isDragging ? 0.85 : 1,
       }}
     >
-      <button
-        {...attributes}
-        {...listeners}
-        aria-label={`Reordenar ${task.title}`}
-        // touch-none: sem isso o navegador interpreta o gesto como scroll e
-        // engole o arrasto antes do dnd-kit ver.
-        className="cursor-grab touch-none text-[var(--text-tertiary)] opacity-0 transition-opacity group-hover:opacity-100 hover:text-[var(--text-secondary)] active:cursor-grabbing"
-      >
-        <GripVertical size={13} />
-      </button>
+      <RowBody
+        task={task}
+        onToggle={onToggle}
+        handle={
+          <button
+            {...attributes}
+            {...listeners}
+            aria-label={`Reordenar ${task.title}`}
+            // touch-none: sem isso o navegador interpreta o gesto como scroll e
+            // engole o arrasto antes do dnd-kit ver.
+            className="cursor-grab touch-none text-[var(--text-tertiary)] opacity-0 transition-opacity duration-[var(--dur-fast)] group-hover:opacity-100 hover:text-[var(--text-secondary)] active:cursor-grabbing"
+          >
+            <GripVertical size={13} />
+          </button>
+        }
+      />
+    </div>
+  );
+}
 
-      <button
-        onClick={onToggle}
-        aria-label={done ? `Reabrir ${task.title}` : `Concluir ${task.title}`}
-        className={cx(
-          "flex size-[16px] shrink-0 items-center justify-center rounded-[4px] border transition-colors duration-[var(--dur-fast)]",
-          done
-            ? "border-[var(--success)] bg-[var(--success)]"
-            : "border-[var(--border-strong)] hover:border-[var(--accent)]",
-        )}
-      >
-        {done && <Check size={11} strokeWidth={3} className="text-black/80" />}
-      </button>
+/**
+ * A tarefa concluída: fica onde estava, apagada e riscada.
+ *
+ * Sem alça e fora do `SortableContext` — arrastar o que não tem posição no
+ * banco moveria um item que a lista de ordenação nem enxerga.
+ */
+function DoneRow({
+  task,
+  top,
+  onToggle,
+}: {
+  task: Task;
+  top: number;
+  onToggle: () => void;
+}) {
+  return (
+    <div
+      className={cx(
+        "group absolute inset-x-0 flex items-center gap-2.5 px-2 opacity-55",
+        "transition-[opacity,background-color] duration-[var(--dur-fast)]",
+        "hover:bg-[var(--bg-hover)] hover:opacity-100",
+      )}
+      style={{ top, height: ROW_H }}
+    >
+      <RowBody task={task} onToggle={onToggle} />
+    </div>
+  );
+}
 
-      <span
-        className={cx(
-          "min-w-0 flex-1 truncate text-[13px]",
-          done ? "text-[var(--text-tertiary)] line-through" : "text-[var(--text-primary)]",
-        )}
-      >
-        {task.title}
-      </span>
+/** O miolo da linha — idêntico para a aberta e a concluída. */
+function RowBody({
+  task,
+  onToggle,
+  handle,
+}: {
+  task: Task;
+  onToggle: () => void;
+  handle?: ReactNode;
+}) {
+  const done = task.completedAt != null;
+  const priority = PRIORITY[task.priority] ?? PRIORITY[2];
+
+  return (
+    <>
+      {/* A alça reserva o espaço mesmo quando não existe: sem isto, a linha da
+          concluída desalinha das demais. */}
+      <span className="grid size-[13px] shrink-0 place-items-center">{handle}</span>
+
+      <Checkbox
+        checked={done}
+        onChange={onToggle}
+        size={18}
+        title={done ? `Reabrir ${task.title}` : `Concluir ${task.title}`}
+      />
+
+      <Label done={done}>{task.title}</Label>
 
       {task.durationMin != null && (
         <span className="tabular shrink-0 text-[11px] text-[var(--text-tertiary)]">
@@ -174,13 +236,47 @@ function Row({
 
       {!done && task.priority !== 2 && (
         <span
-          className="shrink-0 text-[10px]"
-          style={{ color: priority.colour }}
+          className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold tracking-[0.1em] uppercase"
+          style={{
+            color: priority.colour,
+            background: `color-mix(in srgb, ${priority.colour} 12%, transparent)`,
+          }}
           title={`Prioridade ${priority.label}`}
         >
           {priority.label}
         </span>
       )}
-    </div>
+    </>
+  );
+}
+
+/**
+ * O texto da tarefa, com o risco animado.
+ *
+ * O risco é um pseudo-elemento escalado em X, e não `line-through`: um
+ * `text-decoration` aparece pronto, de uma vez, e o gesto perde a resposta. Com
+ * `transform: scaleX` o traço é RISCADO da esquerda para a direita em 200ms —
+ * e, sendo transform, sai de graça no compositor.
+ */
+function Label({ children, done }: { children: ReactNode; done: boolean }) {
+  return (
+    <span className="relative min-w-0 flex-1 truncate">
+      <span
+        className={cx(
+          "text-[13px] transition-colors duration-[var(--dur-base)]",
+          done ? "text-[var(--text-tertiary)]" : "text-[var(--text-primary)]",
+        )}
+      >
+        {children}
+      </span>
+      <span
+        aria-hidden
+        className={cx(
+          "absolute top-1/2 left-0 h-[1.5px] w-full origin-left rounded-full bg-[var(--text-tertiary)]",
+          "transition-transform duration-[var(--dur-base)] ease-[var(--ease)]",
+          done ? "scale-x-100" : "scale-x-0",
+        )}
+      />
+    </span>
   );
 }

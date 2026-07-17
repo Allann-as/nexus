@@ -4,7 +4,7 @@
 //! falam com estes traits, nunca com o SQLite. Trocar o storage é implementar
 //! estes traits de novo, sem tocar em uma linha de regra de negócio.
 
-use crate::domain::entities::{Area, Kind, Node, Status};
+use crate::domain::entities::{Area, Kind, Node, Status, Template};
 use crate::domain::errors::Result;
 use crate::domain::ledger::{LedgerEntry, NewLedgerEvent};
 use crate::domain::schedule::Schedule;
@@ -39,8 +39,15 @@ pub struct NewArea {
     pub name: String,
     pub icon: String,
     pub color: String,
+    pub template: Template,
 }
 
+/// Sem `template`: uma Esfera não troca de tela depois de criada.
+///
+/// Não é limitação técnica, é proteção. Virar "Saúde" em "Agenda simples"
+/// deixaria os checkpoints e o histórico de treino órfãos — dados vivos sem
+/// tela que os mostre. Nome, cor e ícone são cosméticos e mudam à vontade; o
+/// template é estrutural.
 #[derive(Debug, Clone)]
 pub struct AreaPatch {
     pub name: Option<String>,
@@ -112,6 +119,26 @@ pub trait NodeRepository: Send + Sync {
     ) -> Result<Node>;
 
     fn delete_with_event(&self, id: &str, event: &NewLedgerEvent) -> Result<()>;
+}
+
+/* ===== Esferas (o Hub) ===== */
+
+/// As leituras em lote do Hub.
+///
+/// Existe como port separado, e não como mais dois métodos em
+/// `HabitRepository`/`NodeRepository`, porque a pergunta é de outra natureza:
+/// os repositórios existentes respondem sobre UMA entidade ("os ticks do hábito
+/// X"), e o Hub pergunta sobre TODAS de uma vez ("os ticks de todo mundo").
+/// Misturar as duas faria a tela mais aberta do app cair no N+1 sem que
+/// ninguém percebesse.
+pub trait SphereRepository: Send + Sync {
+    /// Todos os ticks de todos os hábitos desde um dia, em UMA query.
+    /// Devolve (habit_id, day, tick). Usa `idx_ticks_day` (0005).
+    fn ticks_since(&self, from_day: &str) -> Result<Vec<(String, String, Tick)>>;
+
+    /// Nodes ativos por (area_id, kind), em UMA query.
+    /// `None` no area_id = os órfãos (Inbox).
+    fn active_node_counts_by_area(&self) -> Result<Vec<(Option<String>, Kind, i64)>>;
 }
 
 pub trait LedgerRepository: Send + Sync {

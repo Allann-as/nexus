@@ -8,7 +8,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FolderKanban, Plus, Target } from "lucide-react";
+import { CheckSquare, FolderKanban, ListTodo, Plus, Target } from "lucide-react";
 
 import {
   listNodes,
@@ -28,6 +28,8 @@ import {
   PageHeader,
   cx,
 } from "../../design-system/primitives";
+import { CountUp, HeroCard, StatCard } from "../../design-system/cards";
+import { ProgressBar, ProgressRing } from "../../design-system/charts";
 import { useToasts } from "../../stores/toasts";
 import { TaskList } from "./TaskList";
 
@@ -43,83 +45,85 @@ export function ProjectsScreen() {
   const current = selected ?? projects[0]?.id ?? null;
 
   return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        title="Metas & Projetos"
-        subtitle="Do objetivo à próxima ação"
-        actions={
-          <Button variant="primary" size="sm" icon={Plus} onClick={() => setCreating(true)}>
-            Novo projeto
-          </Button>
-        }
-      />
+    <div className="nx-page nx-enter h-full overflow-y-auto">
+      <div className="mx-auto max-w-[1100px] pb-12">
+        <PageHeader
+          title="Metas & Projetos"
+          subtitle="Do objetivo à próxima ação"
+          actions={
+            <Button variant="primary" size="sm" icon={Plus} onClick={() => setCreating(true)}>
+              Novo projeto
+            </Button>
+          }
+        />
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-8">
-        {creating && <CreateProjectForm onDone={() => setCreating(false)} />}
+        <div className="px-8">
+          {creating && <CreateProjectForm onDone={() => setCreating(false)} />}
 
-        {projects.length === 0 && !isPending && !creating ? (
-          <div className="h-[60%]">
-            <EmptyState
-              icon={FolderKanban}
-              title="Nenhum projeto ainda"
-              hint="Um projeto é um resultado com várias tarefas. A barra de progresso é simplesmente quantas delas você concluiu."
-              action={
-                <Button variant="primary" size="sm" icon={Plus} onClick={() => setCreating(true)}>
-                  Criar o primeiro
-                </Button>
-              }
-            />
-          </div>
-        ) : (
-          <div className="grid grid-cols-[240px_1fr] gap-4">
-            <nav className="space-y-1">
-              {projects.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setSelected(p.id)}
-                  className={cx(
-                    "flex w-full items-center gap-2 rounded-[var(--radius-md)] px-2.5 text-left text-[13px]",
-                    "transition-colors duration-[var(--dur-fast)]",
-                    current === p.id
-                      ? "bg-[var(--accent-muted)] text-[var(--text-primary)]"
-                      : "text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]",
-                  )}
-                  style={{ height: "var(--row-list)" }}
-                >
-                  <FolderKanban
-                    size={14}
-                    className={
-                      current === p.id ? "text-[var(--accent)]" : "text-[var(--text-tertiary)]"
-                    }
-                  />
-                  <span className="truncate">{p.title}</span>
-                </button>
-              ))}
-            </nav>
-
-            {current ? (
-              <ProjectPanel
-                projectId={current}
-                title={projects.find((p) => p.id === current)?.title ?? ""}
+          {projects.length === 0 && !isPending && !creating ? (
+            <div className="min-h-[420px]">
+              <EmptyState
+                icon={FolderKanban}
+                title="Nenhum projeto ainda"
+                hint="Um projeto é um resultado com várias tarefas. A barra de progresso é simplesmente quantas delas você concluiu."
+                action={
+                  <Button variant="primary" size="sm" icon={Plus} onClick={() => setCreating(true)}>
+                    Criar o primeiro
+                  </Button>
+                }
               />
-            ) : (
-              <Card className="p-8">
-                <p className="text-center text-[13px] text-[var(--text-tertiary)]">
-                  Escolha um projeto.
-                </p>
-              </Card>
-            )}
-          </div>
-        )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-[240px_1fr] items-start gap-4">
+              <nav className="space-y-1">
+                {projects.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setSelected(p.id)}
+                    className={cx(
+                      "flex w-full items-center gap-2 rounded-[var(--radius-md)] border px-2.5 text-left text-[13px]",
+                      "transition-[background-color,border-color,color] duration-[var(--dur-fast)] ease-[var(--ease)]",
+                      current === p.id
+                        ? "border-[color-mix(in_srgb,var(--sphere)_35%,transparent)] bg-[var(--accent-muted)] text-[var(--text-primary)]"
+                        : "border-transparent text-[var(--text-secondary)] hover:border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]",
+                    )}
+                    style={{ height: "var(--row-list)" }}
+                  >
+                    <FolderKanban
+                      size={14}
+                      className={
+                        current === p.id ? "text-[var(--sphere)]" : "text-[var(--text-tertiary)]"
+                      }
+                    />
+                    <span className="truncate">{p.title}</span>
+                  </button>
+                ))}
+              </nav>
 
-        <Card className="mt-4 p-4">
-          <div className="flex items-center gap-2 text-[var(--text-tertiary)]">
-            <Target size={13} />
-            <span className="text-[12px]">
-              Metas com métrica, checkpoints e projeção linear chegam no M3.
-            </span>
-          </div>
-        </Card>
+              {current ? (
+                <ProjectPanel
+                  projectId={current}
+                  title={projects.find((p) => p.id === current)?.title ?? ""}
+                />
+              ) : (
+                <Card className="p-8">
+                  <p className="text-center text-[13px] text-[var(--text-tertiary)]">
+                    Escolha um projeto.
+                  </p>
+                </Card>
+              )}
+            </div>
+          )}
+
+          <Card className="mt-4 p-4">
+            <div className="flex items-center gap-2 text-[var(--text-tertiary)]">
+              <Target size={13} />
+              <span className="text-[12px]">
+                Metas com métrica, checkpoints e projeção linear chegam no M3.
+              </span>
+            </div>
+          </Card>
+        </div>
       </div>
     </div>
   );
@@ -130,9 +134,13 @@ function ProjectPanel({ projectId, title }: { projectId: string; title: string }
   const pushError = useToasts((s) => s.pushError);
   const [newTask, setNewTask] = useState("");
 
+  // `includeDone` ligado: a tarefa concluída CONTINUA na lista, riscada. Sumir
+  // ao marcar custa duas coisas — a linha seguinte pula para debaixo do cursor
+  // e o clique seguinte acerta o item errado; e o risco no texto, que é a
+  // prova de que você fez, nunca chega a ser visto.
   const { data: tasks = [] } = useQuery({
     queryKey: ["tasks", projectId],
-    queryFn: () => listProjectTasks(projectId, false),
+    queryFn: () => listProjectTasks(projectId, true),
   });
   const { data: progress } = useQuery({
     queryKey: ["tasks", "progress", projectId],
@@ -166,54 +174,74 @@ function ProjectPanel({ projectId, title }: { projectId: string; title: string }
     onError: pushError,
   });
 
-  const pct = progress && progress.total > 0
-    ? Math.round((progress.done / progress.total) * 100)
-    : 0;
+  const total = progress?.total ?? 0;
+  const done = progress?.done ?? 0;
+  const open = total - done;
+  const ratio = total > 0 ? done / total : 0;
+  const pct = Math.round(ratio * 100);
 
   return (
-    <Card className="overflow-hidden">
-      <div className="border-b border-[var(--border-subtle)] p-4">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="truncate text-[15px] font-medium">{title}</h2>
-          <span className="tabular shrink-0 text-[12px] text-[var(--text-tertiary)]">
-            {progress ? `${progress.done}/${progress.total}` : "—"}
-          </span>
-        </div>
+    <div className="space-y-4">
+      <HeroCard
+        label={title}
+        value={total > 0 ? `${done}/${total}` : "—"}
+        hint={
+          total > 0
+            ? `${pct}% das tarefas deste projeto concluídas`
+            : "Nenhuma tarefa neste projeto ainda"
+        }
+        aside={
+          <ProgressRing value={ratio} size={72} thickness={6}>
+            <span className="tabular text-[15px] font-semibold">{pct}%</span>
+          </ProgressRing>
+        }
+      >
+        <ProgressBar value={ratio} />
+      </HeroCard>
 
-        <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-[var(--bg-base)]">
-          <div
-            className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-[var(--dur-base)] ease-[var(--ease)]"
-            style={{ width: `${pct}%` }}
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard
+          icon={ListTodo}
+          label="Em aberto"
+          value={<CountUp to={open} />}
+          tone={open > 0 ? "accent" : "sphere"}
+        />
+        <StatCard
+          icon={CheckSquare}
+          label="Concluídas"
+          value={<CountUp to={done} />}
+          tone="success"
+        />
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="border-b border-[var(--border-subtle)] px-3 py-2">
+          <input
+            value={newTask}
+            onChange={(e) => setNewTask(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && newTask.trim() && !add.isPending) {
+                add.mutate(newTask.trim());
+              }
+            }}
+            placeholder="Nova tarefa — Enter para adicionar"
+            className="w-full bg-transparent py-1 text-[13px] outline-none placeholder:text-[var(--text-tertiary)]"
           />
         </div>
-      </div>
 
-      <div className="border-b border-[var(--border-subtle)] px-3 py-2">
-        <input
-          value={newTask}
-          onChange={(e) => setNewTask(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && newTask.trim() && !add.isPending) {
-              add.mutate(newTask.trim());
-            }
-          }}
-          placeholder="Nova tarefa — Enter para adicionar"
-          className="w-full bg-transparent py-1 text-[13px] outline-none placeholder:text-[var(--text-tertiary)]"
-        />
-      </div>
-
-      {tasks.length === 0 ? (
-        <p className="px-4 py-8 text-center text-[12px] text-[var(--text-tertiary)]">
-          Nenhuma tarefa em aberto.
-        </p>
-      ) : (
-        <TaskList
-          tasks={tasks}
-          onToggle={(t) => toggle.mutate(t)}
-          onReorder={(id, toIndex) => reorder.mutate({ id, toIndex })}
-        />
-      )}
-    </Card>
+        {tasks.length === 0 ? (
+          <p className="px-4 py-8 text-center text-[12px] text-[var(--text-tertiary)]">
+            Nenhuma tarefa ainda.
+          </p>
+        ) : (
+          <TaskList
+            tasks={tasks}
+            onToggle={(t) => toggle.mutate(t)}
+            onReorder={(id, toIndex) => reorder.mutate({ id, toIndex })}
+          />
+        )}
+      </Card>
+    </div>
   );
 }
 
@@ -251,9 +279,9 @@ function CreateProjectForm({ onDone }: { onDone: () => void }) {
         <select
           value={areaId}
           onChange={(e) => setAreaId(e.target.value)}
-          className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-2 py-1 text-[12px] outline-none"
+          className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-2 py-1 text-[12px] outline-none transition-colors duration-[var(--dur-fast)] hover:border-[var(--border-strong)]"
         >
-          <option value="">sem área</option>
+          <option value="">sem Esfera</option>
           {areas.map((a) => (
             <option key={a.id} value={a.id}>
               {a.name}

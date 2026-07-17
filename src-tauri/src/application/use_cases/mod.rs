@@ -4,4 +4,5 @@ pub mod areas;
 pub mod dashboard;
 pub mod habits;
 pub mod nodes;
+pub mod spheres;
 pub mod tasks;

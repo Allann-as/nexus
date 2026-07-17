@@ -1,7 +1,7 @@
 # NEXUS — Arquitetura
 
 > Documento vivo. Atualize-o no mesmo commit que muda a estrutura.
-> Estado atual: **M0 — Fundação concluída**.
+> Estado atual: **M2.5 — Midnight Overhaul concluído**.
 
 ## 1. O que o NEXUS é
 
@@ -95,8 +95,11 @@ logs/      rotação diária
 | **M0** | Fundação: scaffold, pool+PRAGMAs+migrations, tokens, shell, `check.ps1` | ✅ **concluído** |
 | **M1** | CRUD Áreas/Nodes, Inbox, ledger, FTS5, palette com busca real | ✅ **concluído** |
 | **M2** | Tarefas, Projetos, Hábitos, Rotinas, ticks, streaks, Dashboard v1 | ✅ **concluído** |
-| M3 | Calendário (timeblocking, RFC-5545, conflitos), Metas + projeção | ⬜ |
-| M4 | Notas (CodeMirror, wiki-links), Timeline, `bi_engine`, Insights | ⬜ |
+| **M2.5** | Design system Midnight, Esferas da Vida, o Hub, rail global | ✅ **concluído** |
+| M3 | Calendário (timeblocking, RFC-5545, conflitos), Metas + sub-desafios | ⬜ |
+| M3.5 | Esferas I: Saúde (checkpoints, treino, exames) + Finanças (aportes, Saúde Financeira) | ⬜ |
+| M4 | Esferas II: Objetivos Financeiros, Estudos + Biblioteca, Carreira; Notas; Timeline | ⬜ |
+| M4.5 | `bi_engine`, Momentum, Conquistas, Retrospectiva | ⬜ |
 | M5 | Backup/restore, export, Revisão Semanal, Modo Foco, seed de 5 anos | ⬜ |
 | M6 | Ícone, instalador, manual, entrega | ⬜ |
 
@@ -162,13 +165,59 @@ reais. Base do seed de 5 anos do M5.
 
 - **React 19 + TypeScript + Vite**; **Tailwind v4** lendo os tokens de
   `design-system/tokens.css` via `@theme inline`.
-- **Zustand** para estado de UI (tema, sidebar) — persistido em localStorage,
-  pois são preferências de chrome, não dados do usuário.
+- **Zustand** para estado de UI (tema) — persistido em localStorage, pois são
+  preferências de chrome, não dados do usuário.
 - **TanStack Query** para tudo que vem do SQLite. `retry: false` de propósito:
   o backend é um arquivo local, não um serviço de rede; não há link instável
   para retentar, e uma falha aqui é um bug real que deve aparecer.
 - **Hash routing** (`createHashRouter`): em produção a app carrega sob o
   protocolo `tauri://`, onde não há servidor para resolver caminhos profundos.
+
+### O design system (Midnight, desde o M2.5)
+
+Substituiu o Aurora do M0 — ver ADR-0015. Três ideias, e todo componente as
+obedece:
+
+1. **O fundo nunca é chapado.** `.nx-page` (em `styles.css`) empilha três
+   camadas de `background-image` estático: navy sólido + dot grid + aurora
+   radial. Sem canvas, sem partícula, sem frame de animação: o fundo não custa
+   nada porque não faz nada.
+2. **O dado é o herói.** Número grande, mono, `tabular-nums`, contando até o
+   valor na montagem (`useCountUp`). O rótulo é pequeno e terciário.
+3. **Cor por Esfera.** A tela define `--sphere` no container; aurora, ícone,
+   gráfico e checkbox leem a variável. Nenhum componente sabe que Esferas
+   existem. A cor **tinge, nunca codifica** — ver ADR-0017.
+
+```
+design-system/
+  tokens.css      as variáveis (dark + light). Hex cru em componente é bug.
+  primitives.tsx  Button, Card, Kbd, EmptyState, PageHeader
+  cards.tsx       HeroCard, StatCard, SummaryCard, GlassPanel, CountUp, Val
+  charts.tsx      Sparkline, Gauge, ProgressRing, ProgressBar (SVG — ADR-0016)
+  Checkbox.tsx    o gesto mais repetido do app
+  useCountUp.ts   rAF, respeita prefers-reduced-motion, zero animação em idle
+```
+
+**Orçamento de movimento** (§6 do plano): só `transform` e `opacity` animam;
+`box-shadow`/`filter` nunca em loop; no máximo **um** `backdrop-filter` visível
+por vez (por isso a palette e a captura são mutuamente exclusivas no `Shell`);
+com o app parado, nenhuma animação roda.
+
+### Navegação: dois níveis (desde o M2.5)
+
+A sidebar de 240px com lista de módulos morreu. No lugar:
+
+- **A rail** (56px, `app/Rail.tsx`) é global: Hub, Calendário, Inbox, Timeline,
+  Insights, Configurações. Só o que não pertence a Esfera nenhuma porque
+  pertence a todas. A fonte é `app/navigation.ts`.
+- **O Hub** (`features/hub/`) é a tela inicial: as Esferas em cards com dado
+  real, o Nexus Score, e a faixa "Hoje".
+- **A Esfera** (`features/spheres/`) é contextual: header tingido + tabs pill.
+  O `template` da Esfera decide quais tabs existem.
+
+As Esferas vêm do banco, não de uma lista em código — o usuário cria as dele.
+Por isso a Command Palette lista Esferas: é o caminho de teclado até elas, e
+`G+<tecla>` só alcança rota fixa.
 
 ## 8. Como rodar
 

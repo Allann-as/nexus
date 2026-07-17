@@ -9,7 +9,7 @@ use std::sync::Arc;
 use crate::application::ports::{LedgerRepository, SearchRepository};
 use crate::application::use_cases::{
     areas::AreaService, dashboard::DashboardService, habits::HabitService, nodes::NodeService,
-    tasks::TaskService,
+    spheres::SphereService, tasks::TaskService,
 };
 use crate::domain::errors::Result;
 use crate::infrastructure::clock::{SystemClock, Uuid7Gen};
@@ -19,7 +19,7 @@ use crate::infrastructure::paths::Paths;
 use crate::infrastructure::repositories::{
     area_repo::SqliteAreaRepository, habit_repo::SqliteHabitRepository,
     ledger_repo::SqliteLedgerRepository, node_repo::SqliteNodeRepository,
-    task_repo::SqliteTaskRepository,
+    sphere_repo::SqliteSphereRepository, task_repo::SqliteTaskRepository,
 };
 
 pub struct AppState {
@@ -30,6 +30,7 @@ pub struct AppState {
     pub habits: Arc<HabitService>,
     pub tasks: Arc<TaskService>,
     pub dashboard: DashboardService,
+    pub spheres: SphereService,
     pub ledger: Arc<dyn LedgerRepository>,
     pub search: Arc<dyn SearchRepository>,
 }
@@ -42,6 +43,7 @@ impl AppState {
         let node_repo = Arc::new(SqliteNodeRepository::new(db.clone()));
         let habit_repo = Arc::new(SqliteHabitRepository::new(db.clone()));
         let task_repo = Arc::new(SqliteTaskRepository::new(db.clone()));
+        let sphere_repo = Arc::new(SqliteSphereRepository::new(db.clone()));
         let ledger: Arc<dyn LedgerRepository> = Arc::new(SqliteLedgerRepository::new(db.clone()));
         let search: Arc<dyn SearchRepository> = Arc::new(SqliteSearchRepository::new(db.clone()));
 
@@ -67,8 +69,15 @@ impl AppState {
         let dashboard = DashboardService {
             habits: habits.clone(),
             tasks: tasks.clone(),
-            habit_repo,
+            habit_repo: habit_repo.clone(),
             nodes: node_repo.clone(),
+        };
+
+        let spheres = SphereService {
+            areas: area_repo.clone(),
+            habits: habit_repo,
+            spheres: sphere_repo,
+            clock: clock.clone(),
         };
 
         Ok(Self {
@@ -86,6 +95,7 @@ impl AppState {
             habits,
             tasks,
             dashboard,
+            spheres,
             ledger,
             search,
             db,

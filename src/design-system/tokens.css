@@ -1,72 +1,138 @@
 /* ============================================================
-   AURORA — the NEXUS design system
+   NEXUS MIDNIGHT — a linguagem visual do NEXUS
    ------------------------------------------------------------
-   Minimalismo moderno premium: Linear + Craft + Apple HIG.
-   Dark by default, data-dense yet calm.
+   Substitui o Aurora (M0–M2), que buscava o "uau" só em
+   tipografia e hierarquia e entregou um app plano: fundo preto
+   chapado, cards sem profundidade, dado sem protagonismo.
 
-   The "wow" comes from typography, spacing, hierarchy and
-   micro-motion — never from loud gradients or heavy shadows.
+   O Midnight mantém a densidade e a calma, e acrescenta as três
+   coisas que faltavam:
 
-   Themes swap ONLY the variables in this file. Any component
-   reaching for a raw hex value is a bug.
+     1. PROFUNDIDADE — o fundo nunca é chapado. Navy profundo
+        (nunca #000) + dot grid + aurora radial na cor do
+        contexto. Ver `.nx-page` em styles.css.
+     2. O DADO É O HERÓI — números grandes, mono, tabular. O
+        rótulo é secundário; o valor é o assunto.
+     3. IDENTIDADE POR ESFERA — cada Esfera tinge a própria tela.
+        Saúde é verde, Estudos é ciano. Você sabe onde está antes
+        de ler o título.
+
+   Custo de GPU disso tudo: ~zero. Gradientes estáticos e
+   box-shadow parado não animam nada. Ver §6 do plano.
+
+   Temas trocam APENAS as variáveis deste arquivo. Componente que
+   busca hex cru é bug.
    ============================================================ */
 
-/* --- DARK (default) ------------------------------------- */
+/* --- DARK (o padrão, e o tema para o qual o app foi desenhado) --- */
 :root,
 :root[data-theme="dark"] {
-  --bg-base: #0c0d10; /* app background — near-black, blue-leaning */
-  --bg-surface: #131418; /* cards, panels */
-  --bg-raised: #1a1c22; /* popovers, command palette */
-  --bg-hover: #1e2029;
-  --border-subtle: #26282f;
-  --border-strong: #343742;
+  --bg-void: #05080f; /* moldura externa da janela */
+  --bg-base: #0a1120; /* fundo geral — navy profundo, NUNCA preto puro */
+  --bg-surface: #0e1729; /* cards */
+  --bg-raised: #14203a; /* popovers, palette, hover de card */
+  --bg-hover: #16253f;
+  --border-subtle: #1b2a47;
+  --border-strong: #2e4a80;
+  --border-glow: #2e4a80; /* borda de card em hover/foco */
 
-  --text-primary: #e8eaf0;
-  --text-secondary: #9ba0ad;
-  --text-tertiary: #5e626e;
+  --text-primary: #edf2fc;
+  --text-secondary: #8fa0c2;
+  --text-tertiary: #54637f;
 
-  --accent: #7c8cf8; /* Nexus indigo — primary actions and focus */
-  --accent-hover: #8f9dfa;
-  --accent-muted: #7c8cf826;
+  --accent: #4d8dff; /* azul elétrico — a cor do NEXUS */
+  --accent-hover: #7eb2ff;
+  --accent-bright: #7eb2ff; /* linhas de gráfico, brilhos */
+  --accent-deep: #1e4fd8; /* gradientes */
+  --accent-muted: #4d8dff1f;
 
-  --success: #4ade80; /* habits done, streaks */
+  --success: #34d399;
   --warning: #fbbf24;
-  --danger: #f87171;
+  --danger: #fb7185;
 
-  --shadow-float: 0 8px 32px rgb(0 0 0 / 0.45);
+  --shadow-float: 0 16px 48px rgb(2 6 16 / 0.66);
+  /* O glow de um card em hover. Estático: entra e sai por
+     transition, nunca em loop. */
+  --glow-accent: 0 0 0 1px rgb(77 141 255 / 0.24), 0 8px 32px rgb(77 141 255 / 0.14);
+
+  /* Opacidades das camadas de fundo (ver .nx-page). Ficam aqui e
+     não hardcoded porque o tema claro precisa de outras. */
+  --dot-alpha: 0.035;
+  --aurora-alpha: 0.13;
+
   color-scheme: dark;
 }
 
-/* --- LIGHT ---------------------------------------------- */
+/* --- LIGHT ---------------------------------------------------
+   O plano do Midnight só especifica o escuro, e é nele que o app
+   foi desenhado. O claro existe desde o M0, com toggle em
+   Configurações, e apagá-lo seria remover um recurso que funciona
+   por omissão de um documento. Então ele foi derivado, não
+   copiado: as MESMAS camadas (grid + aurora) com alfas menores —
+   sobre branco, o mesmo 0.13 vira sujeira em vez de brilho.
+   Ver docs/DECISIONS.md (ADR-0006). */
 :root[data-theme="light"] {
-  --bg-base: #f7f8fa;
+  --bg-void: #dfe4ee;
+  --bg-base: #f4f6fb;
   --bg-surface: #ffffff;
   --bg-raised: #ffffff;
-  --bg-hover: #f0f1f5;
-  --border-subtle: #e4e6ec;
-  --border-strong: #d0d3dd;
+  --bg-hover: #eef1f8;
+  --border-subtle: #e0e5ef;
+  --border-strong: #b9c6e0;
+  --border-glow: #9fb8e8;
 
-  --text-primary: #14161c;
-  --text-secondary: #5b6070;
-  --text-tertiary: #8e93a3;
+  --text-primary: #0c1424;
+  --text-secondary: #4a5876;
+  --text-tertiary: #8592ad;
 
-  --accent: #5566e8;
-  --accent-hover: #4859d8;
-  --accent-muted: #5566e81f;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-bright: #1e4fd8;
+  --accent-deep: #1e3a8a;
+  --accent-muted: #2563eb14;
 
-  --success: #16a34a;
-  --warning: #d97706;
-  --danger: #dc2626;
+  --success: #059669;
+  --warning: #b45309;
+  --danger: #e11d48;
 
-  --shadow-float: 0 8px 32px rgb(15 20 40 / 0.12);
+  --shadow-float: 0 16px 48px rgb(15 23 42 / 0.14);
+  --glow-accent: 0 0 0 1px rgb(37 99 235 / 0.18), 0 8px 28px rgb(37 99 235 / 0.1);
+
+  --dot-alpha: 0.05;
+  --aurora-alpha: 0.07;
+
   color-scheme: light;
 }
 
+/* --- Cores das Esferas ---------------------------------------
+   Cada Esfera tinge a própria UI: aurora do fundo, ícone, gráfico,
+   checkbox. É o que faz "onde estou?" ser respondido pela cor,
+   antes da leitura.
+
+   Padrão DE FÁBRICA. A verdade é `areas.color` no banco (semeado
+   com estes mesmos valores na migration 0005) — o usuário pode
+   trocar a cor de qualquer Esfera, e aí a UI segue o banco. Estes
+   tokens servem ao que precisa da cor antes de qualquer IPC. */
 :root {
-  /* Radii */
+  --sphere-saude: #34d399;
+  --sphere-financas: #4d8dff;
+  --sphere-objetivos: #fbbf24;
+  --sphere-carreira: #a78bfa;
+  --sphere-estudos: #38bdf8;
+
+  /* A cor da Esfera ATUAL. As telas sobrescrevem esta variável no
+     container da página; tudo que é tingível lê daqui. É o que
+     permite um checkbox ser "da cor da esfera" sem que o
+     componente saiba que esferas existem. */
+  --sphere: var(--accent);
+}
+
+:root {
+  /* Radii — 16px nos cards do Midnight (o Aurora usava 14). */
   --radius-sm: 6px;
   --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
 
   /* Spacing — 4px scale. Content grid is 8pt. */
   --space-1: 4px;
@@ -80,15 +146,18 @@
   /* Density */
   --row-list: 40px; /* list rows */
   --row-data: 32px; /* tables and dense data */
-  --sidebar-w: 240px;
-  --sidebar-w-collapsed: 56px;
-  --topbar-h: 48px;
+  --rail-w: 56px; /* a rail global de ícones */
+  --topbar-h: 52px;
 
   /* Motion — 150–200ms, decelerating. Anything slower feels sluggish;
      anything faster reads as a jump cut. */
   --ease: cubic-bezier(0.2, 0, 0, 1);
+  /* Para o count-up e o preenchimento de arco: desacelera forte no
+     fim, que é o que faz um número "assentar" em vez de parar. */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
   --dur-fast: 150ms;
   --dur-base: 200ms;
+  --dur-slow: 400ms;
 
   --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
@@ -96,12 +165,14 @@
 
 /* Expose tokens to Tailwind v4 utilities (bg-surface, text-secondary, …) */
 @theme inline {
+  --color-void: var(--bg-void);
   --color-base: var(--bg-base);
   --color-surface: var(--bg-surface);
   --color-raised: var(--bg-raised);
   --color-hover: var(--bg-hover);
   --color-subtle: var(--border-subtle);
   --color-strong: var(--border-strong);
+  --color-glow: var(--border-glow);
 
   --color-primary: var(--text-primary);
   --color-secondary: var(--text-secondary);
@@ -109,31 +180,39 @@
 
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
+  --color-accent-bright: var(--accent-bright);
+  --color-accent-deep: var(--accent-deep);
   --color-accent-muted: var(--accent-muted);
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
+  --color-sphere: var(--sphere);
 
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
 
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 
-  --ease-aurora: var(--ease);
+  --ease-nexus: var(--ease);
 }
 
-/* --- Micro-motion ---------------------------------------
-   O pulso do check de hábito. Discreto por regra: o "uau" do
-   Aurora vem de tipografia e hierarquia, não de espetáculo. */
+/* --- Micro-motion ---------------------------------------------
+   Tudo aqui anima SÓ transform e opacity — as duas propriedades
+   que o compositor resolve sem recalcular layout nem repintar.
+   Animar box-shadow ou filter em loop é o caminho conhecido para
+   torrar CPU com o app parado. Ver §6 do plano. */
+
+/* O check de hábito: o círculo preenche e dá um pulinho. */
 @keyframes nexus-pulse {
   0% {
     transform: scale(0.7);
     opacity: 0.4;
   }
   60% {
-    transform: scale(1.12);
+    transform: scale(1.15);
     opacity: 1;
   }
   100% {
@@ -142,9 +221,50 @@
   }
 }
 
-/* --- Motion accessibility -------------------------------
-   Not a nicety: motion can trigger vestibular symptoms. The
-   app must remain fully usable with animation off. */
+/* Fechar um bloco diário inteiro: UM anel de glow que sai
+   crescendo. Uma vez, 400ms, e acabou — sem confete, sem
+   biblioteca, sem loop. */
+@keyframes nexus-ring {
+  0% {
+    transform: scale(0.98);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.06);
+    opacity: 0;
+  }
+}
+
+/* A transição entre telas: fade + 12px de slide. */
+@keyframes nexus-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* As listras de uma barra de progresso ativa. Aplicada APENAS
+   quando há atividade recente — uma barra listrada eternamente em
+   movimento é uma animação rodando com o app ocioso. */
+@keyframes nexus-stripes {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 28px 0;
+  }
+}
+
+/* --- Motion accessibility -------------------------------------
+   Não é gentileza: movimento dispara sintomas vestibulares. O app
+   tem que continuar inteiro com a animação desligada. O count-up
+   também respeita isto — ele salta direto para o valor final (ver
+   useCountUp), porque um número que nunca chega ao destino seria
+   pior que um número que não anima. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -8,5 +8,6 @@ pub mod areas;
 pub mod habits;
 pub mod nodes;
 pub mod search;
+pub mod spheres;
 pub mod system;
 pub mod tasks;

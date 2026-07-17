@@ -11,7 +11,11 @@ use crate::domain::errors::{NexusError, Result};
 ///
 /// O `CHECK` da coluna `nodes.kind` espelha exatamente estas variantes; os dois
 /// mudam na mesma migration ou não mudam.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `Ord` deriva da ordem de declaração e não tem significado de domínio: existe
+/// só para o `Kind` poder ser chave de `BTreeMap` (o Hub agrupa contagens por
+/// (área, kind)). Nada deve ler "Note < Task" como se dissesse algo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Kind {
     Note,
@@ -94,9 +98,73 @@ impl Status {
     }
 }
 
-/// Uma Área da vida. Tudo pertence a uma Área — o Inbox é a única exceção,
-/// e é justamente por isso que ele existe: um lugar para o que ainda não foi
-/// decidido.
+/// O template de uma Esfera: QUE tela ela abre.
+///
+/// Fechado, como `Kind`, e pelo mesmo motivo: o `CHECK` de `areas.template`
+/// espelha exatamente estas variantes, e os dois mudam na mesma migration ou
+/// não mudam.
+///
+/// O template é a resposta para "por que a Esfera Saúde mostra checkpoints e a
+/// Esfera Casa não?". Não é o nome nem o id: renomear "Saúde" para "Corpo" não
+/// pode apagar a tela, e um id não diz nada sobre comportamento.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Template {
+    Health,
+    Finance,
+    FinGoals,
+    Career,
+    Studies,
+    /// O template do que o usuário cria: agenda + checklists. Deliberadamente
+    /// raso — ver §3.6 do plano.
+    Simple,
+}
+
+impl Template {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Template::Health => "health",
+            Template::Finance => "finance",
+            Template::FinGoals => "fin_goals",
+            Template::Career => "career",
+            Template::Studies => "studies",
+            Template::Simple => "simple",
+        }
+    }
+
+    pub fn parse(s: &str) -> Result<Self> {
+        Ok(match s {
+            "health" => Template::Health,
+            "finance" => Template::Finance,
+            "fin_goals" => Template::FinGoals,
+            "career" => Template::Career,
+            "studies" => Template::Studies,
+            "simple" => Template::Simple,
+            other => {
+                return Err(NexusError::Validation(format!(
+                    "template de esfera desconhecido: {other}"
+                )))
+            }
+        })
+    }
+
+    /// Os templates que o wizard "+ Nova Esfera" oferece.
+    ///
+    /// Os cinco especializados são instalados pelo NEXUS, não escolhidos: uma
+    /// segunda Esfera com o dashboard de Finanças dividiria o patrimônio em
+    /// duas telas que nunca somam.
+    pub fn user_creatable() -> &'static [Template] {
+        &[Template::Simple]
+    }
+}
+
+/// Uma Área da vida — uma **Esfera**, no vocabulário da UI. Tudo pertence a
+/// uma Esfera; o Inbox é a única exceção, e é justamente por isso que ele
+/// existe: um lugar para o que ainda não foi decidido.
+///
+/// Um nome nos dois mundos, de propósito: `areas` está gravado em quatro
+/// migrations imutáveis e em toda FK do schema. Renomear a tabela custaria uma
+/// migration de recriação por um ganho puramente cosmético. Ver ADR-0005.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Area {
@@ -105,6 +173,10 @@ pub struct Area {
     pub icon: String,
     pub color: String,
     pub sort_order: i64,
+    pub template: Template,
+    /// Uma das 5 Esferas que o NEXUS instala. Editável e arquivável como
+    /// qualquer outra — a flag só serve para o wizard não oferecer duplicá-la.
+    pub is_system: bool,
     pub archived_at: Option<i64>,
 }
 
@@ -194,6 +266,36 @@ mod tests {
     #[test]
     fn unknown_kind_is_rejected() {
         assert!(Kind::parse("pizza").is_err());
+    }
+
+    #[test]
+    fn template_round_trips() {
+        for t in [
+            Template::Health,
+            Template::Finance,
+            Template::FinGoals,
+            Template::Career,
+            Template::Studies,
+            Template::Simple,
+        ] {
+            assert_eq!(Template::parse(t.as_str()).unwrap(), t);
+        }
+    }
+
+    #[test]
+    fn template_strings_match_the_check_constraint() {
+        // Estas strings estão no CHECK de `areas.template` (0005) e no banco do
+        // usuário. Mudar uma aqui faz o INSERT falhar em produção, não aqui.
+        assert_eq!(Template::FinGoals.as_str(), "fin_goals");
+        assert_eq!(Template::Health.as_str(), "health");
+        assert!(Template::parse("espiritualidade").is_err());
+    }
+
+    #[test]
+    fn only_the_simple_template_is_user_creatable() {
+        // Duas Esferas com o dashboard de Finanças dividiriam o patrimônio em
+        // duas telas que nunca somam.
+        assert_eq!(Template::user_creatable(), &[Template::Simple]);
     }
 
     #[test]

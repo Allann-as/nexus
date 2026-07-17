@@ -8,7 +8,7 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { NAV_ITEMS } from "./navigation";
+import { JUMP_TARGETS } from "./navigation";
 
 /** Janela do chord: longa o bastante para não ser corrida, curta o bastante
  *  para um `G` perdido não teleportar alguém que voltou a digitar depois. */
@@ -59,7 +59,7 @@ export function useKeyboard({
       if (pendingG.current) {
         pendingG.current = false;
         window.clearTimeout(timer.current);
-        const target = NAV_ITEMS.find((i) => i.jumpKey === key);
+        const target = JUMP_TARGETS.find((i) => i.jumpKey === key);
         if (target) {
           e.preventDefault();
           navigate(target.path);

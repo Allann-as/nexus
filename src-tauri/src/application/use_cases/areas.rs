@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::application::ports::{AreaPatch, AreaRepository, Clock, IdGen, NewArea};
-use crate::domain::entities::{validate_color, validate_title, Area};
+use crate::domain::entities::{validate_color, validate_title, Area, Template};
 use crate::domain::errors::{NexusError, Result};
 
 pub struct AreaService {
@@ -13,16 +13,28 @@ pub struct AreaService {
 }
 
 impl AreaService {
-    /// Cria uma Área.
+    /// Cria uma Esfera.
     ///
-    /// Áreas não geram evento de ledger: elas são a *estrutura* da vida do
+    /// Esferas não geram evento de ledger: elas são a *estrutura* da vida do
     /// usuário, não algo que aconteceu nela. A timeline conta o que você fez,
     /// não como você organizou as gavetas.
-    pub fn create(&self, name: &str, icon: &str, color: &str) -> Result<Area> {
+    pub fn create(&self, name: &str, icon: &str, color: &str, template: Template) -> Result<Area> {
+        // O wizard só oferece 'simple', mas quem chama o command é o frontend —
+        // e a fronteira do IPC não é lugar de confiar. Sem esta guarda, um
+        // `invoke('create_area', {template: 'finance'})` no console criaria uma
+        // segunda Esfera Finanças e partiria o patrimônio em duas telas.
+        if !Template::user_creatable().contains(&template) {
+            return Err(NexusError::Validation(format!(
+                "o template '{}' é instalado pelo NEXUS e não pode ser criado à mão",
+                template.as_str()
+            )));
+        }
+
         let area = NewArea {
             name: validate_title(name)?,
             icon: validate_icon(icon)?,
             color: validate_color(color)?,
+            template,
         };
         self.repo.create(&self.ids.new_id(), &area)
     }

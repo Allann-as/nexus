@@ -2,7 +2,7 @@
  * Hábitos & Rotinas.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Repeat, Plus, Zap, Flame } from "lucide-react";
 
@@ -17,15 +17,11 @@ import {
   type Schedule,
   type HabitWithStats,
 } from "../../lib/ipc";
-import {
-  Button,
-  Card,
-  EmptyState,
-  PageHeader,
-  cx,
-} from "../../design-system/primitives";
+import { Button, Card, EmptyState, cx } from "../../design-system/primitives";
+import { Checkbox } from "../../design-system/Checkbox";
+import { HeroCard } from "../../design-system/cards";
+import { ProgressRing } from "../../design-system/charts";
 import { useToasts } from "../../stores/toasts";
-import { StreakRing } from "./StreakRing";
 import { HabitDetail } from "./HabitDetail";
 
 export function HabitsScreen() {
@@ -44,6 +40,12 @@ export function HabitsScreen() {
     queryKey: ["habits", "all"],
     queryFn: () => listHabits(),
   });
+
+  // Esta tela atravessa TODAS as Esferas, então não há uma cor de página: quem
+  // recebe `--sphere` é cada linha, pela Esfera do próprio hábito. Mesma query
+  // (e mesmo cache) que o formulário de criação usa para o select de Área.
+  const { data: areas = [] } = useQuery({ queryKey: ["areas"], queryFn: () => listAreas(false) });
+  const colorOf = useMemo(() => new Map(areas.map((a) => [a.id, a.color])), [areas]);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["habits"] });
@@ -76,29 +78,30 @@ export function HabitsScreen() {
   // Agrupa por rotina, preservando a ordem que veio do backend.
   const groups = groupByRoutine(today, all);
 
+  const doneToday = today.filter((h) => h.today === "done").length;
+  const total = today.length;
+  const ratio = total > 0 ? doneToday / total : 0;
+
   return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        title="Hábitos"
-        subtitle={
-          isPending
-            ? "Carregando…"
-            : today.length === 0
-              ? "Nada agendado para hoje"
-              : `${today.filter((h) => h.today === "done").length} de ${today.length} hoje`
-        }
-        actions={
+    <div className="nx-page nx-enter h-full overflow-y-auto">
+      <div className="mx-auto max-w-[1100px] px-8 pt-8 pb-12">
+        <header className="flex items-start justify-between gap-6">
+          <h1 className="text-[28px] leading-[34px] font-semibold tracking-[-0.03em]">
+            Hábitos
+          </h1>
           <Button variant="primary" size="sm" icon={Plus} onClick={() => setCreating(true)}>
             Novo hábito
           </Button>
-        }
-      />
+        </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-8">
-        {creating && <CreateForm onDone={() => setCreating(false)} />}
+        {creating && (
+          <div className="mt-6">
+            <CreateForm onDone={() => setCreating(false)} />
+          </div>
+        )}
 
         {all.length === 0 && !isPending && !creating ? (
-          <div className="h-[60%]">
+          <div className="h-[420px]">
             <EmptyState
               icon={Repeat}
               title="Nenhum hábito ainda"
@@ -111,44 +114,72 @@ export function HabitsScreen() {
             />
           </div>
         ) : (
-          <div className="space-y-6">
-            {groups.map((group) => (
-              <div key={group.routineId ?? "avulsos"}>
-                <div className="mb-2 flex items-center gap-2">
-                  <h2 className="text-[11px] font-semibold tracking-[0.08em] text-[var(--text-tertiary)] uppercase">
-                    {group.title}
-                  </h2>
-                  {group.routineId && group.habits.length > 0 && (
-                    <button
-                      onClick={() => routine.mutate(group.routineId!)}
-                      disabled={routine.isPending}
-                      className="flex items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[10px] text-[var(--accent)] transition-colors hover:bg-[var(--accent-muted)]"
-                    >
-                      <Zap size={10} />
-                      concluir tudo
-                    </button>
-                  )}
-                </div>
-
-                <Card className="divide-y divide-[var(--border-subtle)] overflow-hidden">
-                  {group.habits.map((h) => (
-                    <HabitRow
-                      key={h.id}
-                      habit={h}
-                      busy={tick.isPending}
-                      onToggle={() => tick.mutate({ id: h.id, done: h.today === "done" })}
-                      onOpen={() => setOpenHabit(h.id)}
-                    />
-                  ))}
-                  {group.habits.length === 0 && (
-                    <p className="px-4 py-3 text-[12px] text-[var(--text-tertiary)]">
-                      Nada agendado para hoje.
-                    </p>
-                  )}
-                </Card>
+          <>
+            {!isPending && (
+              <div className="mt-6">
+                <HeroCard
+                  label="Hoje"
+                  value={total > 0 ? `${doneToday}/${total}` : "—"}
+                  hint={
+                    total > 0
+                      ? `${Math.round(ratio * 100)}% dos hábitos agendados para hoje`
+                      : "Nenhum hábito agendado para hoje"
+                  }
+                  aside={
+                    <ProgressRing value={ratio} size={72} thickness={6}>
+                      <span className="tabular text-[15px] font-semibold">
+                        {Math.round(ratio * 100)}%
+                      </span>
+                    </ProgressRing>
+                  }
+                />
               </div>
-            ))}
-          </div>
+            )}
+
+            <div className="mt-6 space-y-6">
+              {groups.map((group) => (
+                <div key={group.routineId ?? "avulsos"}>
+                  <div className="mb-2 flex items-center gap-2">
+                    <h2 className="text-[10px] font-semibold tracking-[0.1em] text-[var(--text-tertiary)] uppercase">
+                      {group.title}
+                    </h2>
+                    {group.routineId && group.habits.length > 0 && (
+                      <button
+                        onClick={() => routine.mutate(group.routineId!)}
+                        disabled={routine.isPending}
+                        className={cx(
+                          "flex items-center gap-1 rounded-[var(--radius-sm)] border border-transparent px-1.5 py-0.5 text-[10px] text-[var(--accent)]",
+                          "transition-[background-color,border-color] duration-[var(--dur-fast)] ease-[var(--ease)]",
+                          "hover:border-[var(--border-glow)] hover:bg-[var(--accent-muted)] disabled:opacity-40",
+                        )}
+                      >
+                        <Zap size={10} />
+                        concluir tudo
+                      </button>
+                    )}
+                  </div>
+
+                  <Card className="divide-y divide-[var(--border-subtle)] overflow-hidden">
+                    {group.habits.map((h) => (
+                      <HabitRow
+                        key={h.id}
+                        habit={h}
+                        color={h.areaId ? colorOf.get(h.areaId) : undefined}
+                        busy={tick.isPending}
+                        onToggle={() => tick.mutate({ id: h.id, done: h.today === "done" })}
+                        onOpen={() => setOpenHabit(h.id)}
+                      />
+                    ))}
+                    {group.habits.length === 0 && (
+                      <p className="px-4 py-3 text-[12px] text-[var(--text-tertiary)]">
+                        Nada agendado para hoje.
+                      </p>
+                    )}
+                  </Card>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
@@ -159,11 +190,14 @@ export function HabitsScreen() {
 
 function HabitRow({
   habit,
+  color,
   busy,
   onToggle,
   onOpen,
 }: {
   habit: HabitWithStats;
+  /** A cor da Esfera do hábito. `undefined` = hábito sem Área: fica no azul do app. */
+  color?: string;
   busy: boolean;
   onToggle: () => void;
   onOpen: () => void;
@@ -172,21 +206,31 @@ function HabitRow({
 
   return (
     <div
-      className="flex items-center gap-3 px-3 transition-colors hover:bg-[var(--bg-hover)]"
-      style={{ minHeight: "var(--row-list)" }}
+      className="flex items-center gap-3 px-3 transition-colors duration-[var(--dur-fast)] hover:bg-[var(--bg-hover)]"
+      style={
+        {
+          minHeight: "var(--row-list)",
+          ...(color ? { "--sphere": color } : {}),
+        } as React.CSSProperties
+      }
     >
-      <StreakRing
-        streak={habit.streaks.current}
-        status={habit.today}
-        onClick={onToggle}
+      {/* Marcar aqui é binário mesmo para hábito com meta — `tick_habit` grava
+          "done", não o valor. O aro de streak não cabe neste gesto: o número
+          dele já está no chip da direita, e um anel que só repete o vizinho é
+          um alvo de clique caro por nada. */}
+      <Checkbox
+        checked={done}
+        variant={habit.today === "skipped" ? "skipped" : "default"}
+        onChange={onToggle}
         disabled={busy}
+        size={18}
         title={done ? `Desmarcar ${habit.title}` : `Marcar ${habit.title}`}
       />
 
       <button onClick={onOpen} className="min-w-0 flex-1 text-left">
         <span
           className={cx(
-            "block truncate text-[13px] transition-colors",
+            "block truncate text-[13px] transition-colors duration-[var(--dur-base)]",
             done
               ? "text-[var(--text-tertiary)] line-through"
               : "text-[var(--text-primary)]",
