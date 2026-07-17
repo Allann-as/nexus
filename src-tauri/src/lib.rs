@@ -106,15 +106,19 @@ pub fn run() {
             commands::events::events_range,
             commands::events::update_event,
             commands::events::move_event,
+            commands::events::resize_event,
             commands::events::cancel_occurrence,
             commands::events::delete_event,
             commands::events::event_conflicts,
+            commands::events::extend_materialization,
             commands::goals::create_goal,
             commands::goals::list_goals,
             commands::goals::goal_with_progress,
             commands::goals::add_goal_checkpoint,
             commands::goals::add_milestone,
             commands::goals::set_milestone_done,
+            commands::goals::set_goal_progress_source,
+            commands::goals::move_milestone,
         ])
         .build(tauri::generate_context!())
         .expect("não foi possível construir a janela do NEXUS")

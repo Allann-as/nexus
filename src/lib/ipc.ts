@@ -600,6 +600,18 @@ export const moveEvent = (
   newStart: number,
 ) => call<Occurrence>("move_event", { id, occurrenceStart, newStart });
 
+/**
+ * Estica/encolhe UMA ocorrência (a borda inferior do bloco).
+ *
+ * Como o arrasto, redimensionar uma ocorrência de série solta AQUELA da regra:
+ * o usuário esticou a terapia desta terça, não todas as terças.
+ */
+export const resizeEvent = (
+  id: string,
+  occurrenceStart: number,
+  newEnd: number,
+) => call<Occurrence>("resize_event", { id, occurrenceStart, newEnd });
+
 /** "Toda terça, MENOS a de 25/11." */
 export const cancelOccurrence = (id: string, occurrenceStart: number) =>
   call<void>("cancel_occurrence", { id, occurrenceStart });
@@ -615,6 +627,19 @@ export const deleteEvent = (id: string) => call<void>("delete_event", { id });
  */
 export const eventConflicts = (fromMs: number, toMs: number) =>
   call<Conflict[]>("event_conflicts", { fromMs, toMs });
+
+/**
+ * Estende a janela materializada até o fim de `untilMonth` ('AAAA-MM').
+ *
+ * A série é materializada 18 meses à frente da âncora, e além disso ela não
+ * existe: o mês 19 abriria vazio. Isto é o que a estende — e é a UI que o
+ * dispara, ao navegar para perto da borda, porque materializar é ESCREVER e a
+ * leitura do calendário roda num pool `query_only`.
+ *
+ * Idempotente: devolve quantas ocorrências nasceram, e 0 é a resposta normal.
+ */
+export const extendMaterialization = (untilMonth: string) =>
+  call<number>("extend_materialization", { untilMonth });
 
 /* ===== metas & sub-desafios ===== */
 
@@ -658,7 +683,12 @@ export interface Milestone {
   targetCount: number | null;
   weight: number;
   sortOrder: number;
-  /** Ticks 'done' do hábito ligado. `null` num 'simple'. Vem de query. */
+  /** 'YYYY-MM-DD': de quando o contador conta. `null` = desde sempre. */
+  countsFrom: string | null;
+  /**
+   * Ticks 'done' do hábito ligado, a partir de `countsFrom`. `null` num
+   * 'simple'. Vem de query — nunca é um número que o usuário digitou.
+   */
   currentCount: number | null;
 }
 
@@ -718,11 +748,25 @@ export const listGoals = (areaId?: string | null) =>
 export const goalWithProgress = (id: string) =>
   call<GoalWithProgress>("goal_with_progress", { id });
 
+/**
+ * Registra uma medição da métrica.
+ *
+ * `notedAt` ausente = agora. O passado é aceito ("a pesagem de segunda, que
+ * esqueci de anotar") e o futuro é recusado — a mesma regra do `day` de um tick
+ * de hábito, e pelo mesmo motivo: a data é o x da reta da projeção.
+ */
 export const addGoalCheckpoint = (
   id: string,
   value: number,
   note?: string | null,
-) => call<GoalCheckpoint>("add_goal_checkpoint", { id, value, note: note ?? null });
+  notedAt?: number | null,
+) =>
+  call<GoalCheckpoint>("add_goal_checkpoint", {
+    id,
+    value,
+    note: note ?? null,
+    notedAt: notedAt ?? null,
+  });
 
 export const addMilestone = (m: {
   goalId: string;
@@ -732,6 +776,14 @@ export const addMilestone = (m: {
   habitId?: string | null;
   targetCount?: number | null;
   weight?: number;
+  /**
+   * 'YYYY-MM-DD': de quando o contador conta. Ausente num 'counter' = hoje.
+   *
+   * Sem este piso, "30 dias de academia" criado hoje sobre um hábito com um ano
+   * de histórico nasceria completo. O passado é aceito ("conte desde o início
+   * do mês"); o futuro, não.
+   */
+  countsFrom?: string | null;
 }) => call<Milestone>("add_milestone", { milestone: m });
 
 /**
@@ -742,3 +794,16 @@ export const addMilestone = (m: {
  */
 export const setMilestoneDone = (id: string, done: boolean) =>
   call<Milestone>("set_milestone_done", { id, done });
+
+/**
+ * Qual barra manda: a métrica ou os sub-desafios.
+ *
+ * As duas discordam o tempo todo, e a escolha é do usuário — o app não adivinha
+ * qual das duas medidas do progresso dele é a verdadeira.
+ */
+export const setGoalProgressSource = (id: string, source: ProgressSource) =>
+  call<Goal>("set_goal_progress_source", { id, source });
+
+/** Arrasta um sub-desafio para a posição `toIndex` da árvore. */
+export const moveMilestone = (id: string, toIndex: number) =>
+  call<void>("move_milestone", { id, toIndex });

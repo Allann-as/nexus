@@ -10,12 +10,9 @@ import { InboxScreen } from "../features/inbox/InboxScreen";
 import { AreasScreen } from "../features/areas/AreasScreen";
 import { HabitsScreen } from "../features/habits/HabitsScreen";
 import { ProjectsScreen } from "../features/projects/ProjectsScreen";
-import {
-  CalendarScreen,
-  NotesScreen,
-  TimelineScreen,
-  InsightsScreen,
-} from "../features/screens";
+import { GoalsScreen } from "../features/goals/GoalsScreen";
+import { CalendarScreen } from "../features/calendar/CalendarScreen";
+import { NotesScreen, TimelineScreen, InsightsScreen } from "../features/screens";
 import { useUi, applyTheme } from "../stores/ui";
 
 const queryClient = new QueryClient({
@@ -55,7 +52,8 @@ const router = createHashRouter([
       // atalho é código que ninguém executa.
       { path: "calendar", element: <CalendarScreen /> },
       { path: "habits", element: <HabitsScreen /> },
-      { path: "goals", element: <ProjectsScreen /> },
+      { path: "goals", element: <GoalsScreen /> },
+      { path: "projects", element: <ProjectsScreen /> },
       { path: "notes", element: <NotesScreen /> },
       { path: "timeline", element: <TimelineScreen /> },
       { path: "insights", element: <InsightsScreen /> },

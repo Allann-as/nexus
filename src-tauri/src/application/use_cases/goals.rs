@@ -14,7 +14,9 @@ use crate::domain::entities::{
 };
 use crate::domain::errors::{NexusError, Result};
 use crate::domain::ledger::{EventType, NewLedgerEvent};
+use crate::domain::ordering::order_between;
 use crate::domain::projection::{self, Point, Projection};
+use crate::domain::schedule::{format_day, parse_day};
 
 /// Um sub-desafio com a fração dele já calculada.
 #[derive(Debug, Clone, Serialize)]
@@ -148,11 +150,17 @@ impl GoalService {
     }
 
     /// Registra uma medição da métrica.
+    ///
+    /// `noted_at` aceita o passado — "a pesagem de segunda, que esqueci de
+    /// anotar" — exatamente como o `tick` de um hábito aceita um dia explícito.
+    /// E recusa o futuro pela mesma razão: uma medição de amanhã não é um dado,
+    /// é um erro, e envenenaria a projeção em silêncio. Ela é o x da reta.
     pub fn add_checkpoint(
         &self,
         goal_id: &str,
         value: f64,
         note: Option<String>,
+        noted_at: Option<i64>,
     ) -> Result<Checkpoint> {
         let goal = self.goals.get(goal_id)?;
         if !value.is_finite() {
@@ -163,10 +171,27 @@ impl GoalService {
         }
 
         let now = self.clock.now_ms();
+        let noted_at = match noted_at {
+            None => now,
+            Some(at) => {
+                if at > now {
+                    return Err(NexusError::Validation(
+                        "não dá para registrar uma medição no futuro".into(),
+                    ));
+                }
+                at
+            }
+        };
         let id = self.ids.new_id();
         let event = NewLedgerEvent {
-            ts: now,
-            day: self.clock.today_local(),
+            // O ledger registra QUANDO A MEDIÇÃO ACONTECEU, não quando ela foi
+            // digitada: a Timeline conta a história do usuário, e a pesagem de
+            // segunda pertence à segunda mesmo que ele a tenha anotado na
+            // quarta. É a mesma escolha do tick de hábito com dia explícito.
+            ts: noted_at,
+            day: format_day(day_of(noted_at).ok_or_else(|| {
+                NexusError::Validation(format!("instante fora do calendário: {noted_at}"))
+            })?),
             entity_id: goal_id.to_string(),
             entity_kind: Kind::Goal,
             // O vocabulário do ledger tem um evento só para isto: a timeline
@@ -181,7 +206,7 @@ impl GoalService {
             &NewCheckpoint {
                 goal_id: goal_id.to_string(),
                 value,
-                noted_at: now,
+                noted_at,
                 note,
             },
             &event,
@@ -240,6 +265,33 @@ impl GoalService {
             }
         }
 
+        // O piso do contador (0009). Sem ele, "30 dias de academia" criado hoje
+        // sobre um hábito com 120 dias de histórico nasce completo — um desafio
+        // que o usuário ganha sem fazer.
+        //
+        // O passado é aceito ("conte desde o início do mês"); o futuro, não —
+        // um contador que só começa a contar semana que vem exibiria 0/30 sem
+        // dizer por quê, e ninguém saberia se está quebrado.
+        let counts_from = match (m.kind, m.counts_from.as_deref()) {
+            (MilestoneKind::Simple, Some(_)) => {
+                return Err(NexusError::Validation(
+                    "um sub-desafio simples não conta nada: ele não tem de quando contar".into(),
+                ))
+            }
+            (MilestoneKind::Simple, None) => None,
+            (MilestoneKind::Counter, None) => Some(self.clock.today_local()),
+            (MilestoneKind::Counter, Some(day)) => {
+                let parsed = parse_day(day)?;
+                let today = parse_day(&self.clock.today_local())?;
+                if parsed > today {
+                    return Err(NexusError::Validation(
+                        "um contador não pode começar a contar no futuro".into(),
+                    ));
+                }
+                Some(format_day(parsed))
+            }
+        };
+
         let id = self.ids.new_id();
         let event = NewLedgerEvent {
             ts: self.clock.now_ms(),
@@ -253,6 +305,7 @@ impl GoalService {
                 "habit": m.habit_id,
                 "targetCount": m.target_count,
                 "weight": m.weight,
+                "countsFrom": counts_from,
             }),
             title_snapshot: title.clone(),
         };
@@ -265,7 +318,12 @@ impl GoalService {
                 area_id: goal.area_id.clone(),
                 parent_id: Some(m.goal_id.clone()),
             },
-            m,
+            // `counts_from` resolvido: o repositório grava o que o SERVIÇO
+            // decidiu (hoje, por padrão), não o que a UI mandou.
+            &NewMilestone {
+                counts_from,
+                ..m.clone()
+            },
             &event,
         )
     }
@@ -305,6 +363,52 @@ impl GoalService {
         };
 
         self.goals.set_milestone_done_with_event(id, done, &event)
+    }
+
+    /// Troca a régua da meta: a métrica ou os sub-desafios.
+    ///
+    /// As duas medidas discordam o tempo todo — "perder 10 kg" pode estar em 40%
+    /// pelo peso e 75% pelos sub-desafios —, e adivinhar qual mostrar seria o app
+    /// decidindo por um número que é do usuário (§5 da 0007).
+    ///
+    /// Sem evento de ledger, igual ao `set_schedule` dos hábitos: trocar a régua
+    /// é configuração de como o fato é medido, não um fato da vida do usuário.
+    /// Ver ADR-0023.
+    pub fn set_progress_source(&self, id: &str, source: ProgressSource) -> Result<Goal> {
+        let goal = self.goals.get(id)?;
+        if goal.progress_source == source {
+            // Nada a fazer não é um erro: o toggle da UI pode chegar aqui duas
+            // vezes por um clique duplo, e a segunda não é uma falha.
+            return Ok(goal);
+        }
+        self.goals.set_progress_source(id, source)
+    }
+
+    /// Move um sub-desafio para a posição `to_index` na árvore da meta.
+    ///
+    /// A conta é a mesma do arrasto de tarefas, e é a MESMA função: a nova ordem
+    /// é a média dos vizinhos, e mover é um update de uma linha. Ver
+    /// `domain::ordering`.
+    ///
+    /// Sem evento de ledger: a ordem da árvore é a arrumação da mesa do usuário,
+    /// não a história dele — exatamente como reordenar tarefas num projeto (M2).
+    pub fn move_milestone(&self, id: &str, to_index: usize) -> Result<()> {
+        let milestone = self.goals.get_milestone(id)?;
+        let goal_id = &milestone.goal_id;
+
+        let (before, after) = self.goals.milestone_neighbours(goal_id, to_index)?;
+
+        let new_order = match order_between(before, after) {
+            Some(order) => order,
+            None => {
+                // Saturou: reespaça e refaz a conta com folga.
+                self.goals.renumber_milestones(goal_id)?;
+                let (a, b) = self.goals.milestone_neighbours(goal_id, to_index)?;
+                order_between(a, b).unwrap_or(0.0)
+            }
+        };
+
+        self.goals.reorder_milestone(id, new_order)
     }
 
     /// A meta com a barra, os sub-desafios e a projeção — numa chamada.
@@ -471,7 +575,6 @@ fn day_of(ms: i64) -> Option<chrono::NaiveDate> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::schedule::format_day;
 
     fn goal(source: ProgressSource) -> Goal {
         Goal {
@@ -500,6 +603,7 @@ mod tests {
             target_count: None,
             weight,
             sort_order: 0.0,
+            counts_from: None,
             current_count: None,
         };
         MilestoneView {
@@ -519,6 +623,7 @@ mod tests {
             target_count: target,
             weight,
             sort_order: 0.0,
+            counts_from: Some("2026-07-01".into()),
             current_count: current,
         };
         MilestoneView {

@@ -280,6 +280,31 @@ linkado, nunca por número digitado à mão), o `weight` na média e a ordem.
 medidas possíveis de progresso — a métrica e os sub-desafios — e elas discordam.
 Adivinhar qual mostrar seria o app decidindo por um número que é do usuário.
 
+`milestone_details.counts_from` (0009) é o dia a partir do qual o contador conta.
+Sem ele, "30 dias de academia" criado hoje sobre um hábito com 120 dias de
+histórico nasce **marcado, exibindo 51/30** — foi o que a tela mostrou. O padrão
+é o dia da criação; o passado é aceito ("conte desde o início do mês") e o futuro
+não, igual ao `day` de um tick. NULL = conta tudo, que é o que dizem as linhas
+anteriores à 0009. Ver ADR-0025.
+
+### A ocorrência lembra de que turno ela é (0008)
+
+`event_occurrences` tem duas colunas de tempo que quase sempre são iguais, e a
+diferença entre elas é o que sustenta a extensão da janela:
+
+| coluna | responde | quem manda |
+|---|---|---|
+| `starts_at` | **quando** a ocorrência acontece | o usuário, arrastando |
+| `rule_start` | **qual turno da regra** ela é | a regra |
+
+Um arrasto reescreve `starts_at` no lugar (é a PK). Sem `rule_start`, a pergunta
+"até onde esta série já foi materializada?" não teria resposta depois do primeiro
+arrasto: a borda por `MAX(starts_at)` abre um buraco de semanas na série quando a
+última ocorrência é empurrada para frente, e a borda que ignora as movidas
+ressuscita a ocorrência que o usuário tirou dali. O índice UNIQUE
+`(event_id, rule_start)` diz ao banco a invariante — **uma linha por turno** — e é
+ele que torna a extensão idempotente de graça. Ver ADR-0022.
+
 ## 6. Integridade e migrations
 
 - `user_version` gerenciado pelo `rusqlite_migration`.

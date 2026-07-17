@@ -9,7 +9,7 @@ use rusqlite::{params, OptionalExtension, Row};
 
 use crate::application::ports::{
     Event, EventPatch, EventRepository, NewEventDetails, NewNode, NewOccurrence, Occurrence,
-    OccurrenceMove,
+    OccurrenceMove, SeriesTail,
 };
 use crate::domain::errors::{NexusError, Result};
 use crate::domain::ledger::NewLedgerEvent;
@@ -129,9 +129,13 @@ impl EventRepository for SqliteEventRepository {
             // gerou. Um evento com node e sem ocorrência é um compromisso
             // invisível: o usuário só descobre no dia em que ele não toca.
             {
+                // `rule_start = starts_at`: uma ocorrência recém-materializada
+                // está, por definição, no slot que a regra gerou. Os dois só
+                // divergem quando o usuário arrasta — e o arrasto não toca em
+                // `rule_start`. Ver a 0008.
                 let mut stmt = tx.prepare(
-                    "INSERT INTO event_occurrences (event_id, starts_at, ends_at, day)
-                     VALUES (?1, ?2, ?3, ?4)",
+                    "INSERT INTO event_occurrences (event_id, starts_at, ends_at, day, rule_start)
+                     VALUES (?1, ?2, ?3, ?4, ?2)",
                 )?;
                 for o in occurrences {
                     stmt.execute(params![id, o.starts_at, o.ends_at, o.day])?;
@@ -326,6 +330,95 @@ impl EventRepository for SqliteEventRepository {
             append_in_tx(&tx, event)?;
             tx.commit()?;
             Ok(())
+        })
+    }
+
+    fn series_needing_extension(&self, until_ms: i64) -> Result<Vec<SeriesTail>> {
+        self.db.with_read(|c| {
+            // O `MAX(o.rule_start)` é a borda da série — o último turno da regra
+            // que já foi materializado (ver a 0008: `starts_at` mente depois de
+            // um arrasto). O índice UNIQUE (event_id, rule_start) da 0008 cobre
+            // o GROUP BY: é um scan do fim de cada grupo, não uma ordenação.
+            //
+            // Duas condições, e as duas são baratas:
+            //   * `e.rrule IS NOT NULL` — um avulso tem a única ocorrência que
+            //     ele terá para sempre; estendê-lo o duplicaria.
+            //   * `MAX(o.rule_start) < ?1` — a série já alcança o horizonte
+            //     pedido: nada a fazer. É a resposta normal, e é ela que faz
+            //     esta pergunta custar quase nada na maioria das navegações.
+            //
+            // O `recurrence_end` NÃO é filtrado aqui, e a tentação é grande.
+            // Um curso que acabou em setembro tem `recurrence_end` (setembro,
+            // 23h) DEPOIS do último turno materializado (setembro, 9h) — a
+            // comparação em epoch diz "ainda cabe mais", e ela está certa: só
+            // não cabe mais porque o próximo turno seria no dia seguinte, e
+            // saber isso exige o dia local de um epoch. Que é exatamente a
+            // pergunta que o SQL não sabe responder sem `datetime(...,
+            // 'localtime')` — a razão de a coluna `day` existir (§3 da 0007).
+            //
+            // Então esta query devolve CANDIDATOS, e quem decide é o serviço:
+            // ele corta a expansão em `min(horizonte, recurrence_end)`, e para
+            // uma série terminada isso vira `until < from` — que o
+            // `Recurrence::expand` responde com uma lista vazia na primeira
+            // linha, sem laço nenhum. O custo de um candidato à toa é uma
+            // comparação de datas.
+            let mut stmt = c.prepare_cached(
+                "SELECT o.event_id, e.starts_at, e.ends_at, e.rrule, e.recurrence_end,
+                        MAX(o.rule_start)
+                   FROM event_occurrences o
+                   JOIN event_details e ON e.node_id = o.event_id
+                  WHERE e.rrule IS NOT NULL
+                  GROUP BY o.event_id
+                 HAVING MAX(o.rule_start) < ?1",
+            )?;
+
+            let rows = stmt.query_map(params![until_ms], |row| {
+                let raw: String = row.get(3)?;
+                let rrule = Recurrence::parse_json(&raw).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        3,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })?;
+                Ok(SeriesTail {
+                    event_id: row.get(0)?,
+                    anchor_starts_at: row.get(1)?,
+                    anchor_ends_at: row.get(2)?,
+                    rrule,
+                    recurrence_end: row.get(4)?,
+                    last_materialised: row.get(5)?,
+                })
+            })?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        })
+    }
+
+    fn append_occurrences(&self, event_id: &str, occurrences: &[NewOccurrence]) -> Result<usize> {
+        self.db.with_write(|conn| {
+            let tx = conn.transaction()?;
+            let mut written = 0;
+            {
+                // `OR IGNORE` sobre a UNIQUE (event_id, rule_start) da 0008 é o
+                // que torna a extensão idempotente — e "já existe" aqui quer
+                // dizer "este TURNO já existe", não "este horário já existe".
+                //
+                // É a diferença que protege a ocorrência arrastada: a terça que
+                // o usuário empurrou para quarta continua ocupando o turno dela,
+                // e a extensão não a recria no horário da regra. Com `OR IGNORE`
+                // sobre a PK (event_id, starts_at), o slot vago seria preenchido
+                // de novo e a terça voltaria dos mortos às 19h.
+                let mut stmt = tx.prepare(
+                    "INSERT OR IGNORE INTO event_occurrences
+                         (event_id, starts_at, ends_at, day, rule_start)
+                     VALUES (?1, ?2, ?3, ?4, ?2)",
+                )?;
+                for o in occurrences {
+                    written += stmt.execute(params![event_id, o.starts_at, o.ends_at, o.day])?;
+                }
+            }
+            tx.commit()?;
+            Ok(written)
         })
     }
 }
@@ -659,6 +752,193 @@ mod tests {
         }
         assert_eq!(repo.range("2026-07-01", "2026-07-31").unwrap().len(), 3);
         assert_eq!(repo.range("2026-07-02", "2026-07-30").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn only_series_short_of_the_horizon_are_offered_for_extension() {
+        // A resposta NORMAL desta pergunta é uma lista vazia: o usuário está no
+        // mês que já foi materializado. Ela é feita a cada troca de mês.
+        let (_dir, repo) = fixture();
+
+        repo.create_with_event(
+            "serie",
+            &node("Terapia"),
+            &details(1_000, 2_000, Some(Recurrence::Daily { interval: 1 })),
+            &[occ(1_000, 2_000, "2026-07-17")],
+            &ledger_event("serie"),
+        )
+        .unwrap();
+        repo.create_with_event(
+            "avulso",
+            &node("Dentista"),
+            &details(1_000, 2_000, None),
+            &[occ(1_000, 2_000, "2026-07-17")],
+            &ledger_event("avulso"),
+        )
+        .unwrap();
+
+        let tails = repo.series_needing_extension(500_000).unwrap();
+        assert_eq!(tails.len(), 1, "o avulso não tem série a estender");
+        assert_eq!(tails[0].event_id, "serie");
+        assert_eq!(
+            tails[0].last_materialised, 1_000,
+            "a borda é o último turno"
+        );
+        assert_eq!(tails[0].anchor_starts_at, 1_000, "a âncora é o evento");
+
+        assert!(
+            repo.series_needing_extension(900).unwrap().is_empty(),
+            "a série já alcança o horizonte pedido: nada a fazer"
+        );
+    }
+
+    #[test]
+    fn the_candidate_carries_the_recurrence_end_for_the_service_to_cut_on() {
+        // Esta query devolve CANDIDATOS: ela não sabe o dia local de um epoch, e
+        // é o serviço que corta a expansão no fim da recorrência. O contrato
+        // aqui é só entregar o `recurrence_end` junto — sem ele, o serviço
+        // materializaria um curso encerrado até o horizonte.
+        let (_dir, repo) = fixture();
+        let mut d = details(1_000, 2_000, Some(Recurrence::Daily { interval: 1 }));
+        d.recurrence_end = Some(2_500);
+
+        repo.create_with_event(
+            "curso",
+            &node("Curso"),
+            &d,
+            &[occ(1_000, 2_000, "2026-07-17")],
+            &ledger_event("curso"),
+        )
+        .unwrap();
+
+        let tails = repo.series_needing_extension(9_000_000).unwrap();
+        assert_eq!(tails[0].recurrence_end, Some(2_500));
+        assert!(
+            matches!(tails[0].rrule, Recurrence::Daily { interval: 1 }),
+            "a regra volta como enum, não como o texto do banco"
+        );
+    }
+
+    #[test]
+    fn extending_twice_writes_the_new_turns_once() {
+        // A idempotência que o comando promete: navegar de outubro para novembro
+        // e voltar não pode duplicar a série. Quem garante é a UNIQUE
+        // (event_id, rule_start) da 0008 — não a boa vontade do chamador.
+        let (_dir, repo) = fixture();
+        repo.create_with_event(
+            "e1",
+            &node("Treino"),
+            &details(1_000, 2_000, Some(Recurrence::Daily { interval: 1 })),
+            &[occ(1_000, 2_000, "2026-07-17")],
+            &ledger_event("e1"),
+        )
+        .unwrap();
+
+        let tail = [
+            occ(90_000_000, 90_001_000, "2026-07-18"),
+            occ(180_000_000, 180_001_000, "2026-07-19"),
+        ];
+
+        assert_eq!(repo.append_occurrences("e1", &tail).unwrap(), 2);
+        assert_eq!(
+            repo.append_occurrences("e1", &tail).unwrap(),
+            0,
+            "o mesmo horizonte, de novo, não escreve nada"
+        );
+        assert_eq!(repo.all_occurrences("e1").unwrap().len(), 3);
+    }
+
+    #[test]
+    fn the_extension_never_resurrects_an_occurrence_the_user_dragged_away() {
+        // A armadilha que a 0008 existe para matar.
+        //
+        // O usuário arrasta a terça de 18/07 para 20/07. O slot de 18/07 fica
+        // VAGO na tabela (o UPDATE reescreveu `starts_at` no lugar). Se a
+        // extensão deduplicasse por horário, ela veria o slot vazio, o
+        // preencheria, e a terça que o usuário tirou dali voltaria dos mortos —
+        // e ele teria o compromisso duas vezes.
+        let (_dir, repo) = fixture();
+        repo.create_with_event(
+            "e1",
+            &node("Terapia"),
+            &details(1_000, 2_000, Some(Recurrence::Daily { interval: 1 })),
+            &[
+                occ(1_000, 2_000, "2026-07-17"),
+                occ(5_000, 6_000, "2026-07-18"),
+            ],
+            &ledger_event("e1"),
+        )
+        .unwrap();
+
+        repo.move_occurrence_with_event(
+            &OccurrenceMove {
+                event_id: "e1",
+                from_start: 5_000,
+                to_start: 9_000,
+                to_end: 10_000,
+                to_day: "2026-07-20",
+                detach: true,
+            },
+            &ledger_event("e1"),
+        )
+        .unwrap();
+
+        // A extensão reexpande a regra e reencontra o turno das 5_000.
+        let written = repo
+            .append_occurrences("e1", &[occ(5_000, 6_000, "2026-07-18")])
+            .unwrap();
+
+        assert_eq!(written, 0, "o turno já tem dono: a linha que foi arrastada");
+        let stored = repo.all_occurrences("e1").unwrap();
+        assert_eq!(
+            stored.len(),
+            2,
+            "arrastar + estender não pode criar uma terceira"
+        );
+        assert_eq!(
+            stored[1].0, 9_000,
+            "a arrastada continua onde o usuário a pôs"
+        );
+    }
+
+    #[test]
+    fn the_border_of_a_series_ignores_where_a_dragged_occurrence_landed() {
+        // A outra metade da mesma armadilha. O usuário empurra a ÚLTIMA
+        // ocorrência materializada para MUITO à frente. Se a borda fosse
+        // `MAX(starts_at)`, a extensão continuaria de lá — e os turnos entre a
+        // borda velha e o destino do arrasto nunca seriam gerados: um buraco na
+        // série, em silêncio.
+        let (_dir, repo) = fixture();
+        repo.create_with_event(
+            "e1",
+            &node("Treino"),
+            &details(1_000, 2_000, Some(Recurrence::Daily { interval: 1 })),
+            &[
+                occ(1_000, 2_000, "2026-07-17"),
+                occ(5_000, 6_000, "2026-07-18"),
+            ],
+            &ledger_event("e1"),
+        )
+        .unwrap();
+
+        repo.move_occurrence_with_event(
+            &OccurrenceMove {
+                event_id: "e1",
+                from_start: 5_000,
+                to_start: 900_000_000,
+                to_end: 900_001_000,
+                to_day: "2026-11-01",
+                detach: true,
+            },
+            &ledger_event("e1"),
+        )
+        .unwrap();
+
+        let tails = repo.series_needing_extension(9_000_000).unwrap();
+        assert_eq!(
+            tails[0].last_materialised, 5_000,
+            "a borda é o último TURNO da regra, não o lugar para onde a linha foi arrastada"
+        );
     }
 
     #[test]

@@ -19,6 +19,12 @@ fn migrations() -> Migrations<'static> {
         M::up(include_str!("../../../migrations/0005_spheres.sql")),
         M::up(include_str!("../../../migrations/0006_career_magenta.sql")),
         M::up(include_str!("../../../migrations/0007_time.sql")),
+        M::up(include_str!(
+            "../../../migrations/0008_occurrence_rule_start.sql"
+        )),
+        M::up(include_str!(
+            "../../../migrations/0009_milestone_counts_from.sql"
+        )),
     ])
 }
 

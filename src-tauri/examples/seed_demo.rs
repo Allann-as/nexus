@@ -13,17 +13,23 @@
 use std::sync::Arc;
 
 use nexus_lib::application::ports::Clock;
-use nexus_lib::application::use_cases::{
-    areas::AreaService, habits::HabitService, nodes::NodeService, tasks::TaskService,
+use nexus_lib::application::ports::{
+    NewEvent, NewEventDetails, NewGoal, NewGoalDetails, NewMilestone,
 };
-use nexus_lib::domain::entities::{Kind, Template};
+use nexus_lib::application::use_cases::{
+    areas::AreaService, events::EventService, goals::GoalService, habits::HabitService,
+    nodes::NodeService, tasks::TaskService,
+};
+use nexus_lib::domain::entities::{Direction, Kind, MilestoneKind, ProgressSource, Template};
+use nexus_lib::domain::recurrence::Recurrence;
 use nexus_lib::domain::schedule::{format_day, parse_day, Schedule};
 use nexus_lib::domain::streak::TickStatus;
 use nexus_lib::infrastructure::clock::{SystemClock, Uuid7Gen};
 use nexus_lib::infrastructure::db::Db;
 use nexus_lib::infrastructure::paths::Paths;
 use nexus_lib::infrastructure::repositories::{
-    area_repo::SqliteAreaRepository, habit_repo::SqliteHabitRepository,
+    area_repo::SqliteAreaRepository, event_repo::SqliteEventRepository,
+    goal_repo::SqliteGoalRepository, habit_repo::SqliteHabitRepository,
     node_repo::SqliteNodeRepository, task_repo::SqliteTaskRepository,
 };
 
@@ -36,6 +42,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let node_repo = Arc::new(SqliteNodeRepository::new(db.clone()));
     let habit_repo = Arc::new(SqliteHabitRepository::new(db.clone()));
     let task_repo = Arc::new(SqliteTaskRepository::new(db.clone()));
+    let event_repo = Arc::new(SqliteEventRepository::new(db.clone()));
+    let goal_repo = Arc::new(SqliteGoalRepository::new(db.clone()));
     let clock = Arc::new(SystemClock);
     let ids = Arc::new(Uuid7Gen);
 
@@ -59,6 +67,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let tasks = TaskService {
         tasks: task_repo,
+        nodes: node_repo.clone(),
+        areas: area_repo.clone(),
+        ids: ids.clone(),
+        clock: clock.clone(),
+    };
+    let events = EventService {
+        events: event_repo,
+        nodes: node_repo.clone(),
+        areas: area_repo.clone(),
+        ids: ids.clone(),
+        clock: clock.clone(),
+    };
+    let goals = GoalService {
+        goals: goal_repo,
         nodes: node_repo,
         areas: area_repo,
         ids,
@@ -243,6 +265,274 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some("deep".into()),
         )?;
     }
+
+    // ===== Calendário (M3) =====
+    //
+    // O relógio de parede de um dia: `at(dia, hora, min)` -> epoch ms local. As
+    // ocorrências são materializadas pela hora LOCAL, então semear por epoch cru
+    // poria a terapia às 16h no fuso errado.
+    let at = |day: chrono::NaiveDate, h: u32, m: u32| -> i64 {
+        use chrono::TimeZone;
+        chrono::Local
+            .from_local_datetime(&day.and_hms_opt(h, m, 0).expect("hora válida"))
+            .earliest()
+            .expect("instante que existe no fuso")
+            .timestamp_millis()
+    };
+    let min = 60_000i64;
+
+    // A terça que vem — a âncora da série semanal.
+    let next_tuesday = (1..=7)
+        .map(|n| today + chrono::Duration::days(n))
+        .find(|d| nexus_lib::domain::schedule::weekday_index(*d) == 2)
+        .expect("uma das próximas 7 datas é terça");
+
+    let mut created_events = 0;
+
+    // Uma série semanal: a terapia das terças. É ela que exercita o arrasto de
+    // UMA ocorrência sem reescrever a regra.
+    events.create(&NewEvent {
+        title: "Terapia".into(),
+        area_id: Some(saude.id.clone()),
+        details: NewEventDetails {
+            starts_at: at(next_tuesday, 19, 0),
+            ends_at: at(next_tuesday, 19, 0) + 50 * min,
+            all_day: false,
+            rrule: Some(Recurrence::Weekly {
+                interval: 1,
+                days: vec![2],
+            }),
+            recurrence_end: None,
+            location: Some("Consultório".into()),
+            category: None,
+        },
+    })?;
+    created_events += 1;
+
+    // Uma mensal. O prompt do M3 pedia "a terceira terça do mês" — e ela NÃO é
+    // expressável: o subconjunto da RFC-5545 do ADR-0021 tem `monthly` por dia
+    // do mês, e cita "na terceira sexta" como exatamente o que ficou de fora.
+    // Semear o que o vocabulário tem é honesto; semear o que ele não tem exigiria
+    // um INSERT cru, e o seed passaria a provar uma feature que não existe. Ver
+    // ADR-0024.
+    let day_15 = (0..40)
+        .map(|n| today + chrono::Duration::days(n))
+        .find(|d| chrono::Datelike::day(d) == 15)
+        .expect("todo mês tem um dia 15");
+    events.create(&NewEvent {
+        title: "Reunião de condomínio".into(),
+        area_id: None,
+        details: NewEventDetails {
+            starts_at: at(day_15, 20, 0),
+            ends_at: at(day_15, 21, 30),
+            all_day: false,
+            rrule: Some(Recurrence::Monthly { interval: 1 }),
+            recurrence_end: None,
+            location: Some("Salão de festas".into()),
+            category: None,
+        },
+    })?;
+    created_events += 1;
+
+    // O standup: uma semanal de vários dias, que enche a grade da semana.
+    let tomorrow = today + chrono::Duration::days(1);
+    events.create(&NewEvent {
+        title: "Daily do time".into(),
+        area_id: Some(carreira.id.clone()),
+        details: NewEventDetails {
+            starts_at: at(tomorrow, 9, 30),
+            ends_at: at(tomorrow, 9, 45),
+            all_day: false,
+            rrule: Some(Recurrence::Weekly {
+                interval: 1,
+                days: vec![1, 2, 3, 4, 5],
+            }),
+            recurrence_end: None,
+            location: None,
+            category: None,
+        },
+    })?;
+    created_events += 1;
+
+    // DOIS que se chocam de propósito, no mesmo dia: é o único jeito de a tela
+    // de conflito ter o que desenhar no seed. Um app que só é testado com a
+    // agenda limpa nunca descobre que o aviso de choque não aparece.
+    events.create(&NewEvent {
+        title: "Dentista".into(),
+        area_id: Some(saude.id.clone()),
+        details: NewEventDetails {
+            starts_at: at(tomorrow, 15, 0),
+            ends_at: at(tomorrow, 16, 0),
+            all_day: false,
+            rrule: None,
+            recurrence_end: None,
+            location: Some("Clínica".into()),
+            category: Some("consulta".into()),
+        },
+    })?;
+    events.create(&NewEvent {
+        title: "Call com o cliente".into(),
+        area_id: Some(carreira.id.clone()),
+        details: NewEventDetails {
+            starts_at: at(tomorrow, 15, 30),
+            ends_at: at(tomorrow, 16, 30),
+            all_day: false,
+            rrule: None,
+            recurrence_end: None,
+            location: None,
+            category: None,
+        },
+    })?;
+    created_events += 2;
+
+    // Um exame com categoria: a §3.1 do M3.5 já lê `category`, e ter o dado
+    // desde agora deixa a tela de Saúde nascer com o que mostrar.
+    events.create(&NewEvent {
+        title: "Exame de sangue".into(),
+        area_id: Some(saude.id.clone()),
+        details: NewEventDetails {
+            starts_at: at(today + chrono::Duration::days(5), 7, 30),
+            ends_at: at(today + chrono::Duration::days(5), 8, 0),
+            all_day: false,
+            rrule: None,
+            recurrence_end: None,
+            location: Some("Laboratório".into()),
+            category: Some("exame".into()),
+        },
+    })?;
+    created_events += 1;
+
+    // Um de dia inteiro: ele não entra na detecção de conflito (é um rótulo do
+    // dia, não uma reserva de horário) e a faixa própria da grade o prova.
+    events.create(&NewEvent {
+        title: "Feriado".into(),
+        area_id: None,
+        details: NewEventDetails {
+            starts_at: at(today + chrono::Duration::days(9), 0, 0),
+            ends_at: at(today + chrono::Duration::days(9), 23, 59),
+            all_day: true,
+            rrule: None,
+            recurrence_end: None,
+            location: None,
+            category: None,
+        },
+    })?;
+    created_events += 1;
+    println!("  {created_events} eventos (2 deles se chocam de propósito)");
+
+    // ===== Metas (M3) =====
+    //
+    // Uma meta com métrica e checkpoints reais, e outra medida pelos
+    // sub-desafios: as duas réguas da §5 da 0007, para o toggle ter o que
+    // alternar e a projeção ter uma reta de verdade.
+    let peso = goals.create(&NewGoal {
+        title: "Perder 10 kg".into(),
+        area_id: Some(saude.id.clone()),
+        details: NewGoalDetails {
+            metric_name: "Peso".into(),
+            start_value: 82.0,
+            target_value: 72.0,
+            unit: "kg".into(),
+            direction: Direction::Decrease,
+            deadline: Some(at(today + chrono::Duration::days(150), 12, 0)),
+            progress_source: ProgressSource::Metric,
+        },
+    })?;
+
+    // Oito pesagens, uma por semana, andando para o alvo com um repique no meio
+    // (a vida não é uma reta — e a projeção por mínimos quadrados existe
+    // justamente para achar a tendência apesar do repique).
+    for (n, value) in [
+        (56i64, 82.0f64),
+        (49, 81.2),
+        (42, 80.9),
+        (35, 79.8),
+        (28, 80.1),
+        (21, 78.9),
+        (14, 78.2),
+        (7, 77.4),
+    ] {
+        let day = today - chrono::Duration::days(n);
+        goals.add_checkpoint(&peso.id, value, None, Some(at(day, 8, 0)))?;
+    }
+
+    for title in [
+        "Cortar refrigerante",
+        "Comprar tênis de corrida",
+        "Marcar avaliação física",
+    ] {
+        goals.add_milestone(&NewMilestone {
+            title: title.into(),
+            goal_id: peso.id.clone(),
+            kind: MilestoneKind::Simple,
+            habit_id: None,
+            target_count: None,
+            weight: 1.0,
+            counts_from: None,
+        })?;
+    }
+    // O sub-desafio CONTÁVEL: ele se preenche sozinho pelos ticks da Academia,
+    // que o seed já semeou nos últimos 120 dias.
+    goals.add_milestone(&NewMilestone {
+        title: "30 dias de academia".into(),
+        goal_id: peso.id.clone(),
+        kind: MilestoneKind::Counter,
+        habit_id: Some(academia.id.clone()),
+        target_count: Some(30),
+        weight: 2.0,
+        // Conta desde 8 semanas atrás, e não de hoje (o padrão): o seed existe
+        // para a tela ter o que mostrar, e um contador recém-nascido mostraria
+        // 0/30. Backdatar aqui é o mesmo pedido legítimo que a UI oferece —
+        // "conte desde o início do mês".
+        counts_from: Some(format_day(today - chrono::Duration::days(56))),
+    })?;
+
+    let done = goals.get_with_progress(&peso.id)?;
+    if let Some(first) = done.milestones.first() {
+        goals.set_milestone_done(&first.milestone.id, true)?;
+    }
+
+    // A segunda meta mede pelos SUB-DESAFIOS: ela não tem checkpoint nenhum, e
+    // é assim que a tela mostra a régua alternativa (e a ausência honesta de
+    // projeção: uma reta precisa de dois pontos).
+    let livros = goals.create(&NewGoal {
+        title: "Ler 12 livros no ano".into(),
+        area_id: Some(carreira.id.clone()),
+        details: NewGoalDetails {
+            metric_name: "Livros lidos".into(),
+            start_value: 0.0,
+            target_value: 12.0,
+            unit: "livros".into(),
+            direction: Direction::Increase,
+            deadline: None,
+            progress_source: ProgressSource::Milestones,
+        },
+    })?;
+    for (i, title) in [
+        "Terminar 'O Espírito da Programação'",
+        "Terminar 'Clean Architecture'",
+        "Escolher o terceiro livro",
+        "Ler 20 páginas por dia por um mês",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let m = goals.add_milestone(&NewMilestone {
+            title: (*title).into(),
+            goal_id: livros.id.clone(),
+            kind: MilestoneKind::Simple,
+            habit_id: None,
+            target_count: None,
+            weight: 1.0,
+            counts_from: None,
+        })?;
+        // Os dois primeiros já foram: a barra por sub-desafios precisa estar em
+        // 50% para dizer alguma coisa.
+        if i < 2 {
+            goals.set_milestone_done(&m.id, true)?;
+        }
+    }
+    println!("  {} metas com sub-desafios", goals.list(None)?.len());
 
     // ===== Inbox =====
     for title in [

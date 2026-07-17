@@ -1,0 +1,66 @@
+-- 0008_occurrence_rule_start.sql — de que TURNO da regra esta ocorrência é
+--
+-- IMMUTABLE ONCE COMMITTED.
+--
+-- A 0007 deixou a janela de materialização com 18 meses e sem quem a estenda: o
+-- mês 19 abre vazio. O comando que a estende (`extend_materialization`) precisa
+-- responder a uma pergunta que a 0007 não sabe responder:
+--
+--     "até que turno desta regra o banco já foi materializado?"
+--
+-- A resposta parece ser `MAX(starts_at)`. Ela não é — e o motivo é o
+-- timeblocking da mesma 0007.
+--
+-- ===== Por que `MAX(starts_at)` não serve =====
+--
+-- Arrastar uma ocorrência REESCREVE o `starts_at` dela (é a PK, e o
+-- `move_occurrence_with_event` faz o UPDATE no lugar). O slot que a regra gerou
+-- deixa de existir na tabela. Então, depois de um arrasto, `starts_at` não diz
+-- mais de que turno aquela linha é — e as duas bordas possíveis erram:
+--
+--   * `MAX(starts_at)` sobre tudo: o usuário empurra a ÚLTIMA terça
+--     materializada (17/01/2028) para 01/03/2028. A borda vira março, e a
+--     extensão continua de março — as terças de 18/01 a 28/02 **nunca são
+--     geradas**. Um buraco de seis semanas na série, em silêncio.
+--
+--   * `MAX(starts_at)` ignorando as movidas: a borda volta para a terça
+--     anterior, e a extensão **regenera o slot de 17/01** — a terça que o
+--     usuário tirou dali reaparece às 19h. É exatamente o que a 0007 evita ao
+--     manter a linha da cancelada na tabela ("senão a próxima materialização a
+--     traria de volta"). O mesmo erro, pela porta do arrasto.
+--
+-- A informação que falta não é derivável: um arrasto a destrói. Ela tem que ser
+-- guardada.
+--
+-- ===== A decisão =====
+--
+-- Toda ocorrência passa a lembrar de que turno da regra ela é. `starts_at` é
+-- QUANDO ela acontece (o usuário manda nisso, arrastando); `rule_start` é QUEM
+-- ela é (a regra manda nisso, e nada além de uma recriação da série muda).
+--
+-- Com isso as duas bordas erradas somem: a borda é `MAX(rule_start)`, e o slot
+-- vago por um arrasto continua ocupado pela linha que o vagou.
+--
+-- Ver ADR-0022.
+
+-- `NOT NULL DEFAULT 0` porque o SQLite não aceita `ADD COLUMN NOT NULL` sem
+-- default. O 0 é um sentinela que o UPDATE seguinte apaga na mesma transação —
+-- nenhuma linha sobrevive a esta migration com ele.
+ALTER TABLE event_occurrences ADD COLUMN rule_start INTEGER NOT NULL DEFAULT 0;
+
+-- O backfill honesto: para toda linha que existe hoje, `starts_at` É o slot da
+-- regra. As movidas dos bancos de desenvolvimento são a exceção conhecida — o
+-- turno original delas foi perdido antes desta coluna existir, e inventá-lo
+-- seria pior que assumir o que a linha diz. Nenhum banco de usuário existe
+-- ainda (o M6 é quem entrega o instalador), então esta é uma ressalva de
+-- registro, não uma perda de dado real.
+UPDATE event_occurrences SET rule_start = starts_at;
+
+-- A invariante, dita ao banco em vez de confiada ao código: **uma linha por
+-- turno da regra**.
+--
+-- É esta UNIQUE que torna a extensão idempotente de graça — `INSERT OR IGNORE`
+-- descarta o turno que já existe, e "já existe" passa a incluir o turno cuja
+-- linha o usuário arrastou para outro dia. Sem o índice, a idempotência seria
+-- uma promessa do Rust; com ele, é uma propriedade do arquivo.
+CREATE UNIQUE INDEX idx_occurrence_rule ON event_occurrences(event_id, rule_start);

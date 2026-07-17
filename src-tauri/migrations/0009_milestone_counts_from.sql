@@ -1,0 +1,33 @@
+-- 0009_milestone_counts_from.sql — a partir de QUANDO o contador conta
+--
+-- IMMUTABLE ONCE COMMITTED.
+--
+-- A 0007 criou o sub-desafio 'counter': "30 dias de academia", que se preenche
+-- sozinho pelos ticks do hábito ligado em vez de pedir um número à mão. O que
+-- ela não disse é a partir de quando contar — e a leitura ficou sendo
+-- `COUNT(*) FROM habit_ticks WHERE habit_id = ? AND status = 'done'`, ou seja,
+-- desde o começo dos tempos.
+--
+-- ===== O que isso faz na tela (visto, não suposto) =====
+--
+-- O hábito "Academia" tem 120 dias de histórico. Ao criar HOJE o sub-desafio
+-- "30 dias de academia", ele nasceu marcado, exibindo **51/30**: o usuário
+-- ganhou um desafio que nunca fez. Um contador que conta o passado não mede um
+-- desafio, ele mede o arquivo.
+--
+-- ===== A decisão =====
+--
+-- O sub-desafio contável guarda o dia em que passou a contar. O padrão é o dia
+-- da criação — "30 dias de academia" pedido hoje conta de hoje —, e o campo
+-- aceita uma data anterior, porque "conte desde o início do mês" é um pedido
+-- legítimo (a mesma razão que faz o checkpoint aceitar `noted_at` no passado).
+--
+-- `TEXT 'YYYY-MM-DD'`, local, calculado em Rust — nunca derivado do epoch em
+-- SQL. É a mesma regra da coluna `day` da 0007: `date(..., 'localtime')` não usa
+-- índice e depende do fuso do PROCESSO, então o mesmo banco responderia
+-- diferente conforme o relógio da máquina que o abriu.
+--
+-- NULL continua significando "conta tudo": é o que as linhas que já existem
+-- dizem hoje, e reescrevê-las com uma data inventada trocaria um dado do
+-- usuário por um palpite nosso. Ver ADR-0025.
+ALTER TABLE milestone_details ADD COLUMN counts_from TEXT;
