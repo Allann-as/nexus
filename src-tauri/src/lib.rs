@@ -1,67 +1,98 @@
 //! NEXUS — a local-first Personal Operating System.
 //!
-//! Layering (see docs/ARCHITECTURE.md):
+//! Camadas (ver docs/ARCHITECTURE.md):
 //!
 //!   commands -> application -> domain <- infrastructure
 //!
-//! The arrows point at `domain`, and `domain` points at nothing. That is the
-//! whole rule.
+//! As setas apontam para `domain`, e `domain` não aponta para nada. Essa é a
+//! regra inteira.
 
-// Building a cdylib with the MSVC toolchain makes the linker print an
-// informational "Creating library ..." line on stdout, which rustc's
-// `linker_messages` lint then reports as a warning. It is pure noise and there
-// is no way to quiet the linker itself. Scoped to this crate so the zero-warning
-// gate stays meaningful; see docs/DECISIONS.md (ADR-0004).
+// Compilar um cdylib com o toolchain MSVC faz o linker imprimir um
+// "Criando biblioteca ..." informativo no stdout, que o lint `linker_messages`
+// do rustc reporta como warning. É ruído puro e não há como calar o linker.
+// Restrito a este crate para o gate de zero-warning continuar significando algo;
+// ver docs/DECISIONS.md (ADR-0004).
 #![allow(linker_messages)]
 
+pub mod application;
 pub mod commands;
 pub mod domain;
 pub mod infrastructure;
+pub mod state;
 
-use commands::system::AppState;
 use infrastructure::{db::Db, logging, paths::Paths};
+use state::AppState;
 
-/// Builds state and runs the app.
+/// Monta o estado e roda o app.
 ///
-/// Startup deliberately fails loudly: a database that cannot be opened or
-/// migrated must not reach a half-alive UI that appears to accept writes.
+/// A inicialização falha alto de propósito: um banco que não abre ou não migra
+/// não pode chegar a uma UI semiviva que parece aceitar escritas.
 pub fn run() {
     let paths = match Paths::resolve() {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("NEXUS could not resolve its data directory: {e}");
+            eprintln!("NEXUS não conseguiu resolver o diretório de dados: {e}");
             std::process::exit(1);
         }
     };
 
     let _log_guard = logging::init(&paths);
-    tracing::info!(root = %paths.root.display(), "starting NEXUS");
+    tracing::info!(root = %paths.root.display(), "iniciando NEXUS");
 
     let db = match Db::open(&paths) {
         Ok(db) => db,
         Err(e) => {
-            tracing::error!(error = %e, "could not open the database");
-            eprintln!("NEXUS could not open its database: {e}");
+            tracing::error!(error = %e, "não foi possível abrir o banco");
+            eprintln!("NEXUS não conseguiu abrir seu banco de dados: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let state = match AppState::new(db, paths) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!(error = %e, "não foi possível montar o estado");
+            eprintln!("NEXUS não conseguiu inicializar: {e}");
             std::process::exit(1);
         }
     };
 
     tauri::Builder::default()
-        .manage(AppState { db, paths })
-        .invoke_handler(tauri::generate_handler![commands::system::system_info])
+        .manage(state)
+        .invoke_handler(tauri::generate_handler![
+            commands::system::system_info,
+            commands::areas::create_area,
+            commands::areas::list_areas,
+            commands::areas::get_area,
+            commands::areas::update_area,
+            commands::areas::archive_area,
+            commands::nodes::create_node,
+            commands::nodes::capture_inbox,
+            commands::nodes::triage_inbox_item,
+            commands::nodes::get_node,
+            commands::nodes::list_nodes,
+            commands::nodes::count_nodes,
+            commands::nodes::rename_node,
+            commands::nodes::set_node_status,
+            commands::nodes::delete_node,
+            commands::search::search,
+            commands::search::rebuild_search_index,
+            commands::search::ledger_range,
+            commands::search::ledger_for_entity,
+        ])
         .build(tauri::generate_context!())
-        .expect("could not build the NEXUS window")
+        .expect("não foi possível construir a janela do NEXUS")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 use tauri::Manager;
-                // Best-effort: refresh planner statistics on the way out. A
-                // failure here must not block exit.
+                // Melhor-esforço: atualiza as estatísticas do planejador na
+                // saída. Uma falha aqui não pode impedir o app de fechar.
                 if let Some(state) = app.try_state::<AppState>() {
                     if let Err(e) = state.db.optimize() {
-                        tracing::warn!(error = %e, "PRAGMA optimize failed on shutdown");
+                        tracing::warn!(error = %e, "PRAGMA optimize falhou no shutdown");
                     }
                 }
-                tracing::info!("NEXUS stopped");
+                tracing::info!("NEXUS encerrado");
             }
         });
 }

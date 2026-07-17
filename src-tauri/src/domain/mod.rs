@@ -1,8 +1,10 @@
-//! The domain: the heart of NEXUS.
+//! O domínio: o coração do NEXUS.
 //!
-//! DEPENDENCY RULE — nothing in this module may import `rusqlite`, `tauri`, or
-//! anything from `infrastructure`/`commands`. Business rules stay testable
-//! without a database or a window. `errors` names `rusqlite` only to convert
-//! it away at the boundary.
+//! REGRA DE DEPENDÊNCIA — nada aqui pode importar `rusqlite`, `tauri` ou
+//! qualquer coisa de `infrastructure`/`commands`. As regras de negócio são
+//! testáveis sem banco e sem janela. `errors` cita `rusqlite` apenas para
+//! convertê-lo na fronteira (ADR-0003).
 
+pub mod entities;
 pub mod errors;
+pub mod ledger;

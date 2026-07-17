@@ -1,7 +1,10 @@
-//! Tauri commands: the interface layer.
+//! Commands Tauri: a camada de interface.
 //!
-//! Deliberately thin — parse input, call a use case, map the error. No business
-//! logic lives here. Every command has exactly one typed wrapper in
-//! `src/lib/` on the frontend side.
+//! Deliberadamente finos — recebem input, chamam um caso de uso, mapeiam o erro.
+//! Nenhuma regra de negócio mora aqui. Todo command tem exatamente um wrapper
+//! tipado em `src/lib/ipc.ts` no frontend.
 
+pub mod areas;
+pub mod nodes;
+pub mod search;
 pub mod system;

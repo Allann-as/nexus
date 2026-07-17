@@ -93,7 +93,7 @@ logs/      rotação diária
 | Milestone | Escopo | Estado |
 |---|---|---|
 | **M0** | Fundação: scaffold, pool+PRAGMAs+migrations, tokens, shell, `check.ps1` | ✅ **concluído** |
-| M1 | CRUD Áreas/Nodes, Inbox, ledger, FTS5, palette com busca real | ⬜ |
+| **M1** | CRUD Áreas/Nodes, Inbox, ledger, FTS5, palette com busca real | ✅ **concluído** |
 | M2 | Tarefas, Projetos, Hábitos, Rotinas, ticks, streaks, Dashboard v1 | ⬜ |
 | M3 | Calendário (timeblocking, RFC-5545, conflitos), Metas + projeção | ⬜ |
 | M4 | Notas (CodeMirror, wiki-links), Timeline, `bi_engine`, Insights | ⬜ |
@@ -109,16 +109,40 @@ logs/      rotação diária
 - Dashboard e Configurações **lendo dados reais** do SQLite via IPC tipado.
 - `check.ps1` verde: fmt, clippy `-D warnings`, testes, `tsc`, vite build, release.
 
-### Medições reais do M0 (build `tauri build`, release)
+### O que o M1 entrega de verdade
 
-| Métrica | Orçamento | Medido |
-|---|---|---|
-| Binário | — | **4,8 MB** |
-| Cold start até janela | < 1,5 s | **0,86 s** |
-| RSS do processo host | < 300 MB total | **31 MB** (host; WebView2 à parte) |
+- **Ledger imutável**: append-only garantido por trigger `RAISE(ABORT)` — nem o
+  próprio NEXUS reescreve a história. Estado atual + evento **na mesma
+  transação**, forçado pela assinatura do repositório (`create_with_event`).
+- **Áreas**: CRUD, arquivar (nunca apagar), cores/ícones validados.
+- **Inbox**: Quick Capture (`Ctrl+Shift+N`) e triagem teclado-primeiro
+  (`T`/`H`/`P`/`Backspace`), com contador de envelhecimento (> 7 dias).
+- **Busca FTS5**: acento-insensível, prefixo (buscar enquanto digita), entrada
+  do usuário nunca interpretada como sintaxe.
+- **Paleta**: ações (fuzzy local) + resultados FTS do banco, numa lista só.
+- 58 testes (31 unitários + 27 de integração contra SQLite real em arquivo).
+
+### Medições reais (build `tauri build`, release)
+
+| Métrica | Orçamento | M0 | M1 |
+|---|---|---|---|
+| Binário | — | 4,8 MB | **5,2 MB** |
+| Cold start até janela | < 1,5 s | 0,86 s | **0,92 s** |
+| RSS do processo host | < 300 MB total | 31 MB | **32 MB** |
 
 > Ressalva honesta: RAM total (host + WebView2) e os orçamentos de busca,
-> timeline e scroll só podem ser validados contra o seed de 5 anos, no M5.
+> timeline e scroll só podem ser validados contra o seed de 5 anos, no M5. Os
+> números acima são de um banco praticamente vazio — não provam escala.
+
+### Semear dados de demonstração (dev)
+
+```powershell
+cargo run --manifest-path src-tauri/Cargo.toml --example seed_demo
+```
+
+Escreve em `%APPDATA%/Nexus` pelos **mesmos casos de uso** que a UI usa (não por
+INSERT cru), então os dados passam pelas validações e geram eventos de ledger
+reais. Base do seed de 5 anos do M5.
 
 ## 7. Frontend
 

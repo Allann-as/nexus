@@ -158,6 +158,57 @@ irrelevante num app desktop sem barra de endereço.
 
 ---
 
+## ADR-0010 — FTS5 contentless: o vínculo é o `rowid`, não uma coluna `node_id`
+
+**Data:** 2026-07-17 · **Status:** aceito
+
+**Contexto.** A `search_index` nasceu com uma coluna `node_id UNINDEXED` e a
+busca juntava por ela (`JOIN nodes n ON n.id = s.node_id`). Compilou, migrou,
+não deu erro — e **retornava zero resultados sempre**. Os testes que esperavam
+`[]` passavam; só os que esperavam encontrar algo falharam.
+
+**Diagnóstico (medido, não suposto).** Um teste isolado mostrou:
+
+```
+match_count       = 1      <- o índice ESTÁ populado, o MATCH funciona
+rowid_readback    = Some(1)
+node_id_readback  = None   <- a coluna UNINDEXED volta NULL
+```
+
+Numa tabela `content=''`, o FTS5 **não armazena valor de coluna nenhum** — nem
+os `UNINDEXED`. Ler qualquer coluna devolve NULL. O JOIN casava contra NULL e
+não encontrava nada, **em silêncio**.
+
+**Decisão.** Remover `node_id` da tabela FTS e vincular por
+`search_index.rowid = nodes.rowid` (`nodes` tem PK TEXT mas continua sendo
+tabela com rowid). `snippet()`/`highlight()` também não existem aqui, pelo mesmo
+motivo: o trecho é montado em Rust a partir de `nodes`/`note_details`.
+
+**Consequência.** Uma coluna que nunca poderia funcionar sai do schema. Achado
+adicional: com alias, `MATCH` exige o **nome da tabela** (`search_index MATCH`),
+não o alias (`s MATCH` não resolve).
+
+**Lição.** Uma feature pode falhar em silêncio e passar por todos os testes que
+esperam vazio. Só testes que exigem um resultado **positivo** pegam isto.
+
+---
+
+## ADR-0011 — `NodePatch` em vez de oito argumentos
+
+**Data:** 2026-07-17 · **Status:** aceito
+
+**Contexto.** `update_with_event` chegou a oito parâmetros e o clippy barrou
+(`too_many_arguments`, 8/7). Silenciar com `#[allow]` era um clique.
+
+**Decisão.** Aceitar o recado e trocar por `NodePatch<'a>` com `Default`.
+
+**Consequência.** A assinatura caiu para 4 parâmetros e as chamadas ficaram
+autoexplicativas (`NodePatch { status: Some(s), ..Default::default() }`) em vez
+de `(id, None, Some(x), None, None, now, &e)` — onde trocar dois `None` de lugar
+compila e faz a coisa errada. O lint estava certo.
+
+---
+
 ## ADR-0009 — Fontes via `@fontsource`, nunca CDN
 
 **Data:** 2026-07-16 · **Status:** aceito
@@ -172,3 +223,27 @@ assets locais.
 
 **Consequência.** Zero rede, e a tipografia é idêntica com o cabo desconectado —
 que é o único modo em que o NEXUS deve rodar.
+
+---
+
+## ADR-0012 — Verificação de UI: clique guardado por `WindowFromPoint`
+
+**Data:** 2026-07-17 · **Status:** aceito · **complementa o ADR-0006**
+
+**Contexto.** O ADR-0006 abandonou `SendKeys` porque teclas seguem o **foco de
+teclado**, que não dá para segurar — e foram parar na janela errada. Mas ainda
+era preciso verificar a UI real do M1.
+
+**Decisão.** Dirigir por **clique**, não por tecla, com uma guarda que o foco não
+consegue enganar: um clique vai para o que está **sob o cursor**, então
+`WindowFromPoint(x,y)` + `GetAncestor(GA_ROOT)` prova, antes de clicar, que o
+alvo é a janela do NEXUS. Se não for, aborta. Para desocluir sem roubar foco:
+`SetWindowPos(HWND_TOPMOST, SWP_NOACTIVATE)`, sempre desfeito num `finally`.
+
+**Consequência.** Verificado de verdade: navegação, lista do Inbox e a triagem
+ponta a ponta (badge 5→4, toast, item saindo da lista). A guarda provou o valor
+na prática — recusou o primeiro clique porque o editor estava por cima.
+
+**Limite honesto.** Continua sendo automação de SO, não E2E de verdade. Para
+suíte de regressão o caminho é `tauri-driver` (WebDriver), que fala com o WebView
+em vez de disputar a mesa do Windows.

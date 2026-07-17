@@ -69,6 +69,10 @@ export function SettingsScreen() {
               <Row label="Nodes" value={data ? String(data.nodeCount) : "—"} />
               <Row label="Áreas" value={data ? String(data.areaCount) : "—"} />
               <Row
+                label="Eventos no ledger"
+                value={data ? String(data.ledgerCount) : "—"}
+              />
+              <Row
                 label="Versão do schema"
                 value={data ? `v${data.schemaVersion}` : "—"}
               />

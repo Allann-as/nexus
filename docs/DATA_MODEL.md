@@ -1,8 +1,7 @@
 # NEXUS — Modelo de Dados
 
-> Estado: `0001_core_schema.sql` aplicado (M0). `0002_fts.sql` e `0003_ledger.sql`
-> chegam no M1 — as seções abaixo já especificam o desenho para que o M1 seja
-> execução, não decisão.
+> Estado: **schema v3** — `0001_core_schema.sql`, `0002_fts.sql` e
+> `0003_ledger.sql` aplicados e cobertos por testes.
 
 ## 1. Convenções
 
@@ -64,7 +63,7 @@ e backlinks.
 | `idx_links_target` | Backlinks (`links` já tem PK em `source_id`). |
 | `idx_file_sha` | Dedup de anexos por conteúdo. |
 
-## 3. A Máquina do Tempo — ledger imutável (M1)
+## 3. A Máquina do Tempo — ledger imutável
 
 **Princípio: CQRS pragmático.** As tabelas da §2 são o **estado atual** — rápidas,
 mutáveis, otimizadas para a leitura de hoje. A história vive num **ledger
@@ -135,11 +134,11 @@ Meses encerrados são congelados pelo `bi_engine` (job mensal). A visão "ano" l
 **só** rollups; a visão "mês/dia" lê o ledger paginado. É assim que a timeline de
 5 anos atrás abre em < 100 ms.
 
-## 4. Busca Universal — FTS5 (M1)
+## 4. Busca Universal — FTS5
 
 ```sql
 CREATE VIRTUAL TABLE search_index USING fts5(
-    node_id UNINDEXED, title, body, tags,
+    title, body, tags,
     content='', contentless_delete=1,
     tokenize = "unicode61 remove_diacritics 2"
 );
@@ -151,6 +150,31 @@ CREATE VIRTUAL TABLE search_index USING fts5(
 - Sincronizado por triggers em `nodes` / `note_details` / `node_tags`.
 - `search(query, limit, offset)` retorna id, kind, title, snippet e rank (bm25).
 - `rebuild_search_index` fica exposto como ação de manutenção.
+
+### Não existe coluna `node_id` aqui — e isso é deliberado (ADR-0010)
+
+Numa tabela contentless o FTS5 **não guarda valor de coluna nenhum**, nem os
+`UNINDEXED`. Ler qualquer coluna devolve **NULL**. Uma coluna `node_id` seria
+sempre NULL e um `JOIN` por ela casaria **zero linhas, em silêncio** — foi
+exatamente o bug encontrado no M1.
+
+O vínculo é `search_index.rowid = nodes.rowid` (`nodes` tem PK TEXT mas continua
+sendo tabela com rowid). Pelo mesmo motivo, `snippet()`/`highlight()` não estão
+disponíveis: o trecho é montado em Rust a partir de `nodes`/`note_details`.
+
+Detalhe de sintaxe: com alias, o `MATCH` exige o **nome da tabela**
+(`search_index MATCH ?`), não o alias.
+
+### A entrada do usuário nunca é sintaxe
+
+Texto livre não pode virar operador. `AND` seria conjunção, `*` curinga, `"` erro
+de sintaxe, `foo:bar` filtro de coluna — a busca quebraria enquanto a pessoa
+digita. `build_match_query` tokeniza por `is_alphanumeric` (some todo caractere
+de sintaxe, e 'saúde'/'ação' sobrevivem) e põe **aspas** em cada token (neutraliza
+as palavras-chave). Cada token ganha `*` para busca-enquanto-digita.
+
+`'; DROP TABLE nodes;--` vira `"DROP"* "TABLE"* "nodes"*` — uma busca literal
+inofensiva.
 
 ## 5. Insights determinísticos (M4)
 

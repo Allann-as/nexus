@@ -5,8 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Shell } from "./Shell";
 import { DashboardScreen } from "../features/dashboard/DashboardScreen";
 import { SettingsScreen } from "../features/settings/SettingsScreen";
+import { InboxScreen } from "../features/inbox/InboxScreen";
+import { AreasScreen } from "../features/areas/AreasScreen";
 import {
-  InboxScreen,
   TodayScreen,
   CalendarScreen,
   HabitsScreen,
@@ -39,6 +40,10 @@ const router = createHashRouter([
     children: [
       { index: true, element: <DashboardScreen /> },
       { path: "inbox", element: <InboxScreen /> },
+      { path: "areas", element: <AreasScreen /> },
+      // A tela da Área (visão consolidada) chega no M2, quando existir conteúdo
+      // para consolidar. Por ora o id cai na lista — melhor que uma rota morta.
+      { path: "areas/:id", element: <AreasScreen /> },
       { path: "today", element: <TodayScreen /> },
       { path: "calendar", element: <CalendarScreen /> },
       { path: "habits", element: <HabitsScreen /> },

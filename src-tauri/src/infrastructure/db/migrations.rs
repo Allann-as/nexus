@@ -13,8 +13,8 @@ use crate::domain::errors::Result;
 fn migrations() -> Migrations<'static> {
     Migrations::new(vec![
         M::up(include_str!("../../../migrations/0001_core_schema.sql")),
-        // 0002_fts.sql      -> M1
-        // 0003_ledger.sql   -> M1
+        M::up(include_str!("../../../migrations/0002_fts.sql")),
+        M::up(include_str!("../../../migrations/0003_ledger.sql")),
     ])
 }
 

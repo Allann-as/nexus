@@ -5,7 +5,19 @@ import { NAV_ITEMS } from "./navigation";
 import { Kbd } from "../design-system/primitives";
 import { useUi } from "../stores/ui";
 
-export function Topbar({ onOpenPalette }: { onOpenPalette: () => void }) {
+/** Rotas que não vivem na sidebar principal e ainda precisam de breadcrumb. */
+const EXTRA_CRUMBS: Record<string, string> = {
+  "/settings": "Configurações",
+  "/areas": "Áreas",
+};
+
+export function Topbar({
+  onOpenPalette,
+  onQuickCapture,
+}: {
+  onOpenPalette: () => void;
+  onQuickCapture: () => void;
+}) {
   const { pathname } = useLocation();
   const theme = useUi((s) => s.theme);
   const toggleTheme = useUi((s) => s.toggleTheme);
@@ -13,7 +25,7 @@ export function Topbar({ onOpenPalette }: { onOpenPalette: () => void }) {
   const current = NAV_ITEMS.find((i) =>
     i.path === "/" ? pathname === "/" : pathname.startsWith(i.path),
   );
-  const crumb = current?.label ?? (pathname === "/settings" ? "Configurações" : "NEXUS");
+  const crumb = current?.label ?? EXTRA_CRUMBS[pathname] ?? "NEXUS";
 
   return (
     <header
@@ -35,6 +47,7 @@ export function Topbar({ onOpenPalette }: { onOpenPalette: () => void }) {
       </button>
 
       <button
+        onClick={onQuickCapture}
         title="Captura rápida (Ctrl+Shift+N)"
         aria-label="Captura rápida"
         className="flex size-8 items-center justify-center rounded-[var(--radius-md)] text-[var(--text-tertiary)] transition-colors duration-[var(--dur-fast)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"

@@ -1,71 +1,100 @@
 /**
- * Dashboard — M0 skeleton.
+ * Dashboard — esqueleto do M1.
  *
- * The columns the spec calls for (Hoje, hábitos, Nexus Score, "Neste dia",
- * alerta de sobrecarga) arrive with the data that feeds them in M2/M4. What is
- * real today is the backend round-trip: this screen proves React → invoke →
- * Rust → SQLite → back is wired end to end.
+ * As colunas que a spec pede (Hoje, hábitos, Nexus Score, "Neste dia", alerta
+ * de sobrecarga) chegam junto com os dados que as alimentam, no M2/M4. O que é
+ * real hoje: contagens vindas do SQLite e o atalho de captura.
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { Database, ShieldCheck, WifiOff } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Database, History, Inbox, WifiOff } from "lucide-react";
 
-import { systemInfo, toNexusError } from "../../lib/ipc";
+import { systemInfo, countNodes, toNexusError } from "../../lib/ipc";
 import { formatBytes } from "../../lib/format";
-import { Card, PageHeader } from "../../design-system/primitives";
+import { Card, PageHeader, Button, Kbd } from "../../design-system/primitives";
 
 export function DashboardScreen() {
+  const navigate = useNavigate();
+
   const { data, error, isPending } = useQuery({
     queryKey: ["system-info"],
     queryFn: systemInfo,
   });
 
+  const { data: inboxCount } = useQuery({
+    queryKey: ["nodes", "count", { kind: "inbox_item", status: "active" }],
+    queryFn: () => countNodes({ kind: "inbox_item", status: "active" }),
+  });
+
+  const num = (v: number | undefined) => (isPending ? "—" : String(v ?? 0));
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="Dashboard"
-        subtitle="Fundação instalada — os módulos chegam por milestone"
+        subtitle="Fundação e núcleo de dados — os módulos chegam por milestone"
       />
 
-      <div className="grid grid-cols-3 gap-4 px-8 pb-8">
+      <div className="grid grid-cols-4 gap-4 px-8 pb-6">
+        <Stat
+          icon={Inbox}
+          label="Inbox"
+          value={num(inboxCount)}
+          hint={
+            (inboxCount ?? 0) > 0 ? "esperando triagem" : "zerada — nada pendente"
+          }
+        />
         <Stat
           icon={Database}
           label="Nodes"
-          value={isPending ? "—" : String(data?.nodeCount ?? 0)}
-          hint="Toda entidade do NEXUS é um node"
+          value={num(data?.nodeCount)}
+          hint="toda entidade é um node"
         />
         <Stat
-          icon={ShieldCheck}
-          label="Schema"
-          value={isPending ? "—" : `v${data?.schemaVersion ?? 0}`}
-          hint={isPending ? "" : formatBytes(data?.dbSizeBytes ?? 0) + " em disco"}
+          icon={History}
+          label="Eventos"
+          value={num(data?.ledgerCount)}
+          hint="história imutável no ledger"
         />
         <Stat
           icon={WifiOff}
           label="Rede"
           value="0"
-          hint="Chamadas de rede em runtime — por construção"
+          hint="chamadas em runtime — por construção"
         />
       </div>
 
       <div className="px-8 pb-8">
         <Card className="p-5">
           <h2 className="text-[13px] font-medium text-[var(--text-primary)]">
-            M0 — Fundação
+            Comece capturando
           </h2>
           <p className="mt-1.5 max-w-[560px] text-[13px] leading-[21px] text-[var(--text-secondary)]">
-            Banco SQLite embarcado com WAL, chaves estrangeiras e o schema core
-            aplicado. Shell, design system e paleta de comandos operantes. Os
-            dados vivem em{" "}
-            <span
-              data-selectable
-              className="font-mono text-[12px] text-[var(--text-tertiary)]"
-            >
-              {data?.dataDir ?? "%APPDATA%\\Nexus"}
-            </span>
-            .
+            <Kbd>Ctrl</Kbd> <Kbd>Shift</Kbd> <Kbd>N</Kbd> captura qualquer coisa de
+            qualquer tela, sem decidir nada. Depois, no Inbox, <Kbd>T</Kbd> vira
+            tarefa, <Kbd>H</Kbd> nota e <Kbd>P</Kbd> projeto. Tudo que você fizer
+            entra no ledger — e a Timeline vai contar essa história a partir do M4.
           </p>
+          <div className="mt-4 flex gap-2">
+            <Button variant="secondary" size="sm" onClick={() => navigate("/inbox")}>
+              Abrir Inbox
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/areas")}>
+              Criar áreas
+            </Button>
+          </div>
         </Card>
+      </div>
+
+      <div className="px-8 pb-8">
+        <p className="text-[12px] text-[var(--text-tertiary)]">
+          Schema v{data?.schemaVersion ?? "—"} ·{" "}
+          {data ? formatBytes(data.dbSizeBytes) : "—"} em disco ·{" "}
+          <span data-selectable className="font-mono">
+            {data?.dataDir ?? "%APPDATA%\\Nexus"}
+          </span>
+        </p>
       </div>
 
       {error && (

@@ -147,7 +147,7 @@ mod tests {
     #[test]
     fn pragmas_are_applied_to_a_real_file() {
         let dir = tempfile::tempdir().unwrap();
-        let paths = Paths::for_test(dir.path().to_path_buf()).unwrap();
+        let paths = Paths::at(dir.path().to_path_buf()).unwrap();
         let db = Db::open(&paths).unwrap();
 
         db.with_write(|c| {
@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn read_pool_refuses_writes() {
         let dir = tempfile::tempdir().unwrap();
-        let paths = Paths::for_test(dir.path().to_path_buf()).unwrap();
+        let paths = Paths::at(dir.path().to_path_buf()).unwrap();
         let db = Db::open(&paths).unwrap();
 
         let result = db.with_read(|c| {

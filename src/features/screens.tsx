@@ -8,7 +8,6 @@
  */
 
 import {
-  Inbox,
   Sun,
   Calendar,
   Repeat,
@@ -16,6 +15,7 @@ import {
   FileText,
   History,
   Sparkles,
+  type LucideIcon,
 } from "lucide-react";
 
 import { EmptyState, PageHeader } from "../design-system/primitives";
@@ -29,7 +29,7 @@ function Module({
 }: {
   title: string;
   subtitle: string;
-  icon: typeof Inbox;
+  icon: LucideIcon;
   emptyTitle: string;
   hint: string;
 }) {
@@ -42,16 +42,6 @@ function Module({
     </div>
   );
 }
-
-export const InboxScreen = () => (
-  <Module
-    title="Inbox"
-    subtitle="Capture agora, organize depois"
-    icon={Inbox}
-    emptyTitle="Inbox zerada"
-    hint="Ctrl+Shift+N captura qualquer coisa de qualquer tela, sem fricção. A triagem chega no M1."
-  />
-);
 
 export const TodayScreen = () => (
   <Module

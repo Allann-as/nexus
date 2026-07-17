@@ -1,9 +1,8 @@
 /**
- * The global keyboard layer. Keyboard-first is a constitutional rule, so the
- * shortcut table lives at the shell level rather than being sprinkled through
- * features.
+ * A camada global de teclado. Teclado-primeiro é regra da constituição, então a
+ * tabela de atalhos mora no shell em vez de espalhada pelas features.
  *
- * Handles `Ctrl+K` (palette) and the `G+<key>` jump chords.
+ * Ctrl+K (paleta), Ctrl+Shift+N (captura rápida) e os chords `G+<tecla>`.
  */
 
 import { useEffect, useRef } from "react";
@@ -11,8 +10,8 @@ import { useNavigate } from "react-router-dom";
 
 import { NAV_ITEMS } from "./navigation";
 
-/** Chord window: long enough to be unhurried, short enough that a stray `G`
- *  followed by typing later never teleports you somewhere. */
+/** Janela do chord: longa o bastante para não ser corrida, curta o bastante
+ *  para um `G` perdido não teleportar alguém que voltou a digitar depois. */
 const CHORD_MS = 800;
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -24,24 +23,38 @@ function isTypingTarget(target: EventTarget | null): boolean {
   );
 }
 
-export function useKeyboard({ onOpenPalette }: { onOpenPalette: () => void }) {
+export function useKeyboard({
+  onOpenPalette,
+  onQuickCapture,
+}: {
+  onOpenPalette: () => void;
+  onQuickCapture: () => void;
+}) {
   const navigate = useNavigate();
   const pendingG = useRef(false);
   const timer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+K must work even from inside a field — it is the way out.
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+      const key = e.key.toLowerCase();
+
+      // Ctrl+Shift+N antes de Ctrl+K: com Shift, `key` é 'n' de qualquer forma,
+      // mas a ordem deixa explícito qual atalho ganha.
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === "n") {
+        e.preventDefault();
+        onQuickCapture();
+        return;
+      }
+
+      // Ctrl+K funciona mesmo de dentro de um campo — é a saída de emergência.
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && key === "k") {
         e.preventDefault();
         onOpenPalette();
         return;
       }
 
-      // Everything below is a bare letter, so it must never fire while typing.
+      // Daqui para baixo são letras soltas: nunca podem disparar digitando.
       if (isTypingTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
-
-      const key = e.key.toLowerCase();
 
       if (pendingG.current) {
         pendingG.current = false;
@@ -68,5 +81,5 @@ export function useKeyboard({ onOpenPalette }: { onOpenPalette: () => void }) {
       window.removeEventListener("keydown", onKeyDown);
       window.clearTimeout(timer.current);
     };
-  }, [navigate, onOpenPalette]);
+  }, [navigate, onOpenPalette, onQuickCapture]);
 }

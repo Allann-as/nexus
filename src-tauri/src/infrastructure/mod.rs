@@ -1,6 +1,9 @@
-//! Infrastructure: concrete adapters to the outside world (SQLite, the
-//! filesystem, logging). Implements the ports the application layer declares.
+//! Infraestrutura: adaptadores concretos para o mundo externo (SQLite, disco,
+//! logs). Implementa os ports declarados pela camada de aplicação.
 
+pub mod clock;
 pub mod db;
+pub mod fts;
 pub mod logging;
 pub mod paths;
+pub mod repositories;

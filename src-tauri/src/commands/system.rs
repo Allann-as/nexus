@@ -1,16 +1,10 @@
-//! System-level commands backing the Settings > "Your data" page.
+//! Commands de sistema — sustentam a página "Seus dados" das Configurações.
 
 use serde::Serialize;
 use tauri::State;
 
 use crate::domain::errors::Result;
-use crate::infrastructure::db::Db;
-use crate::infrastructure::paths::Paths;
-
-pub struct AppState {
-    pub db: Db,
-    pub paths: Paths,
-}
+use crate::state::AppState;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,12 +13,13 @@ pub struct SystemInfo {
     pub db_size_bytes: u64,
     pub node_count: i64,
     pub area_count: i64,
+    pub ledger_count: i64,
     pub data_dir: String,
     pub app_version: String,
 }
 
-/// Reports database health and size. Cheap enough to call on every Settings
-/// mount: both counts are index-only scans.
+/// Saúde e tamanho do banco. Barato o bastante para rodar a cada montagem das
+/// Configurações: todos os COUNTs são varreduras de índice.
 #[tauri::command]
 pub fn system_info(state: State<'_, AppState>) -> Result<SystemInfo> {
     let (schema_version, node_count, area_count) = state.db.with_read(|c| {
@@ -35,8 +30,10 @@ pub fn system_info(state: State<'_, AppState>) -> Result<SystemInfo> {
         ))
     })?;
 
-    // The -wal file holds committed pages not yet checkpointed, so honest
-    // "size on disk" has to count it alongside the main database.
+    let ledger_count = state.ledger.count()?;
+
+    // O -wal guarda páginas já commitadas ainda não integradas ao arquivo
+    // principal, então "tamanho em disco" honesto tem que somar os dois.
     let db_size_bytes =
         file_len(&state.paths.db) + file_len(&state.paths.db.with_extension("db-wal"));
 
@@ -45,6 +42,7 @@ pub fn system_info(state: State<'_, AppState>) -> Result<SystemInfo> {
         db_size_bytes,
         node_count,
         area_count,
+        ledger_count,
         data_dir: state.paths.root.display().to_string(),
         app_version: env!("CARGO_PKG_VERSION").to_string(),
     })

@@ -1,19 +1,37 @@
 /**
- * The command palette — the centre of the app.
+ * A paleta de comandos — o centro do app.
  *
- * M0 scope: fuzzy-matched navigation actions, fully keyboard-driven. M1 adds
- * FTS5 search over nodes to the same list. The interaction model is settled
- * now so later work only widens the result source, never the shell.
+ * Duas fontes numa lista só: ações (fuzzy match local, instantâneo) e busca
+ * FTS5 no banco (debounced). Ações primeiro: quem digita 'cal' quer ir para o
+ * Calendário, não achar uma nota que menciona "calendário".
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CornerDownLeft, type LucideIcon } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  CornerDownLeft,
+  FileText,
+  CheckSquare,
+  FolderKanban,
+  Target,
+  Repeat,
+  Calendar as CalendarIcon,
+  Paperclip,
+  Inbox as InboxIcon,
+  Search as SearchIcon,
+  type LucideIcon,
+} from "lucide-react";
 
 import { NAV_ITEMS } from "../../app/navigation";
+import { search, type Kind } from "../../lib/ipc";
 import { cx, Kbd } from "../../design-system/primitives";
 
-interface Action {
+/** Espera o suficiente para não consultar a cada tecla, curto o bastante para
+ *  a busca ainda parecer instantânea. */
+const DEBOUNCE_MS = 120;
+
+interface Row {
   id: string;
   label: string;
   hint: string;
@@ -22,9 +40,8 @@ interface Action {
 }
 
 /**
- * Subsequence fuzzy match: "cal" matches "Calendário", "mp" matches
- * "Metas & Projetos". Returns a score where lower is better — consecutive
- * matches and early matches rank highest.
+ * Fuzzy por subsequência: 'cal' casa 'Calendário', 'mp' casa 'Metas & Projetos'.
+ * Menor é melhor — casamentos consecutivos e no começo pontuam mais.
  */
 function fuzzyScore(needle: string, haystack: string): number | null {
   if (!needle) return 0;
@@ -38,13 +55,36 @@ function fuzzyScore(needle: string, haystack: string): number | null {
   for (const ch of n) {
     const hit = h.indexOf(ch, hi);
     if (hit === -1) return null;
-    // Penalise gaps, so tighter runs sort first.
-    score += hit - lastHit - 1;
+    score += hit - lastHit - 1; // penaliza buracos
     lastHit = hit;
     hi = hit + 1;
   }
   return score;
 }
+
+const KIND_ICON: Record<Kind, LucideIcon> = {
+  note: FileText,
+  task: CheckSquare,
+  project: FolderKanban,
+  goal: Target,
+  habit: Repeat,
+  routine: Repeat,
+  event: CalendarIcon,
+  file: Paperclip,
+  inbox_item: InboxIcon,
+};
+
+const KIND_LABEL: Record<Kind, string> = {
+  note: "Nota",
+  task: "Tarefa",
+  project: "Projeto",
+  goal: "Meta",
+  habit: "Hábito",
+  routine: "Rotina",
+  event: "Evento",
+  file: "Arquivo",
+  inbox_item: "Inbox",
+};
 
 export function CommandPalette({
   open,
@@ -55,11 +95,26 @@ export function CommandPalette({
 }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [debounced, setDebounced] = useState("");
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const actions = useMemo<Action[]>(
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebounced(query), DEBOUNCE_MS);
+    return () => window.clearTimeout(t);
+  }, [query]);
+
+  const { data: hits = [] } = useQuery({
+    queryKey: ["search", debounced],
+    queryFn: () => search(debounced, 8),
+    // Só consulta com algo digitado; o backend também devolve [] para vazio,
+    // mas não vale a viagem de IPC.
+    enabled: open && debounced.trim().length > 0,
+    staleTime: 5_000,
+  });
+
+  const actions = useMemo<Row[]>(
     () =>
       NAV_ITEMS.map((item) => ({
         id: `nav:${item.path}`,
@@ -71,27 +126,47 @@ export function CommandPalette({
     [navigate],
   );
 
-  const results = useMemo(() => {
+  const matchedActions = useMemo(() => {
     return actions
       .map((a) => ({ a, score: fuzzyScore(query, a.label) }))
-      .filter((r): r is { a: Action; score: number } => r.score !== null)
+      .filter((r): r is { a: Row; score: number } => r.score !== null)
       .sort((x, y) => x.score - y.score)
+      .slice(0, 5)
       .map((r) => r.a);
   }, [actions, query]);
 
-  // Reset per open, so the palette never reopens mid-scroll on a stale query.
+  const resultRows = useMemo<Row[]>(
+    () =>
+      hits.map((h) => ({
+        id: `node:${h.nodeId}`,
+        label: h.title,
+        hint: KIND_LABEL[h.kind] ?? h.kind,
+        icon: KIND_ICON[h.kind] ?? FileText,
+        // M1 não tem tela de detalhe do node ainda. Navegar para um lugar que
+        // não existe seria pior que não navegar, então por ora a paleta leva ao
+        // módulo do tipo. A tela de detalhe chega com o M2/M4.
+        run: () => navigate(pathForKind(h.kind)),
+      })),
+    [hits, navigate],
+  );
+
+  const rows = useMemo(
+    () => [...matchedActions, ...resultRows],
+    [matchedActions, resultRows],
+  );
+
   useEffect(() => {
     if (open) {
       setQuery("");
+      setDebounced("");
       setSelected(0);
       inputRef.current?.focus();
     }
   }, [open]);
 
-  // Clamp rather than reset: as results narrow, keep the selection in range.
   useEffect(() => {
-    setSelected((s) => Math.min(s, Math.max(0, results.length - 1)));
-  }, [results.length]);
+    setSelected((s) => Math.min(s, Math.max(0, rows.length - 1)));
+  }, [rows.length]);
 
   useEffect(() => {
     listRef.current
@@ -101,27 +176,29 @@ export function CommandPalette({
 
   if (!open) return null;
 
-  const commit = (action: Action | undefined) => {
-    if (!action) return;
-    action.run();
+  const commit = (row: Row | undefined) => {
+    if (!row) return;
+    row.run();
     onClose();
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setSelected((s) => (s + 1) % Math.max(1, results.length));
+      setSelected((s) => (s + 1) % Math.max(1, rows.length));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setSelected((s) => (s - 1 + results.length) % Math.max(1, results.length));
+      setSelected((s) => (s - 1 + rows.length) % Math.max(1, rows.length));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      commit(results[selected]);
+      commit(rows[selected]);
     } else if (e.key === "Escape") {
       e.preventDefault();
       onClose();
     }
   };
+
+  const actionCount = matchedActions.length;
 
   return (
     <div
@@ -137,49 +214,60 @@ export function CommandPalette({
         className="w-[560px] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-strong)] bg-[var(--bg-raised)]"
         style={{ boxShadow: "var(--shadow-float)" }}
       >
-        <input
-          ref={inputRef}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar ou executar…"
-          aria-label="Buscar ou executar"
-          className="w-full border-b border-[var(--border-subtle)] bg-transparent px-4 py-3.5 text-[14px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
-        />
+        <div className="flex items-center gap-2.5 border-b border-[var(--border-subtle)] px-4">
+          <SearchIcon size={14} className="shrink-0 text-[var(--text-tertiary)]" />
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar ou executar…"
+            aria-label="Buscar ou executar"
+            className="w-full bg-transparent py-3.5 text-[14px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
+          />
+        </div>
 
-        <div ref={listRef} className="max-h-[320px] overflow-y-auto p-1.5">
-          {results.length === 0 ? (
+        <div ref={listRef} className="max-h-[340px] overflow-y-auto p-1.5">
+          {rows.length === 0 ? (
             <p className="px-3 py-8 text-center text-[13px] text-[var(--text-tertiary)]">
-              Nada encontrado para “{query}”.
+              {query.trim()
+                ? `Nada encontrado para “${query}”.`
+                : "Digite para buscar ações e conteúdo."}
             </p>
           ) : (
-            results.map((a, i) => (
-              <button
-                key={a.id}
-                data-index={i}
-                onMouseMove={() => setSelected(i)}
-                onClick={() => commit(a)}
-                className={cx(
-                  "flex w-full items-center gap-3 rounded-[var(--radius-md)] px-2.5 text-left",
-                  i === selected ? "bg-[var(--bg-hover)]" : "bg-transparent",
+            rows.map((row, i) => (
+              <div key={row.id}>
+                {i === actionCount && actionCount > 0 && resultRows.length > 0 && (
+                  <div className="px-2.5 pt-2 pb-1 text-[10px] font-medium tracking-[0.08em] text-[var(--text-tertiary)] uppercase">
+                    Resultados
+                  </div>
                 )}
-                style={{ height: "var(--row-list)" }}
-              >
-                <a.icon
-                  size={15}
-                  strokeWidth={1.9}
-                  className={
-                    i === selected
-                      ? "text-[var(--accent)]"
-                      : "text-[var(--text-tertiary)]"
-                  }
-                />
-                <span className="flex-1 truncate text-[13px] text-[var(--text-primary)]">
-                  {a.label}
-                </span>
-                <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
-                  {a.hint}
-                </span>
-              </button>
+                <button
+                  data-index={i}
+                  onMouseMove={() => setSelected(i)}
+                  onClick={() => commit(row)}
+                  className={cx(
+                    "flex w-full items-center gap-3 rounded-[var(--radius-md)] px-2.5 text-left",
+                    i === selected ? "bg-[var(--bg-hover)]" : "bg-transparent",
+                  )}
+                  style={{ height: "var(--row-list)" }}
+                >
+                  <row.icon
+                    size={15}
+                    strokeWidth={1.9}
+                    className={
+                      i === selected
+                        ? "shrink-0 text-[var(--accent)]"
+                        : "shrink-0 text-[var(--text-tertiary)]"
+                    }
+                  />
+                  <span className="flex-1 truncate text-[13px] text-[var(--text-primary)]">
+                    {row.label}
+                  </span>
+                  <span className="shrink-0 font-mono text-[10px] text-[var(--text-tertiary)]">
+                    {row.hint}
+                  </span>
+                </button>
+              </div>
             ))
           )}
         </div>
@@ -202,4 +290,22 @@ export function CommandPalette({
       </div>
     </div>
   );
+}
+
+function pathForKind(kind: Kind): string {
+  switch (kind) {
+    case "inbox_item":
+      return "/inbox";
+    case "task":
+    case "project":
+    case "goal":
+      return "/goals";
+    case "habit":
+    case "routine":
+      return "/habits";
+    case "event":
+      return "/calendar";
+    default:
+      return "/notes";
+  }
 }
