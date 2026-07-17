@@ -193,7 +193,8 @@ design-system/
   tokens.css      as variáveis (dark + light). Hex cru em componente é bug.
   primitives.tsx  Button, Card, Kbd, EmptyState, PageHeader
   cards.tsx       HeroCard, StatCard, SummaryCard, GlassPanel, CountUp, Val
-  charts.tsx      Sparkline, Gauge, ProgressRing, ProgressBar (SVG — ADR-0016)
+  charts.tsx      Sparkline, Gauge, ProgressRing, ProgressBar (SVG — ADR-0018)
+  useSphereColor  areaId -> cor, num lugar só. Nenhuma tela reimplementa.
   Checkbox.tsx    o gesto mais repetido do app
   useCountUp.ts   rAF, respeita prefers-reduced-motion, zero animação em idle
 ```
@@ -202,6 +203,21 @@ design-system/
 `box-shadow`/`filter` nunca em loop; no máximo **um** `backdrop-filter` visível
 por vez (por isso a palette e a captura são mutuamente exclusivas no `Shell`);
 com o app parado, nenhuma animação roda.
+
+**Gráficos: SVG ou ECharts?** (ADR-0018) — `SVG para ≤ ~100 pontos decorativos;
+ECharts para telas de análise.` Os micro-gráficos do Hub são SVG **para sempre**:
+o Hub é o caminho do cold start e nunca instancia engine de gráfico. ECharts
+entra a partir do M3 e só onde a tela é de análise (calendário/heatmaps,
+Finanças, Insights), onde eixo, tooltip e zoom não se reimplementam à mão.
+
+**A cor da Esfera nunca é a única pista** (ADR-0017): ela tinge, não codifica.
+Todo lugar que mostra uma Esfera mostra também ícone e nome. Nenhum gráfico pode
+plotar Esferas distinguíveis só por cor com legenda de bolinha.
+
+**O Inbox é a única tela que não se tinge** — de propósito. Ele é o lugar do que
+ainda não tem Esfera, e o azul neutro diz isso. A exceção é o preview da
+triagem: escolher a Esfera de destino (1–9) tinge aquele item ao vivo, porque aí
+a cor não afirma uma decisão, ela mostra a que está prestes a ser tomada.
 
 ### Navegação: dois níveis (desde o M2.5)
 

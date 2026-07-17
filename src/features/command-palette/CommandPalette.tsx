@@ -26,6 +26,7 @@ import {
 import { NAV_ITEMS, SECONDARY_ROUTES } from "../../app/navigation";
 import { listAreas, search, type Kind } from "../../lib/ipc";
 import { sphereIcon } from "../hub/SphereIcon";
+import { fuzzyScore } from "./fuzzy";
 import { cx, Kbd } from "../../design-system/primitives";
 
 /** Espera o suficiente para não consultar a cada tecla, curto o bastante para
@@ -38,42 +39,6 @@ interface Row {
   hint: string;
   icon: LucideIcon;
   run: () => void;
-}
-
-/**
- * Tira acento e caixa: 'saúde' e 'Saude' viram a mesma coisa.
- *
- * Sem isto, num app em português, a paleta é quase inútil: ninguém digita acento
- * numa caixa de busca, e 'calendario' NÃO casava 'Calendário' — o 'a' procurado
- * não é o 'á' do texto, são codepoints diferentes. O mesmo valia para 'saude',
- * 'financas', 'habitos'. NFD separa a letra do diacrítico; o range U+0300–U+036F
- * é o bloco dos diacríticos combinantes, que então se joga fora.
- */
-function fold(s: string): string {
-  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-}
-
-/**
- * Fuzzy por subsequência: 'cal' casa 'Calendário', 'mp' casa 'Metas & Projetos'.
- * Menor é melhor — casamentos consecutivos e no começo pontuam mais.
- */
-function fuzzyScore(needle: string, haystack: string): number | null {
-  if (!needle) return 0;
-  const n = fold(needle);
-  const h = fold(haystack);
-
-  let score = 0;
-  let hi = 0;
-  let lastHit = -1;
-
-  for (const ch of n) {
-    const hit = h.indexOf(ch, hi);
-    if (hit === -1) return null;
-    score += hit - lastHit - 1; // penaliza buracos
-    lastHit = hit;
-    hi = hit + 1;
-  }
-  return score;
 }
 
 const KIND_ICON: Record<Kind, LucideIcon> = {

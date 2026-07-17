@@ -17,6 +17,7 @@ fn migrations() -> Migrations<'static> {
         M::up(include_str!("../../../migrations/0003_ledger.sql")),
         M::up(include_str!("../../../migrations/0004_task_order.sql")),
         M::up(include_str!("../../../migrations/0005_spheres.sql")),
+        M::up(include_str!("../../../migrations/0006_career_magenta.sql")),
     ])
 }
 
@@ -104,6 +105,56 @@ mod tests {
         assert!(
             bad.is_err(),
             "um template fora do vocabulário deve ser recusado"
+        );
+    }
+
+    #[test]
+    fn career_is_magenta_not_violet() {
+        // O violeta da 0005 ficava a ΔE 2,5 do azul das Finanças sob
+        // protanopia. Ver ADR-0019.
+        let mut conn = Connection::open_in_memory().unwrap();
+        run(&mut conn).unwrap();
+
+        let color: String = conn
+            .query_row(
+                "SELECT color FROM areas WHERE id = 'sphere-career'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(color, "#EC4899");
+    }
+
+    #[test]
+    fn the_recolour_does_not_stomp_a_users_own_choice() {
+        // A 0006 só troca a linha que ainda está exatamente como a 0005 a
+        // deixou. Um usuário que já escolheu a cor da própria Esfera Carreira
+        // não pode vê-la mudar sozinha durante uma migration.
+        //
+        // O teste simula a ordem real: 0005 aplicada, usuário escolhe, 0006
+        // chega depois. É por isso que ele migra em dois passos em vez de rodar
+        // `to_latest` de uma vez.
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrations().to_version(&mut conn, 5).unwrap();
+
+        conn.execute(
+            "UPDATE areas SET color = '#123456' WHERE id = 'sphere-career'",
+            [],
+        )
+        .unwrap();
+
+        migrations().to_latest(&mut conn).unwrap();
+
+        let color: String = conn
+            .query_row(
+                "SELECT color FROM areas WHERE id = 'sphere-career'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            color, "#123456",
+            "a escolha do usuário sobrevive à migration"
         );
     }
 

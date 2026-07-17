@@ -4,6 +4,15 @@
  * A triagem é teclado-primeiro por desenho: T vira tarefa, H nota, P projeto,
  * Backspace descarta, ↑/↓ navegam. Triar 30 itens com o mouse é trabalho; com
  * o teclado é um ritual de dois minutos.
+ *
+ * **O Inbox é a única tela que não se tinge.** Não é esquecimento: ele é o
+ * lugar do que ainda NÃO tem Esfera, e o azul neutro comunica exatamente isso.
+ * Pintá-lo de alguma cor seria afirmar uma decisão que o usuário ainda não
+ * tomou — que é justamente o trabalho que o Inbox existe para adiar.
+ *
+ * A exceção é o preview: escolher a Esfera de destino (1–9) tinge AQUELE item,
+ * ao vivo, antes de confirmar. Aí a cor não afirma nada — ela mostra o que vai
+ * acontecer se você apertar T.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -15,6 +24,7 @@ import {
   triageInboxItem,
   deleteNode,
   listAreas,
+  type Area,
   type Kind,
   type Node,
 } from "../../lib/ipc";
@@ -24,6 +34,7 @@ import {
   Kbd,
   cx,
 } from "../../design-system/primitives";
+import { SphereIcon } from "../hub/SphereIcon";
 import { useToasts } from "../../stores/toasts";
 
 /** Depois disto um item parado vira dívida, e o Inbox deixa isso visível. */
@@ -35,6 +46,10 @@ export function InboxScreen() {
   const pushError = useToasts((s) => s.pushError);
   const push = useToasts((s) => s.push);
   const [selected, setSelected] = useState(0);
+  // A Esfera de destino do item em foco, quando o usuário escolheu uma.
+  // `null` = não escolheu, e é o caminho rápido: T/H/P sozinho continua
+  // triando sem Esfera, como sempre fez.
+  const [pendingArea, setPendingArea] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   const { data: items = [], isPending } = useQuery({
@@ -54,14 +69,21 @@ export function InboxScreen() {
   };
 
   const triage = useMutation({
-    mutationFn: ({ id, into }: { id: string; into: Kind }) =>
-      // Área fica nula aqui de propósito: T/H/P decidem o TIPO num toque. Pedir
-      // a área no mesmo gesto reintroduz a fricção que a captura removeu; ela
-      // se define na tela do item ou arrastando para a Área.
-      triageInboxItem(id, into, null),
+    mutationFn: ({ id, into, areaId }: { id: string; into: Kind; areaId: string | null }) =>
+      // A Esfera é OPCIONAL e continua nula por padrão: T/H/P decidem o TIPO
+      // num toque, e exigir a Esfera no mesmo gesto reintroduziria a fricção
+      // que a captura removeu. Quem quiser decidir as duas coisas de uma vez
+      // aperta 1–9 antes; quem não quiser, não paga nada por isso.
+      triageInboxItem(id, into, areaId),
     onSuccess: (node) => {
       invalidate();
-      push("success", `${node.title} → ${KIND_LABEL[node.kind]}`);
+      const sphere = areas.find((a) => a.id === node.areaId);
+      push(
+        "success",
+        sphere
+          ? `${node.title} → ${KIND_LABEL[node.kind]} em ${sphere.name}`
+          : `${node.title} → ${KIND_LABEL[node.kind]}`,
+      );
     },
     onError: pushError,
   });
@@ -105,10 +127,19 @@ export function InboxScreen() {
 
       const key = e.key.toLowerCase();
       const into = TRIAGE_KEYS[key];
+      const digit = Number(e.key);
 
       if (into) {
         e.preventDefault();
-        if (!busy) triage.mutate({ id: current.id, into });
+        if (!busy) triage.mutate({ id: current.id, into, areaId: pendingArea });
+      } else if (Number.isInteger(digit) && digit >= 1 && digit <= 9 && areas[digit - 1]) {
+        // Escolhe a Esfera de destino. Só pinta — quem triaga continua sendo
+        // T/H/P, então dá para trocar de ideia à vontade antes de confirmar.
+        e.preventDefault();
+        setPendingArea(areas[digit - 1].id);
+      } else if (e.key === "0" || e.key === "Escape") {
+        e.preventDefault();
+        setPendingArea(null);
       } else if (e.key === "Backspace" || e.key === "Delete") {
         e.preventDefault();
         if (!busy) discard.mutate(current.id);
@@ -123,7 +154,12 @@ export function InboxScreen() {
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [items, selected, busy, triage, discard]);
+  }, [items, selected, busy, triage, discard, areas, pendingArea]);
+
+  // Mudou o item em foco, a Esfera escolhida some: ela era daquele item. Sem
+  // isto, descer a lista carregaria a escolha anterior e o item seguinte seria
+  // triado para uma Esfera que ninguém pediu para ele.
+  useEffect(() => setPendingArea(null), [selected]);
 
   const ageing = items.filter((i) => isAgeing(i)).length;
 
@@ -173,8 +209,12 @@ export function InboxScreen() {
                   index={i}
                   selected={i === selected}
                   areaCount={areas.length}
+                  // Só o item em foco previsualiza: a escolha é dele.
+                  sphere={i === selected ? areas.find((a) => a.id === pendingArea) : undefined}
                   onHover={() => setSelected(i)}
-                  onTriage={(into) => !busy && triage.mutate({ id: item.id, into })}
+                  onTriage={(into) =>
+                    !busy && triage.mutate({ id: item.id, into, areaId: pendingArea })
+                  }
                   onDiscard={() => !busy && discard.mutate(item.id)}
                 />
               ))}
@@ -223,6 +263,7 @@ function Row({
   index,
   selected,
   areaCount,
+  sphere,
   onHover,
   onTriage,
   onDiscard,
@@ -231,6 +272,8 @@ function Row({
   index: number;
   selected: boolean;
   areaCount: number;
+  /** A Esfera escolhida como destino, se o usuário escolheu uma. */
+  sphere: Area | undefined;
   onHover: () => void;
   onTriage: (into: Kind) => void;
   onDiscard: () => void;
@@ -248,11 +291,32 @@ function Row({
           ? "border-[var(--border-subtle)] border-l-[var(--sphere)] bg-[var(--bg-surface)]"
           : "border-transparent hover:border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]",
       )}
-      style={{ minHeight: "var(--row-list)" }}
+      // Escolheu a Esfera? A linha inteira passa a ser dela — a borda esquerda,
+      // o chip, o fundo. Só este item, e só até confirmar.
+      style={{
+        minHeight: "var(--row-list)",
+        ...(sphere ? ({ "--sphere": sphere.color } as React.CSSProperties) : {}),
+        ...(sphere
+          ? { background: "color-mix(in srgb, var(--sphere) 8%, var(--bg-surface))" }
+          : {}),
+      }}
     >
       <span className="flex-1 truncate text-[13px] text-[var(--text-primary)]">
         {item.title}
       </span>
+
+      {sphere && (
+        <span
+          className="nx-enter flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium"
+          style={{
+            background: "color-mix(in srgb, var(--sphere) 16%, transparent)",
+            color: "var(--sphere)",
+          }}
+        >
+          <SphereIcon name={sphere.icon} size={10} />
+          {sphere.name}
+        </span>
+      )}
 
       <span
         className={cx(
@@ -334,6 +398,13 @@ function Legend() {
       <span className="flex items-center gap-1.5">
         <Kbd>↑</Kbd>
         <Kbd>↓</Kbd> navegar
+      </span>
+      {/* Por último e sem destaque, de propósito: escolher a Esfera é o passo
+          OPCIONAL. Anunciá-lo junto de T/H/P sugeriria que a triagem agora tem
+          dois passos obrigatórios — que é exatamente a fricção que o Inbox
+          existe para não ter. */}
+      <span className="flex items-center gap-1.5">
+        <Kbd>1</Kbd>–<Kbd>9</Kbd> esfera (opcional)
       </span>
     </div>
   );

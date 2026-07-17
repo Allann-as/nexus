@@ -399,7 +399,7 @@ por omissão de um documento seria uma decisão tomada por descuido.
 
 ## ADR-0016 — Sem ECharts no M2.5: SVG onde SVG é a ferramenta certa
 
-**Data:** 2026-07-17 · **Status:** aceito
+**Data:** 2026-07-17 · **Status:** ~~aceito~~ **superseded pelo ADR-0018**
 
 **Contexto.** O plano lista `nexusTheme.ts` (tema do ECharts) como entrega do
 M2.5. Mas os únicos gráficos do M2.5 são 6 sparklines de 30 pontos e dois arcos
@@ -436,3 +436,65 @@ isso for preciso (BI do M4.5), a série carrega rótulo direto.
 **Nota.** Isto **não** vale para paletas categóricas de dados (ex.: alocação por
 classe de ativo, M3.5) — essas nascem para codificar por cor e devem passar no
 validador antes de entrar.
+
+---
+
+## ADR-0018 — SVG no Hub é permanente; ECharts só em tela de análise
+
+**Data:** 2026-07-17 · **Status:** aceito · **supersede o ADR-0016**
+
+**Contexto.** O ADR-0016 adiou o ECharts "para o M3", o que deixava implícito
+que os micro-gráficos do Hub migrariam para ele quando a dependência chegasse.
+Não vão. O que o 0016 tratou como adiamento é, na verdade, uma fronteira
+permanente entre duas ferramentas que resolvem problemas diferentes.
+
+**Decisão.** A regra:
+
+> **SVG para ≤ ~100 pontos decorativos; ECharts para telas de análise.**
+
+- **SVG, para sempre** (`design-system/charts.tsx`): sparklines, anéis e o gauge
+  do Hub e dos cards de Esfera. **Nunca** instanciar engine de gráfico no Hub —
+  ele é o caminho do cold start, e o orçamento dele é o do app inteiro (1,5 s,
+  300 MB). Um gráfico ali é uma FORMA, não uma leitura precisa: sem eixo, sem
+  tooltip, sem zoom. Quem quer o número exato abre a Esfera.
+- **ECharts, a partir do M3**, e só onde a tela é de análise: calendário e
+  heatmaps, Finanças (área acumulada, donut de alocação) e Insights. Lá o que se
+  pede — eixo, tooltip, brush, zoom, legenda — não se reimplementa à mão, e a
+  tela não está no caminho do cold start.
+
+**Consequência.** A pergunta "isto vira ECharts depois?" tem resposta fixa e não
+volta a cada milestone. E o `nexusTheme.ts` nasce no M3 com um gráfico de
+verdade na tela para conferi-lo — em vez de ser escrito no escuro agora.
+
+**O sinal de que a fronteira foi cruzada:** precisar de eixo, tooltip ou
+interação num gráfico do Hub. A resposta certa aí não é importar ECharts no Hub;
+é que aquele gráfico não era do Hub.
+
+---
+
+## ADR-0019 — Carreira vira magenta
+
+**Data:** 2026-07-17 · **Status:** aceito · **complementa o ADR-0017**
+
+**Contexto.** O ADR-0017 aceitou a paleta como veio e mitigou o risco com uma
+regra de uso (a cor tinge, nunca codifica). A medição, porém, era ruim demais
+para parar por aí: o violeta `#A78BFA` da Carreira contra o azul `#4D8DFF` das
+Finanças dava **ΔE 2,5 em protanopia** e **ΔE 11 em visão normal** — ou seja,
+duas Esferas vizinhas no Hub que nem quem enxerga todas as cores separa bem.
+Uma regra de uso protege contra o mau uso; ela não conserta a paleta.
+
+**Decisão.** Trocar a Carreira por magenta `#EC4899`, que abre distância de
+matiz do azul das Finanças e do ciano dos Estudos. Aplicado na migration 0006,
+com guarda `AND color = '#A78BFA'` para não pisar em quem já escolheu a própria
+cor. O violeta continua na paleta do wizard — como opção, não como padrão.
+
+**Consequência.** A **separação CVD passa**: o pior par da paleta sai de ΔE 2,5
+para ΔE 10,6 (protanopia). O padrão de fábrica agora nasce separável, e a regra
+do ADR-0017 volta a ser o que devia ser — uma rede de segurança, não a única
+defesa.
+
+**O que continua fora do alvo, e por decisão.** Estudos (ciano `#38BDF8`) ×
+Finanças (azul `#4D8DFF`) ficam a ΔE 13 em visão normal, abaixo do piso de 15.
+Aceito: as duas sempre aparecem com ícone e nome (ADR-0017), e Estudos-ciano faz
+parte da identidade. Registrado para ninguém "descobrir" isto de novo daqui a
+seis meses e achar que é bug.

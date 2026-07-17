@@ -38,9 +38,9 @@ const PALETTE = [
   "#34D399",
   "#4D8DFF",
   "#FBBF24",
-  "#A78BFA",
+  "#EC4899",
   "#38BDF8",
-  "#FB7185",
+  "#A78BFA",
   "#FB923C",
   "#2DD4BF",
 ];

@@ -19,6 +19,7 @@ import {
   setTaskCompleted,
   moveTask,
   listAreas,
+  type Node,
   type Task,
 } from "../../lib/ipc";
 import {
@@ -30,6 +31,7 @@ import {
 } from "../../design-system/primitives";
 import { CountUp, HeroCard, StatCard } from "../../design-system/cards";
 import { ProgressBar, ProgressRing } from "../../design-system/charts";
+import { sphereStyle, useSphereColor } from "../../design-system/useSphereColor";
 import { useToasts } from "../../stores/toasts";
 import { TaskList } from "./TaskList";
 
@@ -77,26 +79,12 @@ export function ProjectsScreen() {
             <div className="grid grid-cols-[240px_1fr] items-start gap-4">
               <nav className="space-y-1">
                 {projects.map((p) => (
-                  <button
+                  <ProjectNavItem
                     key={p.id}
-                    onClick={() => setSelected(p.id)}
-                    className={cx(
-                      "flex w-full items-center gap-2 rounded-[var(--radius-md)] border px-2.5 text-left text-[13px]",
-                      "transition-[background-color,border-color,color] duration-[var(--dur-fast)] ease-[var(--ease)]",
-                      current === p.id
-                        ? "border-[color-mix(in_srgb,var(--sphere)_35%,transparent)] bg-[var(--accent-muted)] text-[var(--text-primary)]"
-                        : "border-transparent text-[var(--text-secondary)] hover:border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]",
-                    )}
-                    style={{ height: "var(--row-list)" }}
-                  >
-                    <FolderKanban
-                      size={14}
-                      className={
-                        current === p.id ? "text-[var(--sphere)]" : "text-[var(--text-tertiary)]"
-                      }
-                    />
-                    <span className="truncate">{p.title}</span>
-                  </button>
+                    project={p}
+                    active={current === p.id}
+                    onSelect={() => setSelected(p.id)}
+                  />
                 ))}
               </nav>
 
@@ -104,6 +92,7 @@ export function ProjectsScreen() {
                 <ProjectPanel
                   projectId={current}
                   title={projects.find((p) => p.id === current)?.title ?? ""}
+                  areaId={projects.find((p) => p.id === current)?.areaId ?? null}
                 />
               ) : (
                 <Card className="p-8">
@@ -129,7 +118,55 @@ export function ProjectsScreen() {
   );
 }
 
-function ProjectPanel({ projectId, title }: { projectId: string; title: string }) {
+/**
+ * Um projeto na lista, tingido com a cor da Esfera dona.
+ *
+ * Componente próprio porque `useSphereColor` é um hook: chamá-lo dentro do
+ * `.map()` da nav quebraria as regras dos hooks (a contagem mudaria a cada
+ * projeto criado). Uma linha por projeto, cada uma com o seu.
+ */
+function ProjectNavItem({
+  project,
+  active,
+  onSelect,
+}: {
+  project: Node;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const colour = useSphereColor(project.areaId);
+
+  return (
+    <button
+      onClick={onSelect}
+      className={cx(
+        "flex w-full items-center gap-2 rounded-[var(--radius-md)] border px-2.5 text-left text-[13px]",
+        "transition-[background-color,border-color,color] duration-[var(--dur-fast)] ease-[var(--ease)]",
+        active
+          ? "border-[color-mix(in_srgb,var(--sphere)_35%,transparent)] bg-[color-mix(in_srgb,var(--sphere)_10%,transparent)] text-[var(--text-primary)]"
+          : "border-transparent text-[var(--text-secondary)] hover:border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]",
+      )}
+      style={{ height: "var(--row-list)", ...sphereStyle(colour).style }}
+    >
+      <FolderKanban
+        size={14}
+        className={active ? "text-[var(--sphere)]" : "text-[var(--text-tertiary)]"}
+      />
+      <span className="truncate">{project.title}</span>
+    </button>
+  );
+}
+
+function ProjectPanel({
+  projectId,
+  title,
+  areaId,
+}: {
+  projectId: string;
+  title: string;
+  areaId: string | null;
+}) {
+  const colour = useSphereColor(areaId);
   const qc = useQueryClient();
   const pushError = useToasts((s) => s.pushError);
   const [newTask, setNewTask] = useState("");
@@ -181,7 +218,9 @@ function ProjectPanel({ projectId, title }: { projectId: string; title: string }
   const pct = Math.round(ratio * 100);
 
   return (
-    <div className="space-y-4">
+    // Uma variável, e o painel inteiro se tinge: HeroCard, anel, barra,
+    // StatCards e o checkbox de cada tarefa. Nenhum deles sabe o que é Esfera.
+    <div className="space-y-4" {...sphereStyle(colour)}>
       <HeroCard
         label={title}
         value={total > 0 ? `${done}/${total}` : "—"}
@@ -200,11 +239,14 @@ function ProjectPanel({ projectId, title }: { projectId: string; title: string }
       </HeroCard>
 
       <div className="grid grid-cols-2 gap-3">
+        {/* `sphere` e não `accent`: tarefa em aberto é um fato DESTA Esfera, e
+            um chip azul fixo num painel magenta lê como componente esquecido.
+            `success` fica só nas concluídas, onde verde significa algo. */}
         <StatCard
           icon={ListTodo}
           label="Em aberto"
           value={<CountUp to={open} />}
-          tone={open > 0 ? "accent" : "sphere"}
+          tone="sphere"
         />
         <StatCard
           icon={CheckSquare}

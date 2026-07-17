@@ -48,6 +48,7 @@ Invoke-Step 'cargo fmt --check' { cargo fmt --manifest-path src-tauri/Cargo.toml
 Invoke-Step 'cargo clippy -D warnings' { cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings }
 Invoke-Step 'cargo test' { cargo test --manifest-path src-tauri/Cargo.toml }
 Invoke-Step 'tsc --noEmit' { npx tsc --noEmit }
+Invoke-Step 'vitest' { npx vitest run }
 Invoke-Step 'vite build' { npx vite build }
 
 if (-not $Quick) {
