@@ -94,6 +94,13 @@ export function EventModal({
 
   if (!draft && !existing) return null;
 
+  // "A terceira terça do mês" (ADR-0024): a semana e o dia-da-semana saem da
+  // data do evento — o usuário não escolhe "3ª terça" num abstrato, ele marca um
+  // evento numa terça que por acaso é a 3ª do mês, e a opção aparece já pronta.
+  const rruleOptions: Array<{ label: string; value: Recurrence | null }> = draft
+    ? [...RRULE_OPTIONS.slice(0, 4), monthlyByWeekdayOption(draft.startsAt), RRULE_OPTIONS[4]]
+    : RRULE_OPTIONS;
+
   const submit = () => {
     if (!draft || !title.trim()) return;
     onCreate({
@@ -182,7 +189,7 @@ export function EventModal({
 
               <Field label="Repetição">
                 <div className="flex flex-wrap gap-1">
-                  {RRULE_OPTIONS.map((opt) => (
+                  {rruleOptions.map((opt) => (
                     <Pill
                       key={opt.label}
                       active={rruleLabel(rrule) === opt.label}
@@ -271,7 +278,32 @@ function ExistingEvent({
   );
 }
 
+const WEEKDAY_NAMES = [
+  "domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado",
+];
+const ORDINALS = ["1ª", "2ª", "3ª", "4ª", "5ª"];
+
+/** "Toda 3ª terça" a partir da semana (1–5) e do dia da semana (0=domingo). */
+function monthlyByWeekdayLabel(week: number, weekday: number): string {
+  return `Toda ${ORDINALS[week - 1] ?? `${week}ª`} ${WEEKDAY_NAMES[weekday] ?? ""}`.trim();
+}
+
+/** A opção "N-ésima Xª-feira do mês", derivada da data do evento (ADR-0024). */
+function monthlyByWeekdayOption(startsAt: number): {
+  label: string;
+  value: Recurrence;
+} {
+  const d = new Date(startsAt);
+  const week = Math.ceil(d.getDate() / 7);
+  const weekday = d.getDay();
+  return {
+    label: monthlyByWeekdayLabel(week, weekday),
+    value: { type: "monthly_by_weekday", interval: 1, week, weekday },
+  };
+}
+
 function rruleLabel(r: Recurrence | null): string {
+  if (r?.type === "monthly_by_weekday") return monthlyByWeekdayLabel(r.week, r.weekday);
   return RRULE_OPTIONS.find((o) => o.value?.type === r?.type)?.label ?? "Não repete";
 }
 

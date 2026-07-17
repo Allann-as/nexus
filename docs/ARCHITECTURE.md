@@ -1,7 +1,7 @@
 # NEXUS — Arquitetura
 
 > Documento vivo. Atualize-o no mesmo commit que muda a estrutura.
-> Estado atual: **M3.5 concluído** (Saúde + Finanças). Próximo: M4 — Esferas II.
+> Estado atual: **M4 concluído** (Esferas II + Memória). Próximo: M4.5 — Vida (BI).
 
 ## 1. O que o NEXUS é
 
@@ -98,7 +98,7 @@ logs/      rotação diária
 | **M2.5** | Design system Midnight, Esferas da Vida, o Hub, rail global | ✅ **concluído** |
 | **M3** | Calendário (timeblocking, RFC-5545, conflitos), Metas + sub-desafios | ✅ **concluído** |
 | **M3.5** | Esferas I: Saúde (checkpoints, treino, exames) + Finanças (aportes, Saúde Financeira) | ✅ **concluído** |
-| M4 | Esferas II: Objetivos Financeiros, Estudos + Biblioteca, Carreira; Notas; Timeline | ⬜ |
+| **M4** | Esferas II: Objetivos Financeiros, Estudos + Biblioteca, Carreira; Notas; Timeline | ✅ **concluído** |
 | M4.5 | `bi_engine`, Momentum, Conquistas, Retrospectiva | ⬜ |
 | M5 | Backup/restore, export, Revisão Semanal, Modo Foco, seed de 5 anos | ⬜ |
 | M6 | Ícone, instalador, manual, entrega | ⬜ |
@@ -183,6 +183,39 @@ logs/      rotação diária
 - **ECharts entra de verdade** (ADR-0018): a área acumulada e o donut de
   alocação das Finanças, e o heatmap de treino da Saúde — as três telas de
   análise densa que justificam a engine. O resto do app segue em SVG.
+
+### O que o M4 entrega de verdade
+
+- **Objetivos Financeiros** (as "caixinhas", kind `fin_goal`): grade de cards com
+  barra grossa/glow, `R$ guardado / alvo` com count-up, badge do banco e a projeção
+  determinística (`domain::savings`, média dos últimos 3 meses, fórmula exibível).
+  Depósito em 1 clique; fechar dispara a celebração dourada (CSS one-shot) e a
+  conquista 🏆 no ledger. O progresso das caixinhas ativas alimenta a parcela
+  "Objetivos" da Saúde Financeira (ADR-0031, cumprindo o ADR-0028).
+- **Estudos + Biblioteca** (kind `book`): estante visual com capas GERADAS
+  localmente (gradiente + iniciais, sem imagem externa), estrelas interativas,
+  filtros por status/prateleira/nota, meta anual de leitura com anel + ritmo. Terminar
+  um livro grava a conquista no ledger e transforma a resenha numa NOTA linkada via
+  `links`. Idiomas/Faculdade/Cursos reusam o kind `project`.
+- **Carreira**: marcos profissionais como fatos ledger-only
+  (`LedgerEntityKind::CareerMilestone`, ADR-0032), com a "linha da carreira" no painel;
+  Projetos e Habilidades reusam `project`.
+- **Notas** (CodeMirror 6): editor Markdown com preview ao vivo, checkboxes
+  interativos, `[[wiki-links]]` com autocomplete + backlinks automáticos (2º consumidor
+  de `links`), e anexos copiados para `media/AAAA/MM/<sha>.<ext>` com SHA-256 e dedup
+  (colar imagem do clipboard entra direto). Protocolo `asset:` habilitado com escopo em
+  `media/`.
+- **Timeline** (a Máquina do Tempo): scrubber de ano/mês, visão MÊS como feed do ledger
+  agrupado por dia (sem JOIN com `nodes` — `title_snapshot` + `payload`), visão ANO por
+  `timeline_rollups` congelados pelo job de fechamento (disparado pela navegação,
+  ADR-0034) + o mês corrente ao vivo, filtros, e o card "Neste dia" no Hub.
+- **`MonthlyByWeekday`** ("toda 3ª terça", ADR-0030): variante de recorrência que pula
+  o mês sem a N-ésima ocorrência, derivada da data do evento na UI do calendário.
+- **Template `simple`**: Agenda (compromissos = eventos do calendário unificado) +
+  Checklists (reuso de `project`+`task`), mais o wizard "+ Nova Esfera" (só `simple`,
+  ADR-0035).
+- **Migration 0011**: recria `nodes` UMA vez para os dois kinds novos (ADR-0029), mais
+  `fin_goal_details`/`fin_goal_deposits`, `book_details` e `reading_goals`.
 
 ### Medições reais (build `tauri build`, release)
 

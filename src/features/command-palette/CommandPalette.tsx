@@ -22,6 +22,7 @@ import {
   Inbox as InboxIcon,
   Search as SearchIcon,
   PiggyBank,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 
@@ -56,6 +57,8 @@ const KIND_ICON: Record<Kind, LucideIcon> = {
   file: Paperclip,
   inbox_item: InboxIcon,
   milestone: Flag,
+  fin_goal: PiggyBank,
+  book: BookOpen,
 };
 
 const KIND_LABEL: Record<Kind, string> = {
@@ -69,6 +72,8 @@ const KIND_LABEL: Record<Kind, string> = {
   file: "Arquivo",
   inbox_item: "Inbox",
   milestone: "Sub-desafio",
+  fin_goal: "Caixinha",
+  book: "Livro",
 };
 
 export function CommandPalette({

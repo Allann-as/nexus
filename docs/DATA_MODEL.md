@@ -328,6 +328,36 @@ foi ele que forçou o ledger a admitir história que não é sobre um node
 é uma função pura do histórico, com pesos redistribuídos e fórmula exibível
 (ADR-0028); ela é computada, nunca gravada.
 
+## 5.8 Esferas II e Memória (0011)
+
+Dois kinds novos numa recriação só de `nodes` (ADR-0029): `fin_goal` (as
+caixinhas) e `book` (a Biblioteca). As três armadilhas do 12-step (CASCADE,
+rowid, rename dos gatilhos de FTS) ganharam mais um teste — provando que a
+SEGUNDA recriação sobre dados existentes também é segura.
+
+- **`fin_goal_details`** — a caixinha: `target_cents` (centavo inteiro),
+  `account_id` (o banco onde o dinheiro mora, opcional), `deadline`, `emoji`.
+  **`fin_goal_deposits`** — cada depósito; resgate é negativo, e a soma acumulada
+  já faz a conta (a mesma decisão de `contributions`). O total guardado vem de
+  query, nunca de um número à mão. Índice `(goal_id, happened_on)` para o total e
+  a média de 3 meses da projeção.
+- **`book_details`** — autor, páginas, `status` de leitura (fila/lendo/lido/
+  abandonado, CHECK), `rating` 0–5, `shelf` (texto livre — a estante é do usuário,
+  não eixo de gráfico), datas. Terminar um livro marca o node `done` e a resenha
+  vira uma NOTA linkada via `links` (`link_type='references'`).
+- **`reading_goals`** — a meta anual (`year` PK), como `portfolio_snapshots`:
+  reinformar corrige, não empilha. Não é um node — é configuração numérica.
+
+**A tabela `links` ganha seus primeiros consumidores de código.** Notas
+(`[[wiki-links]]` → `references`, com backlinks do outro lado) e anexos
+(`attached_to`, nota → node `file`). Salvar o corpo de uma nota resincroniza só os
+'references'; os 'attached_to' não vêm do texto e ficam intactos (ADR-0033).
+
+**A Timeline** lê o ledger (visão MÊS, por `idx_ledger_day`) e `timeline_rollups`
+(visão ANO, meses congelados). Marcos de carreira são fatos sem node no ledger
+(`entity_kind='career_milestone'`, ADR-0032). Nenhuma tabela nova: `timeline_rollups`
+e `insight_cache` já existiam desde a 0003.
+
 ## 6. Integridade e migrations
 
 - `user_version` gerenciado pelo `rusqlite_migration`.

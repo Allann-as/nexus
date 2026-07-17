@@ -36,6 +36,10 @@ import { HealthExams } from "./HealthExams";
 import { FinanceDashboard } from "../finance/FinanceDashboard";
 import { ContributionsTab } from "../finance/ContributionsTab";
 import { AporteModal } from "../finance/AporteModal";
+import { CaixinhasTab } from "../fin-goals/CaixinhasTab";
+import { CareerContent } from "../career/CareerContent";
+import { StudiesContent } from "../studies/StudiesContent";
+import { SimpleContent } from "../simple/SimpleContent";
 
 /**
  * As tabs de cada template.
@@ -64,29 +68,28 @@ const TABS: Record<Template, Tab[]> = {
     // Esfera. Uma tab só para ela repetiria o que o Painel já mostra.
   ],
   fin_goals: [
-    { key: "dashboard", label: "Painel" },
+    { key: "boxes", label: "Caixinhas" },
     { key: "goals", label: "Metas" },
-    { key: "boxes", label: "Caixinhas", milestone: "M4" },
   ],
   career: [
     { key: "dashboard", label: "Painel" },
     { key: "goals", label: "Metas" },
-    { key: "projects", label: "Projetos", milestone: "M4" },
-    { key: "skills", label: "Habilidades", milestone: "M4" },
+    { key: "projects", label: "Projetos" },
+    { key: "skills", label: "Habilidades" },
   ],
   studies: [
     { key: "dashboard", label: "Painel" },
     { key: "goals", label: "Metas" },
-    { key: "languages", label: "Idiomas", milestone: "M4" },
-    { key: "college", label: "Faculdade", milestone: "M4" },
-    { key: "courses", label: "Cursos", milestone: "M4" },
-    { key: "library", label: "Biblioteca", milestone: "M4" },
+    { key: "languages", label: "Idiomas" },
+    { key: "college", label: "Faculdade" },
+    { key: "courses", label: "Cursos" },
+    { key: "library", label: "Biblioteca" },
   ],
   simple: [
     { key: "dashboard", label: "Painel" },
     { key: "goals", label: "Metas" },
-    { key: "agenda", label: "Agenda", milestone: "M4" },
-    { key: "checklists", label: "Checklists", milestone: "M4" },
+    { key: "agenda", label: "Agenda" },
+    { key: "checklists", label: "Checklists" },
   ],
 };
 
@@ -238,6 +241,22 @@ function SphereContent({
 
   if (sphere.template === "finance") {
     return <FinanceContent tab={tab} />;
+  }
+
+  if (sphere.template === "fin_goals") {
+    return <CaixinhasTab areaId={sphere.id} />;
+  }
+
+  if (sphere.template === "career") {
+    return <CareerContent areaId={sphere.id} tab={tab} />;
+  }
+
+  if (sphere.template === "studies") {
+    return <StudiesContent areaId={sphere.id} tab={tab} />;
+  }
+
+  if (sphere.template === "simple") {
+    return <SimpleContent sphere={sphere} card={card} tab={tab} />;
   }
 
   return <SphereDashboard sphere={sphere} card={card} />;

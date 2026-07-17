@@ -1,0 +1,324 @@
+/**
+ * Notas — o editor Markdown do NEXUS (M4).
+ *
+ * Duas colunas: à esquerda, a lista de notas (busca, fixadas no topo, "Nova
+ * nota"); à direita, o editor CodeMirror com preview ao vivo, wiki-links e
+ * backlinks. Notas é uma tela GLOBAL (mora na rail), então ela não se tinge de
+ * Esfera — fica no azul neutro do accent, como o resto do que é do app inteiro.
+ *
+ * A lista vem pinned-first, newest-first do backend; a busca filtra por título
+ * no cliente, porque a lista de notas de uma pessoa cabe folgada na memória e um
+ * ida-e-volta ao SQLite por tecla digitada seria latência sem ganho.
+ */
+
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { FileText, Pin, Plus, Search } from "lucide-react";
+
+import { Button, EmptyState, PageHeader, cx } from "../../design-system/primitives";
+import { useToasts } from "../../stores/toasts";
+import {
+  createNote,
+  getNote,
+  listNotes,
+  pinNote,
+  type NoteFull,
+  type NoteSummary,
+} from "../../lib/ipc";
+import { NoteEditor } from "./NoteEditor";
+
+const DAY_MS = 86_400_000;
+
+/** Tempo relativo curto para a lista — "hoje", "há 3 dias", "12/03". */
+function relativeTime(ms: number): string {
+  const days = Math.floor((Date.now() - ms) / DAY_MS);
+  if (days <= 0) return "hoje";
+  if (days === 1) return "ontem";
+  if (days < 7) return `há ${days} dias`;
+  return new Date(ms).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+}
+
+export function NotesScreen() {
+  const qc = useQueryClient();
+  const pushError = useToasts((s) => s.pushError);
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const list = useQuery({
+    queryKey: ["notes", "list"],
+    queryFn: () => listNotes(),
+  });
+
+  const notes = useMemo(() => list.data ?? [], [list.data]);
+
+  // Sem seleção, abre a primeira nota — a tela nunca fica com o painel direito
+  // vazio quando há o que mostrar.
+  useEffect(() => {
+    if (!selectedId && notes.length > 0) setSelectedId(notes[0].id);
+    if (selectedId && notes.length > 0 && !notes.some((n) => n.id === selectedId)) {
+      setSelectedId(notes[0].id);
+    }
+  }, [notes, selectedId]);
+
+  const selected = useQuery({
+    queryKey: ["notes", selectedId],
+    queryFn: () => getNote(selectedId as string),
+    enabled: !!selectedId,
+  });
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const rows = q ? notes.filter((n) => n.title.toLowerCase().includes(q)) : notes;
+    return {
+      pinned: rows.filter((n) => n.isPinned),
+      rest: rows.filter((n) => !n.isPinned),
+    };
+  }, [notes, query]);
+
+  const handleCreate = async () => {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const note = await createNote("Nova nota");
+      qc.setQueryData<NoteFull>(["notes", note.id], note);
+      await qc.invalidateQueries({ queryKey: ["notes", "list"] });
+      setQuery("");
+      setSelectedId(note.id);
+    } catch (e) {
+      pushError(e);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const togglePin = async (n: NoteSummary) => {
+    try {
+      await pinNote(n.id, !n.isPinned);
+      await qc.invalidateQueries({ queryKey: ["notes", "list"] });
+    } catch (e) {
+      pushError(e);
+    }
+  };
+
+  const hasNotes = notes.length > 0;
+  const anyResult = filtered.pinned.length + filtered.rest.length > 0;
+
+  return (
+    <div className="nx-page nx-enter flex h-full flex-col overflow-hidden">
+      <NotesPreviewStyles />
+      <PageHeader
+        title="Notas"
+        subtitle="Markdown puro, wiki-links e backlinks — um formato eterno"
+        actions={
+          hasNotes ? (
+            <Button variant="primary" size="sm" icon={Plus} onClick={handleCreate}>
+              Nova nota
+            </Button>
+          ) : undefined
+        }
+      />
+
+      {list.isLoading ? (
+        <div className="flex min-h-0 flex-1 gap-0 px-8 pb-8">
+          <div className="w-[280px] animate-pulse rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)]" />
+          <div className="ml-4 flex-1 animate-pulse rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)]" />
+        </div>
+      ) : !hasNotes ? (
+        <div className="min-h-0 flex-1 pb-16">
+          <EmptyState
+            icon={FileText}
+            title="Nenhuma nota ainda"
+            hint="Escreva em Markdown, ligue ideias com [[wiki-links]] e deixe os backlinks tecerem a teia. Comece pela primeira."
+            action={
+              <Button variant="primary" size="sm" icon={Plus} onClick={handleCreate}>
+                Nova nota
+              </Button>
+            }
+          />
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 border-t border-[var(--border-subtle)]">
+          {/* ===== Sidebar ===== */}
+          <aside className="flex w-[280px] shrink-0 flex-col border-r border-[var(--border-subtle)]">
+            <div className="flex flex-col gap-2.5 p-3">
+              <div className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 focus-within:border-[var(--border-glow)]">
+                <Search size={14} className="shrink-0 text-[var(--text-tertiary)]" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Buscar notas…"
+                  className="h-8 w-full bg-transparent text-[12.5px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
+                />
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Plus}
+                onClick={handleCreate}
+                className="w-full"
+              >
+                Nova nota
+              </Button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+              {!anyResult ? (
+                <p className="px-2 py-6 text-center text-[12px] text-[var(--text-tertiary)]">
+                  Nenhuma nota encontrada.
+                </p>
+              ) : (
+                <>
+                  {filtered.pinned.length > 0 && (
+                    <>
+                      <SectionLabel>Fixadas</SectionLabel>
+                      {filtered.pinned.map((n) => (
+                        <NoteRow
+                          key={n.id}
+                          note={n}
+                          active={n.id === selectedId}
+                          onOpen={() => setSelectedId(n.id)}
+                          onPin={() => togglePin(n)}
+                        />
+                      ))}
+                      {filtered.rest.length > 0 && <SectionLabel>Todas</SectionLabel>}
+                    </>
+                  )}
+                  {filtered.rest.map((n) => (
+                    <NoteRow
+                      key={n.id}
+                      note={n}
+                      active={n.id === selectedId}
+                      onOpen={() => setSelectedId(n.id)}
+                      onPin={() => togglePin(n)}
+                    />
+                  ))}
+                </>
+              )}
+            </div>
+          </aside>
+
+          {/* ===== Editor ===== */}
+          <main className="min-h-0 flex-1">
+            {selected.data ? (
+              <NoteEditor key={selected.data.id} note={selected.data} onOpenNote={setSelectedId} />
+            ) : selectedId && selected.isLoading ? (
+              <div className="h-full animate-pulse bg-[var(--bg-surface)]" />
+            ) : (
+              <div className="flex h-full items-center justify-center">
+                <p className="text-[13px] text-[var(--text-tertiary)]">
+                  Selecione uma nota à esquerda.
+                </p>
+              </div>
+            )}
+          </main>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="px-2 pt-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--text-tertiary)]">
+      {children}
+    </p>
+  );
+}
+
+function NoteRow({
+  note,
+  active,
+  onOpen,
+  onPin,
+}: {
+  note: NoteSummary;
+  active: boolean;
+  onOpen: () => void;
+  onPin: () => void;
+}) {
+  return (
+    <div
+      onClick={onOpen}
+      className={cx(
+        "group flex cursor-pointer items-center gap-2 rounded-[var(--radius-md)] border-l-2 px-2.5 py-2 transition-[background-color,border-color] duration-[var(--dur-fast)] ease-[var(--ease)]",
+        active
+          ? "border-l-[var(--accent)] bg-[var(--bg-surface)]"
+          : "border-l-transparent hover:bg-[var(--bg-surface)]",
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <p
+          className={cx(
+            "truncate text-[13px]",
+            active ? "font-medium text-[var(--text-primary)]" : "text-[var(--text-secondary)]",
+          )}
+        >
+          {note.title || "Sem título"}
+        </p>
+        <p className="tabular mt-0.5 text-[10.5px] text-[var(--text-tertiary)]">
+          {relativeTime(note.updatedAt)}
+        </p>
+      </div>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onPin();
+        }}
+        title={note.isPinned ? "Desafixar" : "Fixar"}
+        aria-label={note.isPinned ? "Desafixar" : "Fixar"}
+        className={cx(
+          "shrink-0 rounded-[var(--radius-sm)] p-1 transition-[opacity,color,background-color] duration-[var(--dur-fast)]",
+          note.isPinned
+            ? "text-[var(--accent)] opacity-100"
+            : "text-[var(--text-tertiary)] opacity-0 hover:bg-[var(--bg-raised)] hover:text-[var(--text-primary)] group-hover:opacity-100",
+        )}
+      >
+        <Pin size={13} fill={note.isPinned ? "currentColor" : "none"} />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * As regras da preview de Markdown.
+ *
+ * O renderizador emite classes `nx-md-*` numa string de HTML — que o Tailwind não
+ * varre —, então o estilo mora aqui, em CSS de verdade, só com tokens do tema
+ * (nada de hex cru). É injetado uma vez pela tela.
+ */
+function NotesPreviewStyles() {
+  return (
+    <style>{`
+.nx-md { color: var(--text-secondary); font-size: 13.5px; line-height: 1.7; }
+.nx-md > *:first-child { margin-top: 0; }
+.nx-md .nx-md-h { color: var(--text-primary); font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; margin: 1.2em 0 0.5em; }
+.nx-md .nx-md-h1 { font-size: 22px; }
+.nx-md .nx-md-h2 { font-size: 18px; }
+.nx-md .nx-md-h3 { font-size: 15px; }
+.nx-md .nx-md-h4, .nx-md .nx-md-h5, .nx-md .nx-md-h6 { font-size: 13.5px; }
+.nx-md .nx-md-p { margin: 0.5em 0; }
+.nx-md strong { color: var(--text-primary); font-weight: 600; }
+.nx-md em { font-style: italic; }
+.nx-md a.nx-md-link { color: var(--accent); text-decoration: none; }
+.nx-md a.nx-md-link:hover { text-decoration: underline; }
+.nx-md a.nx-md-wiki { color: var(--accent); font-weight: 500; text-decoration: none; cursor: pointer; border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.nx-md a.nx-md-wiki:hover { background: var(--accent-muted); border-radius: 3px; }
+.nx-md .nx-md-wiki-pending { color: var(--text-tertiary); cursor: help; border-bottom: 1px dashed var(--text-tertiary); }
+.nx-md .nx-md-code { font-family: var(--font-mono); font-size: 0.86em; color: var(--text-primary); background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.1em 0.35em; }
+.nx-md .nx-md-pre { margin: 0.7em 0; padding: 12px 14px; overflow-x: auto; background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+.nx-md .nx-md-pre code { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); }
+.nx-md .nx-md-list { margin: 0.5em 0; padding-left: 1.4em; }
+.nx-md ul.nx-md-list { list-style: disc; }
+.nx-md ol.nx-md-list { list-style: decimal; }
+.nx-md .nx-md-list li { margin: 0.2em 0; }
+.nx-md li.nx-md-task { list-style: none; margin-left: -1.4em; display: flex; align-items: flex-start; gap: 0.5em; }
+.nx-md .nx-md-check { margin-top: 0.28em; width: 14px; height: 14px; accent-color: var(--accent); cursor: pointer; }
+.nx-md .nx-md-task-done { color: var(--text-tertiary); text-decoration: line-through; }
+.nx-md .nx-md-quote { margin: 0.7em 0; padding-left: 12px; color: var(--text-tertiary); font-style: italic; border-left: 2px solid var(--border-strong); }
+.nx-md .nx-md-hr { margin: 1.2em 0; border: none; border-top: 1px solid var(--border-subtle); }
+.nx-md .nx-md-img { max-width: 100%; margin: 0.5em 0; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+    `}</style>
+  );
+}

@@ -26,6 +26,9 @@ fn migrations() -> Migrations<'static> {
             "../../../migrations/0009_milestone_counts_from.sql"
         )),
         M::up(include_str!("../../../migrations/0010_finances.sql")),
+        M::up(include_str!(
+            "../../../migrations/0011_studies_fin_goals.sql"
+        )),
     ])
 }
 
@@ -409,6 +412,90 @@ mod tests {
                 [],
             );
             assert!(junk.is_err(), "o CHECK não pode ter sumido na recriação");
+        }
+
+        #[test]
+        fn fin_goal_and_book_join_the_vocabulary_in_one_recreation() {
+            // O M4 recria `nodes` de novo (0011), agora para dois kinds de uma
+            // vez. Ambos têm que entrar, e o CHECK tem que continuar recusando
+            // lixo. Pagar a recriação uma vez para os dois é a decisão do
+            // ADR-0029.
+            let mut conn = seeded_at_v6();
+            migrations().to_latest(&mut conn).unwrap();
+
+            conn.execute(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('g1', 'fin_goal', 'PS5', 0, 0)",
+                [],
+            )
+            .expect("'fin_goal' entrou no vocabulário");
+            conn.execute(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('b1', 'book', 'O Nome do Vento', 0, 0)",
+                [],
+            )
+            .expect("'book' entrou no vocabulário");
+
+            let junk = conn.execute(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('z1', 'sanduiche', 'nao', 0, 0)",
+                [],
+            );
+            assert!(junk.is_err(), "o CHECK não pode ter sumido na recriação");
+        }
+
+        #[test]
+        fn the_new_satellites_cascade_from_their_node() {
+            // fin_goal_details, fin_goal_deposits e book_details apagam junto com
+            // o node dono — a mesma garantia dos satélites do 0001.
+            let mut conn = seeded_at_v6();
+            migrations().to_latest(&mut conn).unwrap();
+            conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+
+            conn.execute_batch(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('g1', 'fin_goal', 'PS5', 0, 0);
+                 INSERT INTO fin_goal_details (node_id, target_cents, account_id)
+                      VALUES ('g1', 250000, 'acct-btg-invest');
+                 INSERT INTO fin_goal_deposits (id, goal_id, amount_cents, happened_on, created_at)
+                      VALUES ('d1', 'g1', 50000, '2026-07-01', 0);",
+            )
+            .unwrap();
+
+            conn.execute("DELETE FROM nodes WHERE id = 'g1'", [])
+                .unwrap();
+
+            let (goals, deposits): (i64, i64) = conn
+                .query_row(
+                    "SELECT (SELECT COUNT(*) FROM fin_goal_details),
+                            (SELECT COUNT(*) FROM fin_goal_deposits)",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!(goals, 0, "o satélite da caixinha some com o node");
+            assert_eq!(deposits, 0, "os depósitos somem com a caixinha (CASCADE)");
+        }
+
+        #[test]
+        fn the_book_status_check_is_live() {
+            let mut conn = seeded_at_v6();
+            migrations().to_latest(&mut conn).unwrap();
+
+            conn.execute(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('b1', 'book', 'Livro', 0, 0)",
+                [],
+            )
+            .unwrap();
+            let bad = conn.execute(
+                "INSERT INTO book_details (node_id, status) VALUES ('b1', 'sumido')",
+                [],
+            );
+            assert!(
+                bad.is_err(),
+                "um status fora do vocabulário deve ser recusado"
+            );
         }
 
         #[test]

@@ -12,7 +12,7 @@
  * seria o app perguntando ao usuário qual das duas telas de hoje ele quis.
  */
 
-import { FileText, History, Sparkles, type LucideIcon } from "lucide-react";
+import { Sparkles, type LucideIcon } from "lucide-react";
 
 import { EmptyState, PageHeader } from "../design-system/primitives";
 
@@ -44,25 +44,12 @@ function Module({
 // mesmo caminho do Dashboard (M2) e dos Hábitos — a tela nasce como promessa
 // honesta aqui e sai quando o marco a entrega.
 
-export const NotesScreen = () => (
-  <Module
-    title="Notas"
-    subtitle="Markdown puro — um formato eterno"
-    icon={FileText}
-    emptyTitle="Nenhuma nota ainda"
-    hint="Editor Markdown com preview ao vivo, [[wiki-links]] para qualquer node e backlinks automáticos. Chegam no M4."
-  />
-);
+// `NotesScreen` saiu daqui no M4: virou `features/notes/NotesScreen`, com editor
+// CodeMirror 6, preview ao vivo, [[wiki-links]] + backlinks e anexos por SHA-256.
 
-export const TimelineScreen = () => (
-  <Module
-    title="Timeline"
-    subtitle="A máquina do tempo"
-    icon={History}
-    emptyTitle="Sua história começa agora"
-    hint="Cada ação registrada vira um evento imutável no ledger. Quando houver história, ela aparece aqui — M4."
-  />
-);
+// `TimelineScreen` saiu daqui no M4: virou `features/timeline/TimelineScreen`,
+// com scrubber de ano/mês, feed do ledger agrupado por dia, visão-ano por
+// rollups congelados e o "Neste dia". Mesmo caminho do Calendário e dos Hábitos.
 
 export const InsightsScreen = () => (
   <Module

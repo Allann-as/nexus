@@ -40,6 +40,23 @@ pub enum Recurrence {
     Weekly { interval: u32, days: Vec<u8> },
     /// Todo mês no mesmo dia do mês, a cada `interval` meses.
     Monthly { interval: u32 },
+    /// No N-ésimo dia-da-semana do mês, a cada `interval` meses.
+    ///
+    /// "A terceira terça do mês" = `{ week: 3, weekday: 2 }`. Equivale ao
+    /// `FREQ=MONTHLY;BYDAY=3TU` da RFC-5545 (ADR-0024). `week` é 1..=5 e
+    /// `weekday` é 0=domingo … 6=sábado, o mesmo índice do `Weekly` e do
+    /// `strftime('%w')`.
+    ///
+    /// O caso do 5º que não existe ("quinta sexta de fevereiro"): a expansão
+    /// **pula o mês**, não escorrega para o seguinte — decidido na âncora, o
+    /// mesmo princípio do dia 31 (só que ali a saída é grudar no último dia, e
+    /// aqui é pular, porque "a quinta sexta" que virasse a primeira do mês
+    /// seguinte seria um dia que ninguém pediu).
+    MonthlyByWeekday {
+        interval: u32,
+        week: u8,
+        weekday: u8,
+    },
     /// Todo ano na mesma data.
     Yearly { interval: u32 },
 }
@@ -70,6 +87,25 @@ impl Recurrence {
                 if let Some(bad) = days.iter().find(|d| **d > 6) {
                     return Err(NexusError::Validation(format!(
                         "dia da semana inválido: {bad} (esperado 0=domingo … 6=sábado)"
+                    )));
+                }
+                *interval
+            }
+            Recurrence::MonthlyByWeekday {
+                interval,
+                week,
+                weekday,
+            } => {
+                // week = 0 não existe ("a zerésima terça"), e > 5 é impossível:
+                // nenhum mês tem seis do mesmo dia da semana.
+                if *week < 1 || *week > 5 {
+                    return Err(NexusError::Validation(format!(
+                        "semana do mês inválida: {week} (esperado 1..=5)"
+                    )));
+                }
+                if *weekday > 6 {
+                    return Err(NexusError::Validation(format!(
+                        "dia da semana inválido: {weekday} (esperado 0=domingo … 6=sábado)"
                     )));
                 }
                 *interval
@@ -160,9 +196,60 @@ impl Recurrence {
                     n += 1;
                 }
             }
+
+            // "A terceira terça, a cada `interval` meses." A fase é o mês da
+            // âncora; a regra (semana, dia da semana) é fixa. Iteramos mês a mês
+            // a partir do primeiro dia do mês da âncora — dia 1 nunca é clampado
+            // por `add_months`, então a aritmética de mês fica limpa.
+            Recurrence::MonthlyByWeekday {
+                interval,
+                week,
+                weekday,
+            } => {
+                let anchor_first =
+                    NaiveDate::from_ymd_opt(anchor.year(), anchor.month(), 1).unwrap_or(anchor);
+                let mut n = 0u32;
+                while let Some(first) = add_months(anchor_first, n * interval) {
+                    // A ocorrência mais tardia possível é a 5ª de um dia, ~dia
+                    // 29–35: se o próprio 1º do mês já passou de `until`, acabou.
+                    if first > until || out.len() >= MAX_OCCURRENCES {
+                        break;
+                    }
+                    // O mês pode não ter a N-ésima ocorrência (a 5ª sexta que não
+                    // existe): `nth_weekday_of_month` devolve `None` e o mês é
+                    // PULADO, não escorregado — ADR-0024.
+                    if let Some(d) =
+                        nth_weekday_of_month(first.year(), first.month(), *week, *weekday)
+                    {
+                        if d >= start && d <= until {
+                            out.push(d);
+                        }
+                    }
+                    n += 1;
+                }
+            }
         }
         out
     }
+}
+
+/// A N-ésima ocorrência de um dia da semana num mês, ou `None` se ela não existe.
+///
+/// `week` é 1..=5 e `weekday` é 0=domingo … 6=sábado. "A quinta sexta de
+/// fevereiro" não existe → `None`, e quem chama pula o mês. É o núcleo do caso
+/// da 5ª ocorrência do ADR-0024.
+fn nth_weekday_of_month(year: i32, month: u32, week: u8, weekday: u8) -> Option<NaiveDate> {
+    let first = NaiveDate::from_ymd_opt(year, month, 1)?;
+    // Quantos dias do 1º do mês até o primeiro `weekday`.
+    let first_dow = weekday_index(first);
+    let lead = (weekday as i64 - first_dow as i64).rem_euclid(7);
+    let day = 1 + lead + (i64::from(week) - 1) * 7;
+
+    let last = last_day_of_month(year, month)?;
+    if day > i64::from(last) {
+        return None;
+    }
+    NaiveDate::from_ymd_opt(year, month, day as u32)
 }
 
 /// `date` + `months` meses, grudando no último dia quando o mês é mais curto.
@@ -332,6 +419,121 @@ mod tests {
         );
     }
 
+    // ===== MonthlyByWeekday — "a terceira terça do mês" (ADR-0024) =====
+
+    #[test]
+    fn third_tuesday_of_each_month() {
+        // week=3, weekday=2 (terça). Julho/2026: as terças são 7,14,21,28 → a 3ª
+        // é 21. Agosto: 4,11,18,25 → 18. Setembro: 1,8,15,22,29 → 15.
+        let r = Recurrence::MonthlyByWeekday {
+            interval: 1,
+            week: 3,
+            weekday: 2,
+        };
+        let out = r.expand(d("2026-07-21"), d("2026-07-01"), d("2026-09-30"));
+        assert_eq!(out, vec![d("2026-07-21"), d("2026-08-18"), d("2026-09-15")]);
+    }
+
+    #[test]
+    fn the_fifth_friday_skips_the_months_that_do_not_have_one() {
+        // O caso que decidiu a variante (ADR-0024): a 5ª sexta só existe em
+        // alguns meses. Em 2026, as 5as sextas caem em jan(30), mai(29),
+        // jul(31), out(30). Fevereiro, março, abril, junho NÃO têm — e são
+        // PULADOS, não escorregados para o mês seguinte.
+        let r = Recurrence::MonthlyByWeekday {
+            interval: 1,
+            week: 5,
+            weekday: 5,
+        };
+        let out = r.expand(d("2026-01-30"), d("2026-01-01"), d("2026-08-31"));
+        assert_eq!(
+            out,
+            vec![d("2026-01-30"), d("2026-05-29"), d("2026-07-31")],
+            "fev/mar/abr/jun não têm 5ª sexta e ficam de fora; nada escorrega"
+        );
+    }
+
+    #[test]
+    fn first_sunday_bimonthly_keeps_the_anchors_phase() {
+        // A cada 2 meses, no 1º domingo. Âncora em julho → jul, set, nov (não
+        // ago, out). O 1º domingo de julho/2026 é 05; de setembro, 06; de
+        // novembro, 01.
+        let r = Recurrence::MonthlyByWeekday {
+            interval: 2,
+            week: 1,
+            weekday: 0,
+        };
+        let out = r.expand(d("2026-07-05"), d("2026-07-01"), d("2026-11-30"));
+        assert_eq!(out, vec![d("2026-07-05"), d("2026-09-06"), d("2026-11-01")]);
+    }
+
+    #[test]
+    fn a_fifth_weekday_that_exists_is_kept() {
+        // Contraprova do skip: quando a 5ª ocorrência EXISTE, ela aparece.
+        let r = Recurrence::MonthlyByWeekday {
+            interval: 1,
+            week: 5,
+            weekday: 5,
+        };
+        let out = r.expand(d("2026-01-30"), d("2026-01-01"), d("2026-01-31"));
+        assert_eq!(out, vec![d("2026-01-30")]);
+    }
+
+    #[test]
+    fn monthly_by_weekday_is_deterministic_across_overlapping_windows() {
+        // A idempotência da extensão (ADR-0022) se apoia nisto: reexpandir uma
+        // janela que cobre a anterior tem que devolver EXATAMENTE as mesmas
+        // datas, senão a UNIQUE (event_id, rule_start) receberia um turno com
+        // data diferente e duplicaria.
+        let r = Recurrence::MonthlyByWeekday {
+            interval: 1,
+            week: 2,
+            weekday: 4,
+        };
+        let anchor = d("2026-07-09");
+        let wide = r.expand(anchor, d("2026-07-01"), d("2026-12-31"));
+        let narrow = r.expand(anchor, d("2026-09-01"), d("2026-12-31"));
+        // A parte comum das duas janelas coincide dia a dia.
+        let tail: Vec<_> = wide
+            .iter()
+            .filter(|x| **x >= d("2026-09-01"))
+            .cloned()
+            .collect();
+        assert_eq!(tail, narrow);
+    }
+
+    #[test]
+    fn monthly_by_weekday_rejects_out_of_range_fields() {
+        assert!(Recurrence::MonthlyByWeekday {
+            interval: 1,
+            week: 0,
+            weekday: 2
+        }
+        .validate()
+        .is_err());
+        assert!(Recurrence::MonthlyByWeekday {
+            interval: 1,
+            week: 6,
+            weekday: 2
+        }
+        .validate()
+        .is_err());
+        assert!(Recurrence::MonthlyByWeekday {
+            interval: 1,
+            week: 3,
+            weekday: 7
+        }
+        .validate()
+        .is_err());
+        assert!(Recurrence::MonthlyByWeekday {
+            interval: 0,
+            week: 3,
+            weekday: 2
+        }
+        .validate()
+        .is_err());
+    }
+
     // ===== Yearly =====
 
     #[test]
@@ -412,6 +614,11 @@ mod tests {
                 days: vec![1, 3, 5],
             },
             Recurrence::Monthly { interval: 3 },
+            Recurrence::MonthlyByWeekday {
+                interval: 1,
+                week: 3,
+                weekday: 2,
+            },
             Recurrence::Yearly { interval: 1 },
         ] {
             assert_eq!(Recurrence::parse_json(&r.to_json()).unwrap(), r);
@@ -433,6 +640,15 @@ mod tests {
             }
             .to_json(),
             r#"{"type":"weekly","interval":2,"days":[1,3]}"#
+        );
+        assert_eq!(
+            Recurrence::MonthlyByWeekday {
+                interval: 1,
+                week: 3,
+                weekday: 2
+            }
+            .to_json(),
+            r#"{"type":"monthly_by_weekday","interval":1,"week":3,"weekday":2}"#
         );
     }
 

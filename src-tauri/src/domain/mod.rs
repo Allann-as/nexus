@@ -12,6 +12,8 @@ pub mod ledger;
 pub mod ordering;
 pub mod projection;
 pub mod recurrence;
+pub mod savings;
 pub mod schedule;
 pub mod score;
 pub mod streak;
+pub mod wikilink;

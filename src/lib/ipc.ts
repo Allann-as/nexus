@@ -64,7 +64,9 @@ export type Kind =
   | "event"
   | "file"
   | "inbox_item"
-  | "milestone";
+  | "milestone"
+  | "fin_goal"
+  | "book";
 
 export type Status = "active" | "done" | "archived" | "dropped";
 
@@ -514,6 +516,8 @@ export type Recurrence =
   | { type: "daily"; interval: number }
   | { type: "weekly"; interval: number; days: number[] }
   | { type: "monthly"; interval: number }
+  /** "A terceira terça do mês": `week` 1–5, `weekday` 0=domingo…6=sábado. */
+  | { type: "monthly_by_weekday"; interval: number; week: number; weekday: number }
   | { type: "yearly"; interval: number };
 
 /** A REGRA de um evento. O que o calendário desenha é a `Occurrence`. */
@@ -927,3 +931,294 @@ export const financeOverview = () => call<FinanceOverview>("finance_overview");
 /** O patrimônio informado à mão para um mês ('AAAA-MM'). */
 export const setPortfolioSnapshot = (month: string, totalCents: number) =>
   call<void>("set_portfolio_snapshot", { month, totalCents });
+
+/* ===== Objetivos Financeiros: as "caixinhas" ===== */
+
+/** Uma caixinha. Espelha `ports::FinGoal`. */
+export interface FinGoal {
+  id: string;
+  title: string;
+  areaId: string | null;
+  status: Status;
+  targetCents: number;
+  accountId: string | null;
+  /** O nome do banco onde o dinheiro está guardado, se houver conta. */
+  accountName: string | null;
+  deadline: string | null;
+  emoji: string;
+  /** Somado dos depósitos — nunca um número à mão. */
+  savedCents: number;
+  createdAt: number;
+}
+
+/** A projeção de conclusão — espelha `domain::savings::SavingsProjection`. */
+export interface SavingsProjection {
+  /** 'YYYY-MM' de conclusão, ou `null` (já fechou, ou sem ritmo). */
+  etaMonth: string | null;
+  monthsRemaining: number | null;
+  monthlyRateCents: number;
+  formula: string;
+}
+
+/** Uma caixinha com a projeção — o que o card mostra. */
+export interface FinGoalCard extends FinGoal {
+  projection: SavingsProjection;
+}
+
+export interface FinGoalDeposit {
+  id: string;
+  goalId: string;
+  amountCents: number;
+  happenedOn: string;
+  note: string | null;
+  createdAt: number;
+}
+
+/** O resultado de um depósito: se ele FECHOU a caixinha (dispara a celebração). */
+export interface DepositOutcome {
+  deposit: FinGoalDeposit;
+  completed: boolean;
+}
+
+export const createFinGoal = (goal: {
+  title: string;
+  areaId?: string | null;
+  targetCents: number;
+  accountId?: string | null;
+  deadline?: string | null;
+  emoji?: string | null;
+}) =>
+  call<FinGoal>("create_fin_goal", {
+    goal: {
+      title: goal.title,
+      areaId: goal.areaId ?? null,
+      targetCents: goal.targetCents,
+      accountId: goal.accountId ?? null,
+      deadline: goal.deadline ?? null,
+      emoji: goal.emoji ?? null,
+    },
+  });
+
+/** As caixinhas de uma Esfera (ou todas, com `areaId` ausente), com projeção. */
+export const listFinGoals = (areaId?: string | null) =>
+  call<FinGoalCard[]>("list_fin_goals", { areaId: areaId ?? null });
+
+/** Deposita (ou saca, com `amountCents` negativo) numa caixinha. */
+export const depositFinGoal = (deposit: {
+  goalId: string;
+  amountCents: number;
+  happenedOn?: string | null;
+  note?: string | null;
+}) =>
+  call<DepositOutcome>("deposit_fin_goal", {
+    deposit: {
+      goalId: deposit.goalId,
+      amountCents: deposit.amountCents,
+      happenedOn: deposit.happenedOn ?? null,
+      note: deposit.note ?? null,
+    },
+  });
+
+export const finGoalDeposits = (goalId: string) =>
+  call<FinGoalDeposit[]>("fin_goal_deposits", { goalId });
+
+/* ===== Biblioteca: os livros ===== */
+
+/** O ciclo de vida de um livro. Espelha `domain::entities::BookStatus`. */
+export type BookStatus = "fila" | "lendo" | "lido" | "abandonado";
+
+export interface Book {
+  id: string;
+  title: string;
+  areaId: string | null;
+  author: string | null;
+  totalPages: number | null;
+  currentPage: number;
+  status: BookStatus;
+  /** 0–5 estrelas, ou `null` se não avaliado. */
+  rating: number | null;
+  shelf: string | null;
+  startedOn: string | null;
+  finishedOn: string | null;
+  createdAt: number;
+}
+
+/** O painel de Estudos — mirrors `use_cases::books::StudiesOverview`. */
+export interface StudiesOverview {
+  year: string;
+  readingGoal: number | null;
+  finishedThisYear: number;
+  readingNow: Book[];
+  totalBooks: number;
+}
+
+export const createBook = (book: {
+  title: string;
+  areaId?: string | null;
+  author?: string | null;
+  totalPages?: number | null;
+  shelf?: string | null;
+}) =>
+  call<Book>("create_book", {
+    book: {
+      title: book.title,
+      areaId: book.areaId ?? null,
+      author: book.author ?? null,
+      totalPages: book.totalPages ?? null,
+      shelf: book.shelf ?? null,
+    },
+  });
+
+export const listBooks = (areaId?: string | null) =>
+  call<Book[]>("list_books", { areaId: areaId ?? null });
+
+export const setBookProgress = (id: string, currentPage: number) =>
+  call<Book>("set_book_progress", { id, currentPage });
+
+export const setBookStatus = (id: string, status: BookStatus) =>
+  call<Book>("set_book_status", { id, status });
+
+export const setBookShelf = (id: string, shelf: string | null) =>
+  call<Book>("set_book_shelf", { id, shelf });
+
+export const setBookRating = (id: string, rating: number | null) =>
+  call<Book>("set_book_rating", { id, rating });
+
+/** Termina o livro: 'lido', conquista no ledger, e a resenha vira nota linkada. */
+export const finishBook = (id: string, rating: number | null, review: string | null) =>
+  call<Book>("finish_book", { id, rating, review });
+
+export const studiesOverview = (areaId?: string | null) =>
+  call<StudiesOverview>("studies_overview", { areaId: areaId ?? null });
+
+export const setReadingGoal = (target: number) =>
+  call<void>("set_reading_goal", { target });
+
+/* ===== Carreira: os marcos profissionais ===== */
+
+/** O tipo de um marco. Espelha `domain::entities::CareerMilestoneKind`. */
+export type CareerMilestoneKind =
+  | "promotion"
+  | "certification"
+  | "new_job"
+  | "raise"
+  | "award"
+  | "other";
+
+/** Registra um marco de carreira no ledger (§2.3). */
+export const recordCareerMilestone = (m: {
+  title: string;
+  kind: CareerMilestoneKind;
+  happenedOn?: string | null;
+  note?: string | null;
+}) =>
+  call<LedgerEntry>("record_career_milestone", {
+    milestone: {
+      title: m.title,
+      kind: m.kind,
+      happenedOn: m.happenedOn ?? null,
+      note: m.note ?? null,
+    },
+  });
+
+/** Os marcos de carreira, do mais recente ao mais antigo. */
+export const careerMilestones = () => call<LedgerEntry[]>("career_milestones");
+
+/* ===== Timeline: a Máquina do Tempo ===== */
+
+/** Um mês congelado da visão ANO — mirrors `ports::MonthRollup`. */
+export interface MonthRollup {
+  /** 'YYYY-MM'. */
+  month: string;
+  events: number;
+  completed: number;
+  checked: number;
+}
+
+/** A visão MÊS: os eventos entre dois dias 'YYYY-MM-DD', paginados. */
+export const timelineRange = (
+  fromDay: string,
+  toDay: string,
+  limit = 500,
+  offset = 0,
+) => call<LedgerEntry[]>("timeline_range", { fromDay, toDay, limit, offset });
+
+/** A visão ANO: um resumo por mês de um ano 'YYYY'. */
+export const timelineYear = (year: string) =>
+  call<MonthRollup[]>("timeline_year", { year });
+
+/** "Neste dia": o que aconteceu no mesmo dia de anos anteriores. */
+export const onThisDay = () => call<LedgerEntry[]>("on_this_day");
+
+/** Congela os meses completos ainda pendentes. Chamado ao abrir a Timeline. */
+export const ensureTimelineRollups = () =>
+  call<number>("ensure_timeline_rollups");
+
+/* ===== Notas: corpo, wiki-links e anexos ===== */
+
+export interface NoteSummary {
+  id: string;
+  title: string;
+  areaId: string | null;
+  isPinned: boolean;
+  updatedAt: number;
+}
+
+/** Um elo de/para uma nota. */
+export interface NoteLink {
+  nodeId: string;
+  kind: Kind;
+  title: string;
+  linkType: "related" | "blocks" | "references" | "attached_to";
+}
+
+export interface Attachment {
+  nodeId: string;
+  title: string;
+  /** Relativo à raiz de dados: 'media/AAAA/MM/<sha>.<ext>'. */
+  relativePath: string;
+  mime: string;
+  sizeBytes: number;
+  sha256: string;
+}
+
+/** Uma nota inteira — mirrors `ports::NoteFull`. */
+export interface NoteFull {
+  id: string;
+  title: string;
+  areaId: string | null;
+  bodyMd: string;
+  isPinned: boolean;
+  updatedAt: number;
+  /** Wiki-links resolvidos que esta nota emite. */
+  outgoing: NoteLink[];
+  /** Quem aponta para esta nota. */
+  backlinks: NoteLink[];
+  attachments: Attachment[];
+}
+
+/** A raiz de dados (`%APPDATA%/Nexus`) — para montar a URL de um anexo. */
+export const dataRoot = () => call<string>("data_root");
+
+export const listNotes = (areaId?: string | null) =>
+  call<NoteSummary[]>("list_notes", { areaId: areaId ?? null });
+
+export const getNote = (id: string) => call<NoteFull>("get_note", { id });
+
+export const createNote = (title: string, areaId?: string | null) =>
+  call<NoteFull>("create_note", { title, areaId: areaId ?? null });
+
+/** Salva o corpo e resincroniza os wiki-links. Chamar debounced. */
+export const saveNoteBody = (id: string, bodyMd: string) =>
+  call<NoteFull>("save_note_body", { id, bodyMd });
+
+export const pinNote = (id: string, pinned: boolean) =>
+  call<void>("pin_note", { id, pinned });
+
+/** Anexa um arquivo (ou imagem colada) à nota. `bytes` = bytes crus. */
+export const attachToNote = (noteId: string, filename: string, bytes: Uint8Array) =>
+  call<Attachment>("attach_to_note", {
+    noteId,
+    filename,
+    bytes: Array.from(bytes),
+  });

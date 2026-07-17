@@ -5,7 +5,8 @@
 //! estes traits de novo, sem tocar em uma linha de regra de negócio.
 
 use crate::domain::entities::{
-    Area, AssetClass, Direction, Kind, MilestoneKind, Node, ProgressSource, Status, Template,
+    Area, AssetClass, BookStatus, Direction, Kind, MilestoneKind, Node, ProgressSource, Status,
+    Template,
 };
 use crate::domain::errors::Result;
 use crate::domain::ledger::{LedgerEntry, NewLedgerEvent};
@@ -154,7 +155,142 @@ pub trait LedgerRepository: Send + Sync {
         offset: i64,
     ) -> Result<Vec<LedgerEntry>>;
     fn for_entity(&self, entity_id: &str, limit: i64) -> Result<Vec<LedgerEntry>>;
+
+    /// Os eventos de um tipo de entidade (ex.: 'career_milestone'), do mais
+    /// recente ao mais antigo. O painel da Carreira lê os marcos por aqui.
+    fn by_entity_kind(&self, entity_kind: &str, limit: i64) -> Result<Vec<LedgerEntry>>;
+
     fn count(&self) -> Result<i64>;
+}
+
+/* ===== Timeline: a Máquina do Tempo ===== */
+
+/// Um mês congelado — as contagens que a visão ANO desenha.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MonthRollup {
+    /// 'YYYY-MM'.
+    pub month: String,
+    pub events: i64,
+    /// Conquistas (event_type = 'completed').
+    pub completed: i64,
+    /// Marcações de hábito ('checked').
+    pub checked: i64,
+}
+
+pub trait TimelineRepository: Send + Sync {
+    /// Meses ('YYYY-MM') com evento no ledger anteriores a `current_month`.
+    fn ledger_months_before(&self, current_month: &str) -> Result<Vec<String>>;
+    /// Meses já congelados em `timeline_rollups`.
+    fn rolled_up_months(&self) -> Result<Vec<String>>;
+    /// Congela um mês (idempotente).
+    fn freeze_month(&self, month: &str, now: i64) -> Result<()>;
+    /// Os rollups de um ano; o mês corrente é computado ao vivo.
+    fn year(&self, year: &str, current_month: &str) -> Result<Vec<MonthRollup>>;
+    /// "Neste dia": eventos do mesmo 'MM-DD' de anos anteriores.
+    fn on_this_day(&self, today: &str) -> Result<Vec<LedgerEntry>>;
+}
+
+/* ===== Notas: corpo, wiki-links e anexos ===== */
+
+/// O resumo de uma nota — o item da lista.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteSummary {
+    pub id: String,
+    pub title: String,
+    pub area_id: Option<String>,
+    pub is_pinned: bool,
+    pub updated_at: i64,
+}
+
+/// Um elo de/para uma nota, com o alvo já resolvido para exibir.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteLink {
+    pub node_id: String,
+    pub kind: Kind,
+    pub title: String,
+    /// 'related' | 'blocks' | 'references' | 'attached_to'.
+    pub link_type: String,
+}
+
+/// Um anexo (um node 'file' linkado à nota).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Attachment {
+    pub node_id: String,
+    pub title: String,
+    pub relative_path: String,
+    pub mime: String,
+    pub size_bytes: i64,
+    pub sha256: String,
+}
+
+/// Uma nota inteira: corpo, elos de saída (wiki-links resolvidos + anexos) e
+/// backlinks (quem aponta para ela).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteFull {
+    pub id: String,
+    pub title: String,
+    pub area_id: Option<String>,
+    pub body_md: String,
+    pub is_pinned: bool,
+    pub updated_at: i64,
+    pub outgoing: Vec<NoteLink>,
+    pub backlinks: Vec<NoteLink>,
+    pub attachments: Vec<Attachment>,
+}
+
+/// Os dados de um anexo já copiado para a mídia — o que o repo grava.
+#[derive(Debug, Clone)]
+pub struct NewAttachment {
+    pub title: String,
+    pub relative_path: String,
+    pub mime: String,
+    pub size_bytes: i64,
+    pub sha256: String,
+    pub area_id: Option<String>,
+}
+
+pub trait NoteRepository: Send + Sync {
+    fn list(&self, area_id: Option<&str>) -> Result<Vec<NoteSummary>>;
+    fn get_full(&self, id: &str) -> Result<NoteFull>;
+
+    /// Salva o corpo (upsert em `note_details`), RESINCRONIZA os wiki-links
+    /// (substitui os elos 'references' desta nota pelos `resolved`) e grava o
+    /// evento — tudo na mesma transação. Os elos 'attached_to' (anexos) NÃO são
+    /// tocados: eles não vêm do texto.
+    fn save_body_with_event(
+        &self,
+        id: &str,
+        body_md: &str,
+        resolved: &[String],
+        updated_at: i64,
+        event: &NewLedgerEvent,
+    ) -> Result<NoteFull>;
+
+    fn set_pinned(&self, id: &str, pinned: bool) -> Result<()>;
+
+    /// Resolve um título para o id de um node (case-insensitive, o mais recente),
+    /// exceto o próprio `exclude_id`. `None` = elo pendente (o alvo não existe).
+    fn find_by_title(&self, title: &str, exclude_id: &str) -> Result<Option<String>>;
+
+    /// Se já existe um arquivo com este SHA, devolve o caminho relativo dele — a
+    /// dedup: o mesmo conteúdo é gravado uma vez só.
+    fn path_for_sha(&self, sha256: &str) -> Result<Option<String>>;
+
+    /// Cria o node 'file', o satélite e o link 'attached_to' com a nota, e grava
+    /// o evento — na mesma transação.
+    fn attach_with_event(
+        &self,
+        file_id: &str,
+        note_id: &str,
+        att: &NewAttachment,
+        now: i64,
+        event: &NewLedgerEvent,
+    ) -> Result<Attachment>;
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -785,4 +921,198 @@ pub trait ContributionRepository: Send + Sync {
 
     /// Grava/atualiza o retrato do patrimônio de um mês (INSERT OR REPLACE).
     fn set_snapshot(&self, month: &str, total_cents: i64, noted_at: i64) -> Result<()>;
+}
+
+/* ===== Objetivos Financeiros: as "caixinhas" ===== */
+
+#[derive(Debug, Clone)]
+pub struct NewFinGoal {
+    pub title: String,
+    pub area_id: Option<String>,
+    /// Centavos. O alvo é sempre positivo.
+    pub target_cents: i64,
+    /// O banco onde o dinheiro está guardado. Opcional: uma caixinha pode ser só
+    /// uma intenção antes de ter conta.
+    pub account_id: Option<String>,
+    /// 'YYYY-MM-DD' local. Opcional.
+    pub deadline: Option<String>,
+    pub emoji: String,
+}
+
+/// Uma caixinha: o node + o satélite + o total já guardado, juntos.
+///
+/// `saved_cents` vem de query (a soma dos depósitos), nunca de um número
+/// digitado — é o mesmo princípio do contador do sub-desafio.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FinGoal {
+    pub id: String,
+    pub title: String,
+    pub area_id: Option<String>,
+    pub status: String,
+    pub target_cents: i64,
+    pub account_id: Option<String>,
+    /// O nome do banco, se houver conta — a UI mostra o badge sem uma 2ª query.
+    pub account_name: Option<String>,
+    pub deadline: Option<String>,
+    pub emoji: String,
+    pub saved_cents: i64,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewFinGoalDeposit {
+    pub goal_id: String,
+    /// Centavos. Negativo é um saque da caixinha (mudei de ideia, tirei de volta).
+    pub amount_cents: i64,
+    pub happened_on: String,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FinGoalDeposit {
+    pub id: String,
+    pub goal_id: String,
+    pub amount_cents: i64,
+    pub happened_on: String,
+    pub note: Option<String>,
+    pub created_at: i64,
+}
+
+pub trait FinGoalRepository: Send + Sync {
+    /// Node + satélite + ledger, na mesma transação.
+    fn create_with_event(
+        &self,
+        id: &str,
+        node: &NewNode,
+        new: &NewFinGoal,
+        event: &NewLedgerEvent,
+    ) -> Result<FinGoal>;
+
+    fn get(&self, id: &str) -> Result<FinGoal>;
+
+    /// As caixinhas de uma Esfera (ou todas, com `None`), com `saved_cents` já
+    /// somado. Devolve também o total depositado desde `rate_since` (o começo da
+    /// janela de projeção) — na MESMA query, para a projeção não custar N idas ao
+    /// banco.
+    fn list(&self, area_id: Option<&str>, rate_since: &str) -> Result<Vec<(FinGoal, i64)>>;
+
+    /// Grava o depósito E o evento, na mesma transação. Se `completion` for
+    /// `Some`, o node vira 'done' e o evento de conquista entra junto — tudo
+    /// atômico, para a caixinha nunca ficar "fechada sem conquista" nem o
+    /// contrário.
+    fn deposit_with_event(
+        &self,
+        id: &str,
+        deposit: &NewFinGoalDeposit,
+        created_at: i64,
+        deposit_event: &NewLedgerEvent,
+        completion: Option<&NewLedgerEvent>,
+    ) -> Result<FinGoalDeposit>;
+
+    /// Os depósitos de uma caixinha, do mais recente ao mais antigo.
+    fn deposits(&self, goal_id: &str) -> Result<Vec<FinGoalDeposit>>;
+
+    /// A média de progresso (saved/target, 0..=1) das caixinhas ATIVAS, ou
+    /// `None` quando não há nenhuma. Alimenta a parcela "Objetivos" da Saúde
+    /// Financeira (ADR-0028).
+    fn active_progress(&self) -> Result<Option<f64>>;
+}
+
+/* ===== Biblioteca: os livros ===== */
+
+#[derive(Debug, Clone)]
+pub struct NewBook {
+    pub title: String,
+    pub area_id: Option<String>,
+    pub author: Option<String>,
+    pub total_pages: Option<i64>,
+    pub shelf: Option<String>,
+}
+
+/// Um livro: o node + o satélite. `node_status` é o do node (para a busca e a
+/// timeline); `status` é o de LEITURA (fila/lendo/lido/abandonado).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Book {
+    pub id: String,
+    pub title: String,
+    pub area_id: Option<String>,
+    pub author: Option<String>,
+    pub total_pages: Option<i64>,
+    pub current_page: i64,
+    pub status: BookStatus,
+    pub rating: Option<i64>,
+    pub shelf: Option<String>,
+    pub started_on: Option<String>,
+    pub finished_on: Option<String>,
+    pub created_at: i64,
+}
+
+/// Alteração parcial de um livro. `None` = não mexer. Progresso, status,
+/// prateleira e nota — nenhum é um FATO da vida (é estado de leitura), então não
+/// grava no ledger. Terminar um livro é o fato, e tem caminho próprio.
+#[derive(Debug, Clone, Default)]
+pub struct BookPatch {
+    pub current_page: Option<i64>,
+    pub status: Option<BookStatus>,
+    pub rating: Option<Option<i64>>,
+    pub shelf: Option<Option<String>>,
+    /// Datas derivadas de mudanças de status (começou a ler → `started_on`).
+    pub started_on: Option<Option<String>>,
+    pub finished_on: Option<Option<String>>,
+    /// O status do NODE, quando o de leitura muda (lido → done, abandonado →
+    /// dropped). O serviço decide; o repo só aplica.
+    pub node_status: Option<Status>,
+}
+
+/// A resenha de 1 frase que vira uma nota linkada ao livro (§2.2).
+#[derive(Debug, Clone)]
+pub struct ReviewNote {
+    pub note_id: String,
+    pub title: String,
+    pub body_md: String,
+    pub event: NewLedgerEvent,
+}
+
+pub trait BookRepository: Send + Sync {
+    fn create_with_event(
+        &self,
+        id: &str,
+        node: &NewNode,
+        new: &NewBook,
+        event: &NewLedgerEvent,
+    ) -> Result<Book>;
+
+    fn get(&self, id: &str) -> Result<Book>;
+
+    /// Todos os livros de uma Esfera (ou todos). Os filtros de status/prateleira/
+    /// nota são do front: uma estante pessoal tem dezenas de livros, não milhares.
+    fn list(&self, area_id: Option<&str>) -> Result<Vec<Book>>;
+
+    /// Aplica um patch de estado de leitura. Sem ledger (ADR-0023).
+    fn update(&self, id: &str, patch: &BookPatch) -> Result<Book>;
+
+    /// Termina o livro: status 'lido', nota, `finished_on`, node 'done' e o
+    /// evento de conquista — na mesma transação. Se `review` for `Some`, cria a
+    /// nota linkada (o primeiro consumidor de `links`) junto, atômico.
+    fn finish_with_event(
+        &self,
+        id: &str,
+        rating: Option<i64>,
+        finished_on: &str,
+        now: i64,
+        completion: &NewLedgerEvent,
+        review: Option<&ReviewNote>,
+    ) -> Result<Book>;
+
+    /// Quantos livros foram marcados 'lido' num ano ('YYYY') — a meta anual.
+    fn finished_in_year(&self, year: &str) -> Result<i64>;
+
+    /// A meta anual de leitura de um ano, se houver.
+    fn reading_goal(&self, year: &str) -> Result<Option<i64>>;
+
+    /// Grava/atualiza a meta anual (INSERT OR REPLACE).
+    fn set_reading_goal(&self, year: &str, target: i64, noted_at: i64) -> Result<()>;
 }

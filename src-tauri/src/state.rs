@@ -8,9 +8,10 @@ use std::sync::Arc;
 
 use crate::application::ports::{LedgerRepository, SearchRepository};
 use crate::application::use_cases::{
-    areas::AreaService, dashboard::DashboardService, events::EventService, finance::FinanceService,
-    goals::GoalService, habits::HabitService, nodes::NodeService, spheres::SphereService,
-    tasks::TaskService,
+    areas::AreaService, books::BookService, career::CareerService, dashboard::DashboardService,
+    events::EventService, fin_goals::FinGoalService, finance::FinanceService, goals::GoalService,
+    habits::HabitService, nodes::NodeService, notes::NoteService, spheres::SphereService,
+    tasks::TaskService, timeline::TimelineService,
 };
 use crate::domain::errors::Result;
 use crate::infrastructure::clock::{SystemClock, Uuid7Gen};
@@ -18,11 +19,13 @@ use crate::infrastructure::db::Db;
 use crate::infrastructure::fts::SqliteSearchRepository;
 use crate::infrastructure::paths::Paths;
 use crate::infrastructure::repositories::{
-    area_repo::SqliteAreaRepository, contribution_repo::SqliteContributionRepository,
-    event_repo::SqliteEventRepository, goal_repo::SqliteGoalRepository,
+    area_repo::SqliteAreaRepository, book_repo::SqliteBookRepository,
+    contribution_repo::SqliteContributionRepository, event_repo::SqliteEventRepository,
+    fin_goal_repo::SqliteFinGoalRepository, goal_repo::SqliteGoalRepository,
     habit_repo::SqliteHabitRepository, ledger_repo::SqliteLedgerRepository,
-    node_repo::SqliteNodeRepository, sphere_repo::SqliteSphereRepository,
-    task_repo::SqliteTaskRepository,
+    node_repo::SqliteNodeRepository, note_repo::SqliteNoteRepository,
+    sphere_repo::SqliteSphereRepository, task_repo::SqliteTaskRepository,
+    timeline_repo::SqliteTimelineRepository,
 };
 
 pub struct AppState {
@@ -35,6 +38,11 @@ pub struct AppState {
     pub events: EventService,
     pub goals: GoalService,
     pub finance: FinanceService,
+    pub fin_goals: FinGoalService,
+    pub books: BookService,
+    pub career: CareerService,
+    pub timeline: TimelineService,
+    pub notes: NoteService,
     pub dashboard: DashboardService,
     pub spheres: SphereService,
     pub ledger: Arc<dyn LedgerRepository>,
@@ -53,6 +61,7 @@ impl AppState {
         let event_repo = Arc::new(SqliteEventRepository::new(db.clone()));
         let goal_repo = Arc::new(SqliteGoalRepository::new(db.clone()));
         let contribution_repo = Arc::new(SqliteContributionRepository::new(db.clone()));
+        let fin_goal_repo = Arc::new(SqliteFinGoalRepository::new(db.clone()));
         let ledger: Arc<dyn LedgerRepository> = Arc::new(SqliteLedgerRepository::new(db.clone()));
         let search: Arc<dyn SearchRepository> = Arc::new(SqliteSearchRepository::new(db.clone()));
 
@@ -93,8 +102,43 @@ impl AppState {
 
         let finance = FinanceService {
             contributions: contribution_repo,
+            fin_goals: fin_goal_repo.clone(),
             ids: ids.clone(),
             clock: clock.clone(),
+        };
+
+        let fin_goals = FinGoalService {
+            fin_goals: fin_goal_repo,
+            areas: area_repo.clone(),
+            ids: ids.clone(),
+            clock: clock.clone(),
+        };
+
+        let books = BookService {
+            books: Arc::new(SqliteBookRepository::new(db.clone())),
+            areas: area_repo.clone(),
+            ids: ids.clone(),
+            clock: clock.clone(),
+        };
+
+        let career = CareerService {
+            ledger: ledger.clone(),
+            ids: ids.clone(),
+            clock: clock.clone(),
+        };
+
+        let timeline = TimelineService {
+            timeline: Arc::new(SqliteTimelineRepository::new(db.clone())),
+            ledger: ledger.clone(),
+            clock: clock.clone(),
+        };
+
+        let notes = NoteService {
+            notes: Arc::new(SqliteNoteRepository::new(db.clone())),
+            nodes: node_repo.clone(),
+            ids: ids.clone(),
+            clock: clock.clone(),
+            paths: paths.clone(),
         };
 
         let dashboard = DashboardService {
@@ -128,6 +172,11 @@ impl AppState {
             events,
             goals,
             finance,
+            fin_goals,
+            books,
+            career,
+            timeline,
+            notes,
             dashboard,
             spheres,
             ledger,
