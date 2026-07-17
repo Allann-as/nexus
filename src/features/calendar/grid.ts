@@ -128,6 +128,52 @@ export function fractionOfDay(ms: number, day: string): number {
   return Math.max(0, Math.min(1, (ms - start) / span));
 }
 
+/**
+ * O inverso do `fractionOfDay`: a fração da coluna vira um instante.
+ *
+ * É o que traduz "o usuário soltou o mouse a 40% da altura da coluna de terça"
+ * em epoch. Sem saturar, de propósito: arrastar um bloco para baixo do fim do
+ * dia é um gesto legítimo (o evento continua na madrugada seguinte), e é o
+ * `snapMs` que decide o alinhamento, não esta função.
+ */
+export function instantAt(day: string, fraction: number): number {
+  const start = dayStartMs(day);
+  return start + Math.round(fraction * (dayEndMs(day) - start));
+}
+
+/**
+ * Arredonda um instante para o slot mais próximo, a partir da MEIA-NOITE LOCAL
+ * do dia dele.
+ *
+ * Não a partir do epoch: o epoch zero é meia-noite em Londres, e num fuso de
+ * meia hora (Índia, Nepal — o NEXUS não escolhe onde é usado) todo slot sairia
+ * torto. Ancorar no dia local faz "09:30" ser 09:30 em qualquer lugar.
+ */
+export function snapMs(ms: number, stepMin: number, day: string): number {
+  const step = stepMin * 60_000;
+  const base = dayStartMs(day);
+  return base + Math.round((ms - base) / step) * step;
+}
+
+/** "14:30" — a hora local de um instante. */
+export function hhmm(ms: number): string {
+  const d = new Date(ms);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/**
+ * "1h30" / "45min" — a duração de um bloco, como um humano a diria.
+ *
+ * Existe para o modal e o bloco não formatarem minutos cada um do seu jeito.
+ */
+export function durationLabel(ms: number): string {
+  const min = Math.max(0, Math.round(ms / 60_000));
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  if (h === 0) return `${m}min`;
+  return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}`;
+}
+
 const MONTHS = [
   "janeiro",
   "fevereiro",

@@ -12,7 +12,7 @@
  * seria o app perguntando ao usuário qual das duas telas de hoje ele quis.
  */
 
-import { Calendar, FileText, History, Sparkles, type LucideIcon } from "lucide-react";
+import { FileText, History, Sparkles, type LucideIcon } from "lucide-react";
 
 import { EmptyState, PageHeader } from "../design-system/primitives";
 
@@ -39,15 +39,10 @@ function Module({
   );
 }
 
-export const CalendarScreen = () => (
-  <Module
-    title="Calendário"
-    subtitle="Mês, semana e dia com timeblocking"
-    icon={Calendar}
-    emptyTitle="Nenhum evento"
-    hint="Timeblocking por arrasto, recorrência RFC-5545 e detecção de conflitos chegam no M3."
-  />
-);
+// `CalendarScreen` saiu daqui no M3: virou `features/calendar/CalendarScreen`,
+// com mês/semana/dia, timeblocking por arrasto e detecção de conflitos. Foi o
+// mesmo caminho do Dashboard (M2) e dos Hábitos — a tela nasce como promessa
+// honesta aqui e sai quando o marco a entrega.
 
 export const NotesScreen = () => (
   <Module

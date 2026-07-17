@@ -11,10 +11,7 @@ use crate::application::ports::{
 use crate::domain::entities::{validate_title, Kind, Status};
 use crate::domain::errors::{NexusError, Result};
 use crate::domain::ledger::{EventType, NewLedgerEvent};
-
-/// Abaixo desta distância entre vizinhos, a média começa a perder precisão no
-/// double e é hora de reespaçar. ~50 inserções sucessivas no mesmo ponto.
-const MIN_GAP: f64 = 1e-6;
+use crate::domain::ordering::order_between;
 
 pub struct TaskService {
     pub tasks: Arc<dyn TaskRepository>,
@@ -201,24 +198,16 @@ impl TaskService {
     pub fn move_to(&self, id: &str, project_id: &str, to_index: usize) -> Result<()> {
         let (before, after) = self.tasks.neighbours(project_id, to_index)?;
 
-        let new_order = match (before, after) {
-            (None, None) => 0.0,                // lista vazia
-            (None, Some(first)) => first - 1.0, // topo
-            (Some(last), None) => last + 1.0,   // fim
-            (Some(a), Some(b)) => {
-                if (b - a).abs() < MIN_GAP {
-                    // Saturou: reespaça e refaz a conta com folga.
-                    self.tasks.renumber_project_tasks(project_id)?;
-                    let (a2, b2) = self.tasks.neighbours(project_id, to_index)?;
-                    match (a2, b2) {
-                        (Some(a2), Some(b2)) => (a2 + b2) / 2.0,
-                        (None, Some(f)) => f - 1.0,
-                        (Some(l), None) => l + 1.0,
-                        (None, None) => 0.0,
-                    }
-                } else {
-                    (a + b) / 2.0
-                }
+        let new_order = match order_between(before, after) {
+            Some(order) => order,
+            None => {
+                // Saturou: reespaça e refaz a conta com folga.
+                self.tasks.renumber_project_tasks(project_id)?;
+                let (a, b) = self.tasks.neighbours(project_id, to_index)?;
+                // O reespaçamento devolve folga 1.0 entre vizinhos, então a
+                // média não pode saturar de novo — e se saturasse, 0.0 é a
+                // origem de uma lista que acabou de ser renumerada.
+                order_between(a, b).unwrap_or(0.0)
             }
         };
 

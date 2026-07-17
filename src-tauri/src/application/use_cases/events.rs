@@ -13,7 +13,7 @@ use crate::application::ports::{
 use crate::domain::entities::{validate_title, Kind};
 use crate::domain::errors::{NexusError, Result};
 use crate::domain::ledger::{EventType, NewLedgerEvent};
-use crate::domain::recurrence::overlaps;
+use crate::domain::recurrence::{overlaps, Recurrence};
 use crate::domain::schedule::{format_day, parse_day};
 
 /// Até onde a série é materializada (§7 do plano).
@@ -180,6 +180,63 @@ impl EventService {
         )
     }
 
+    /// Estica ou encolhe UMA ocorrência (a borda inferior do bloco).
+    ///
+    /// É um `move` cujo início não muda: por isso reusa o mesmo caminho do
+    /// arrasto, com o mesmo destacamento da série e a mesma transação. Um
+    /// segundo caminho de escrita para "quase mover" seria a segunda chance de
+    /// esquecer o ledger ou o `moved`.
+    ///
+    /// Redimensionar uma ocorrência de série solta AQUELA da regra, como o
+    /// arrasto: o usuário esticou a terapia desta terça, não todas as terças.
+    pub fn resize_event(
+        &self,
+        event_id: &str,
+        occurrence_start: i64,
+        new_end: i64,
+    ) -> Result<Occurrence> {
+        let event = self.events.get(event_id)?;
+
+        // `<=` e não `<`: aqui a duração zero não é um lembrete legítimo (como
+        // no create), é o usuário tendo arrastado a borda para cima do início.
+        if new_end <= occurrence_start {
+            return Err(NexusError::Validation(
+                "um evento não pode terminar antes de começar".into(),
+            ));
+        }
+
+        let day = format_day(local_at(occurrence_start)?.date_naive());
+        let detach = event.rrule.is_some();
+
+        let ledger = NewLedgerEvent {
+            ts: self.clock.now_ms(),
+            day: self.clock.today_local(),
+            entity_id: event_id.to_string(),
+            entity_kind: Kind::Event,
+            event_type: EventType::StatusChanged,
+            payload: json!({
+                "resized": true,
+                "occurrence": occurrence_start,
+                "to": new_end,
+                "detachedFromSeries": detach,
+            }),
+            title_snapshot: event.title.clone(),
+        };
+
+        self.events.move_occurrence_with_event(
+            &OccurrenceMove {
+                event_id,
+                from_start: occurrence_start,
+                // O início é o mesmo: só a borda de baixo se mexeu.
+                to_start: occurrence_start,
+                to_end: new_end,
+                to_day: &day,
+                detach,
+            },
+            &ledger,
+        )
+    }
+
     /// "Toda terça, MENOS a de 25/11."
     ///
     /// A linha continua na tabela de propósito: apagá-la faria a próxima
@@ -221,6 +278,72 @@ impl EventService {
         };
 
         self.nodes.delete_with_event(id, &ledger)
+    }
+
+    /// Estende a janela materializada até o fim de `until_month` ('YYYY-MM').
+    ///
+    /// O passo que faltava da 0007: sem ele a série acaba 18 meses depois da
+    /// âncora e o mês 19 abre vazio — não porque não haja compromisso, mas
+    /// porque ninguém o escreveu.
+    ///
+    /// **Por que é um comando explícito, e não parte da leitura do calendário.**
+    /// Materializar é ESCREVER. A leitura do mês roda no pool r2d2, que abre
+    /// `READ_ONLY` + `query_only=ON` justamente para nunca escrever; estender ali
+    /// levaria um `SQLITE_READONLY` na cara do usuário ao virar o mês. A UI chama
+    /// isto ao navegar para perto da borda, e a escrita entra pela fila do
+    /// `Db::write` como qualquer outra.
+    ///
+    /// **Por que não grava no ledger.** O ledger é a história do usuário, e
+    /// estender a janela não é um fato da vida dele: é o NEXUS terminando de
+    /// escrever uma decisão que já foi registrada quando a série foi criada.
+    /// Um evento por extensão encheria a Timeline de linhas que ninguém causou.
+    ///
+    /// Devolve quantas ocorrências novas nasceram — 0 quando não havia o que
+    /// fazer, que é a resposta normal.
+    pub fn extend_materialization(&self, until_month: &str) -> Result<usize> {
+        let until = parse_month_end(until_month)?;
+        // A borda é comparada em epoch: `rule_start` é epoch, e o dia local só
+        // vira instante aqui, uma vez, em vez de dentro do SQL (onde
+        // `datetime(..., 'localtime')` não usaria índice e dependeria do fuso do
+        // processo — a razão de a coluna `day` existir na 0007).
+        let until_ms = end_of_day_ms(until)?;
+
+        let mut written = 0;
+        for tail in self.events.series_needing_extension(until_ms)? {
+            let anchor_dt = local_at(tail.anchor_starts_at)?;
+            let anchor = anchor_dt.date_naive();
+
+            // Continua do turno seguinte ao último materializado. `succ_opt` e
+            // não "+1 dia em ms" pela mesma razão de sempre: dia é calendário,
+            // não aritmética de instante.
+            let Some(from) = local_at(tail.last_materialised)?.date_naive().succ_opt() else {
+                continue;
+            };
+
+            // O fim da recorrência ganha do horizonte pedido: um curso que
+            // acaba em setembro não gera aula em 2029 por o usuário ter rolado
+            // o calendário até lá.
+            let stop = match tail.recurrence_end {
+                Some(end) => until.min(local_at(end)?.date_naive()),
+                None => until,
+            };
+
+            let occurrences = expand_rule(
+                &tail.rrule,
+                anchor,
+                anchor_dt.time(),
+                tail.anchor_ends_at - tail.anchor_starts_at,
+                from,
+                stop,
+            );
+            if occurrences.is_empty() {
+                continue;
+            }
+            written += self
+                .events
+                .append_occurrences(&tail.event_id, &occurrences)?;
+        }
+        Ok(written)
     }
 
     /// Os choques de horário dentro de uma janela.
@@ -295,11 +418,35 @@ fn materialise(d: &NewEventDetails) -> Result<Vec<NewOccurrence>> {
         None => horizon,
     };
 
-    let duration_ms = d.ends_at - d.starts_at;
-    let time = start.time();
+    Ok(expand_rule(
+        rule,
+        anchor,
+        start.time(),
+        d.ends_at - d.starts_at,
+        anchor,
+        until,
+    ))
+}
 
-    Ok(rule
-        .expand(anchor, anchor, until)
+/// Os turnos de uma regra entre `from` e `until`, como ocorrências.
+///
+/// Compartilhada pela criação (que expande da âncora) e pela extensão (que
+/// expande da borda para a frente). Uma segunda expansão, escrita à parte para a
+/// extensão, seria uma segunda chance de errar a virada do horário de verão — e
+/// as duas divergiriam no dia em que só uma fosse corrigida.
+///
+/// `anchor` é sempre o evento ORIGINAL, mesmo quando `from` está 18 meses à
+/// frente: é a âncora que dá a fase de "a cada 2 semanas". Passar a borda como
+/// âncora faria a série escorregar de semana a cada extensão.
+fn expand_rule(
+    rule: &Recurrence,
+    anchor: NaiveDate,
+    time: NaiveTime,
+    duration_ms: i64,
+    from: NaiveDate,
+    until: NaiveDate,
+) -> Vec<NewOccurrence> {
+    rule.expand(anchor, from, until)
         .into_iter()
         .filter_map(|day| {
             // A hora de PAREDE é o que se repete: "toda terça às 19h" são 19h dos
@@ -312,7 +459,39 @@ fn materialise(d: &NewEventDetails) -> Result<Vec<NewOccurrence>> {
                 day: format_day(day),
             })
         })
-        .collect())
+        .collect()
+}
+
+/// 'YYYY-MM' -> o último dia daquele mês.
+///
+/// O horizonte que a UI pede é um MÊS ("materialize até 2028-03"), não um dia:
+/// o gesto que o dispara é navegar para perto da borda, e o usuário navega em
+/// meses. Aceitar um dia aqui só empurraria esta conta para dentro da tela.
+fn parse_month_end(month: &str) -> Result<NaiveDate> {
+    let bad = || NexusError::Validation(format!("mês inválido: {month} (esperado 'AAAA-MM')"));
+
+    let (y, m) = month.split_once('-').ok_or_else(bad)?;
+    let year: i32 = y.parse().map_err(|_| bad())?;
+    let month0: u32 = m.parse().map_err(|_| bad())?;
+
+    // O dia 1 do mês SEGUINTE, menos um dia: o último dia deste mês, sem
+    // nenhuma regra de bissexto escrita à mão.
+    let first = NaiveDate::from_ymd_opt(year, month0, 1).ok_or_else(bad)?;
+    first
+        .checked_add_months(Months::new(1))
+        .and_then(|d| d.pred_opt())
+        .ok_or_else(bad)
+}
+
+/// O último instante de um dia local — a borda superior da janela.
+///
+/// 23:59:59.999 e não a meia-noite seguinte: a comparação com `rule_start` é
+/// `<`, e um evento que começa exatamente à meia-noite do dia seguinte não
+/// pertence a este mês.
+fn end_of_day_ms(day: NaiveDate) -> Result<i64> {
+    let time = NaiveTime::from_hms_milli_opt(23, 59, 59, 999).expect("23:59:59.999 é uma hora");
+    local_ms(day, time)
+        .ok_or_else(|| NexusError::Validation(format!("fim de dia fora do calendário: {day}")))
 }
 
 /// O instante, no fuso do usuário.
@@ -444,6 +623,94 @@ mod tests {
         let start = ms("2026-07-17", 23, 30);
         let occ = expand(&details(start, start + 3_600_000, None));
         assert_eq!(occ[0].day, "2026-07-17");
+    }
+
+    #[test]
+    fn the_month_horizon_is_the_last_day_of_that_month() {
+        assert_eq!(
+            parse_month_end("2028-03").unwrap(),
+            NaiveDate::from_ymd_opt(2028, 3, 31).unwrap()
+        );
+        assert_eq!(
+            parse_month_end("2028-02").unwrap(),
+            NaiveDate::from_ymd_opt(2028, 2, 29).unwrap(),
+            "2028 é bissexto, e ninguém escreveu uma regra de bissexto"
+        );
+        assert_eq!(
+            parse_month_end("2027-12").unwrap(),
+            NaiveDate::from_ymd_opt(2027, 12, 31).unwrap(),
+            "dezembro tem que virar o ANO, não o mês 13"
+        );
+    }
+
+    #[test]
+    fn a_month_outside_the_vocabulary_is_refused_instead_of_guessed() {
+        // Um 'AAAA-MM' torto vindo da UI não pode virar uma janela silenciosa de
+        // tamanho errado: ela materializaria a série no lugar errado, e o erro
+        // só apareceria como um mês vazio meses depois.
+        for bad in ["2028", "2028-13", "2028-00", "março/2028", "", "-"] {
+            assert!(
+                parse_month_end(bad).is_err(),
+                "'{bad}' não devia ser aceito como mês"
+            );
+        }
+    }
+
+    #[test]
+    fn the_extension_continues_the_phase_of_the_anchor_instead_of_the_border() {
+        // "A cada 2 semanas" expandido a partir da BORDA (e não da âncora) tem
+        // 50% de chance de escorregar para a semana errada — e a série se
+        // deslocaria mais um pouco a cada extensão, sem nunca dar erro.
+        let anchor = parse_day("2026-07-14").unwrap(); // uma terça
+        let time = NaiveTime::from_hms_opt(19, 0, 0).unwrap();
+        let rule = Recurrence::Weekly {
+            interval: 2,
+            days: vec![2],
+        };
+
+        // A borda cai numa terça ÍMPAR em relação à âncora (a semana que a regra
+        // pula): é a que pegaria a fase errada se fosse usada como âncora.
+        let border = parse_day("2026-07-21").unwrap();
+        let occ = expand_rule(
+            &rule,
+            anchor,
+            time,
+            3_600_000,
+            border,
+            parse_day("2026-08-31").unwrap(),
+        );
+
+        let days: Vec<&str> = occ.iter().map(|o| o.day.as_str()).collect();
+        assert_eq!(
+            days,
+            vec!["2026-07-28", "2026-08-11", "2026-08-25"],
+            "as terças da fase da âncora, não as da borda"
+        );
+    }
+
+    #[test]
+    fn a_finished_series_expands_to_nothing_no_matter_how_far_the_user_navigates() {
+        // O corte que o SQL não sabe fazer (ver `series_needing_extension`): um
+        // curso encerrado é oferecido como candidato à extensão, e é AQUI que
+        // ele morre. Sem este corte, rolar o calendário até 2029 materializaria
+        // aula de um curso que acabou em julho.
+        let anchor = parse_day("2026-07-14").unwrap();
+        let time = NaiveTime::from_hms_opt(9, 0, 0).unwrap();
+
+        // `stop` = min(horizonte, fim da recorrência), como o serviço calcula.
+        let stop = parse_day("2028-12-31")
+            .unwrap()
+            .min(parse_day("2026-07-16").unwrap());
+
+        let occ = expand_rule(
+            &Recurrence::Daily { interval: 1 },
+            anchor,
+            time,
+            3_600_000,
+            parse_day("2026-07-17").unwrap(), // a borda já passou do fim
+            stop,
+        );
+        assert!(occ.is_empty(), "o fim da recorrência ganha do horizonte");
     }
 
     #[test]

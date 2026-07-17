@@ -434,6 +434,30 @@ pub struct OccurrenceMove<'a> {
     pub detach: bool,
 }
 
+/// Uma série cuja materialização acaba antes do horizonte pedido.
+///
+/// O que a extensão precisa saber para continuar a série de onde ela parou, e
+/// nada além: a regra, a âncora e a borda atual.
+///
+/// `anchor_*` é o evento ORIGINAL, não a última ocorrência. É a âncora que
+/// define a fase — "a cada 2 semanas" contado a partir da última materializada
+/// escorregaria de semana a cada extensão, e a série se deslocaria um pouco
+/// mais a cada vez que o usuário navegasse para longe.
+#[derive(Debug, Clone)]
+pub struct SeriesTail {
+    pub event_id: String,
+    pub anchor_starts_at: i64,
+    pub anchor_ends_at: i64,
+    pub rrule: Recurrence,
+    pub recurrence_end: Option<i64>,
+    /// O `rule_start` do último turno que existe hoje — a borda.
+    ///
+    /// `rule_start` e não `starts_at`: a última ocorrência pode ter sido
+    /// arrastada para longe, e o que a extensão quer saber é até onde a REGRA
+    /// já foi aplicada. Ver a 0008.
+    pub last_materialised: i64,
+}
+
 pub trait EventRepository: Send + Sync {
     /// Cria o node, o satélite, as ocorrências E o evento de ledger — tudo na
     /// MESMA transação.
@@ -476,6 +500,22 @@ pub trait EventRepository: Send + Sync {
         starts_at: i64,
         event: &NewLedgerEvent,
     ) -> Result<()>;
+
+    /// As séries cujo último TURNO cai antes de `until_ms` — as que a extensão
+    /// tem trabalho a fazer.
+    ///
+    /// Filtra no SQL e não em Rust: a resposta normal desta pergunta é uma lista
+    /// VAZIA (o usuário está dentro da janela já materializada), e trazer todas
+    /// as séries do banco para descobrir isso seria pagar por um trabalho que
+    /// quase nunca existe.
+    fn series_needing_extension(&self, until_ms: i64) -> Result<Vec<SeriesTail>>;
+
+    /// Grava a continuação de uma série. Devolve quantas linhas eram novas.
+    ///
+    /// Idempotente por contrato: chamar duas vezes com o mesmo horizonte insere
+    /// zero na segunda. A UI dispara isto ao navegar, e navegar de outubro para
+    /// novembro e voltar não pode custar uma reescrita da série.
+    fn append_occurrences(&self, event_id: &str, occurrences: &[NewOccurrence]) -> Result<usize>;
 }
 
 /* ===== Metas e sub-desafios ===== */
@@ -542,6 +582,12 @@ pub struct NewMilestone {
     pub habit_id: Option<String>,
     pub target_count: Option<i64>,
     pub weight: f64,
+    /// 'YYYY-MM-DD' local: o dia a partir do qual o contador conta.
+    ///
+    /// `None` num 'counter' vira HOJE no serviço — "30 dias de academia" pedido
+    /// hoje conta de hoje. Uma data anterior é aceita ("conte desde o início do
+    /// mês"); o futuro, não. Ver a 0009.
+    pub counts_from: Option<String>,
 }
 
 /// Um sub-desafio. `status == "done"` É o checkbox — ver a §4 da 0007.
@@ -557,8 +603,12 @@ pub struct Milestone {
     pub target_count: Option<i64>,
     pub weight: f64,
     pub sort_order: f64,
-    /// Ticks 'done' do hábito ligado. `None` num 'simple' — ele não conta nada.
-    /// Vem de query: nunca é um número que o usuário digitou.
+    /// O dia a partir do qual o contador conta. `None` = desde sempre, que é o
+    /// que dizem as linhas nascidas antes da 0009.
+    pub counts_from: Option<String>,
+    /// Ticks 'done' do hábito ligado, **a partir de `counts_from`**. `None` num
+    /// 'simple' — ele não conta nada. Vem de query: nunca é um número que o
+    /// usuário digitou.
     pub current_count: Option<i64>,
 }
 
@@ -607,4 +657,26 @@ pub trait GoalRepository: Send + Sync {
         done: bool,
         event: &NewLedgerEvent,
     ) -> Result<Milestone>;
+
+    /// Qual das duas barras manda nesta meta.
+    ///
+    /// Sem evento de ledger, igual ao `update_schedule` dos hábitos: trocar a
+    /// régua não é um fato da vida do usuário, é a configuração de como o fato é
+    /// medido. Ver ADR-0023.
+    fn set_progress_source(&self, goal_id: &str, source: ProgressSource) -> Result<Goal>;
+
+    /// A coordenada dos vizinhos da posição `index` na árvore da meta.
+    ///
+    /// Gêmeo do `neighbours` das tarefas, e pela mesma razão: mover é a média
+    /// dos dois: UM update de UMA linha. Ver `domain::ordering`.
+    fn milestone_neighbours(
+        &self,
+        goal_id: &str,
+        index: usize,
+    ) -> Result<(Option<f64>, Option<f64>)>;
+
+    fn reorder_milestone(&self, id: &str, new_order: f64) -> Result<()>;
+
+    /// Reespaça a árvore em inteiros quando a média satura.
+    fn renumber_milestones(&self, goal_id: &str) -> Result<()>;
 }

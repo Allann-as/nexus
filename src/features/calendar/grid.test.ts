@@ -15,12 +15,16 @@ import {
   addMonths,
   dayEndMs,
   dayStartMs,
+  durationLabel,
   fractionOfDay,
   fromDay,
+  hhmm,
+  instantAt,
   isSameMonth,
   lastDayOfMonth,
   monthGrid,
   monthLabel,
+  snapMs,
   toDay,
   weekGrid,
   weekStart,
@@ -221,5 +225,55 @@ describe("monthLabel", () => {
   it("escreve o mês em português", () => {
     expect(monthLabel("2026-07-17")).toBe("julho de 2026");
     expect(monthLabel("2026-03-01")).toBe("março de 2026");
+  });
+});
+
+describe("instantAt", () => {
+  it("é o inverso do fractionOfDay", () => {
+    // Os dois lados do arrasto: `fractionOfDay` põe o bloco na coluna,
+    // `instantAt` lê onde o usuário o soltou. Uma divergência entre eles moveria
+    // o evento para um horário diferente do que a mão largou.
+    const day = "2026-07-17";
+    const noon = dayStartMs(day) + 12 * 3_600_000;
+    expect(instantAt(day, fractionOfDay(noon, day))).toBe(noon);
+  });
+
+  it("põe o topo da coluna na meia-noite e o fim no dia seguinte", () => {
+    expect(instantAt("2026-07-17", 0)).toBe(dayStartMs("2026-07-17"));
+    expect(instantAt("2026-07-17", 1)).toBe(dayEndMs("2026-07-17"));
+  });
+});
+
+describe("snapMs", () => {
+  it("alinha ao slot mais próximo", () => {
+    const day = "2026-07-17";
+    const t = (h: number, m: number) => dayStartMs(day) + (h * 60 + m) * 60_000;
+
+    expect(snapMs(t(9, 20), 30, day)).toBe(t(9, 30));
+    expect(snapMs(t(9, 10), 30, day)).toBe(t(9, 0));
+    // Quem já está no slot fica onde está.
+    expect(snapMs(t(9, 30), 30, day)).toBe(t(9, 30));
+  });
+
+  it("ancora na meia-noite local, não no epoch", () => {
+    // O epoch zero é meia-noite em Londres. Num fuso de meia hora (Índia,
+    // Nepal), arredondar o epoch cru poria todo slot 30min fora do lugar — e o
+    // NEXUS não escolhe onde é usado.
+    const day = "2026-07-17";
+    const snapped = snapMs(dayStartMs(day) + 61_000, 30, day);
+    expect(hhmm(snapped)).toBe("00:00");
+  });
+});
+
+describe("durationLabel", () => {
+  it("fala como um humano", () => {
+    expect(durationLabel(30 * 60_000)).toBe("30min");
+    expect(durationLabel(60 * 60_000)).toBe("1h");
+    expect(durationLabel(90 * 60_000)).toBe("1h30");
+    expect(durationLabel(125 * 60_000)).toBe("2h05");
+  });
+
+  it("não inventa duração negativa", () => {
+    expect(durationLabel(-5_000)).toBe("0min");
   });
 });

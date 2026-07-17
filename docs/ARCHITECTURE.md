@@ -1,7 +1,7 @@
 # NEXUS — Arquitetura
 
 > Documento vivo. Atualize-o no mesmo commit que muda a estrutura.
-> Estado atual: **M3 — Tempo (em curso)**. M2.5 concluído.
+> Estado atual: **M3 concluído** (Calendário + Metas). Próximo: M3.5 — Esferas I.
 
 ## 1. O que o NEXUS é
 
@@ -96,7 +96,7 @@ logs/      rotação diária
 | **M1** | CRUD Áreas/Nodes, Inbox, ledger, FTS5, palette com busca real | ✅ **concluído** |
 | **M2** | Tarefas, Projetos, Hábitos, Rotinas, ticks, streaks, Dashboard v1 | ✅ **concluído** |
 | **M2.5** | Design system Midnight, Esferas da Vida, o Hub, rail global | ✅ **concluído** |
-| M3 | Calendário (timeblocking, RFC-5545, conflitos), Metas + sub-desafios | ⬜ |
+| **M3** | Calendário (timeblocking, RFC-5545, conflitos), Metas + sub-desafios | ✅ **concluído** |
 | M3.5 | Esferas I: Saúde (checkpoints, treino, exames) + Finanças (aportes, Saúde Financeira) | ⬜ |
 | M4 | Esferas II: Objetivos Financeiros, Estudos + Biblioteca, Carreira; Notas; Timeline | ⬜ |
 | M4.5 | `bi_engine`, Momentum, Conquistas, Retrospectiva | ⬜ |
@@ -138,6 +138,29 @@ logs/      rotação diária
   mover é 1 update de 1 linha, com reespaçamento automático quando o double
   satura.
 - **Heatmap anual** em SVG puro (nada de biblioteca de gráficos para 365 rects).
+
+### O que o M3 entrega de verdade
+
+- **Calendário** em mês/semana/dia. A grade do mês tem 6 linhas fixas (um mês que
+  encolhe faz a tela pular a cada seta); a de horas tem slots de 30 min e abre nas
+  07h — mas **nunca depois de agora**, senão quem abre o app às 4h da manhã não vê
+  a linha do "agora" (achado dirigindo o app).
+- **Timeblocking** por Pointer Events com `setPointerCapture` (sem ele, mover o
+  mouse rápido para fora do bloco congela o arrasto): arrastar no vazio cria,
+  arrastar o bloco move, arrastar a borda de baixo redimensiona.
+- **Conflitos** lado a lado, com largura dividida pela maior CONCORRÊNCIA do
+  cluster — não pelo tamanho dele. O cluster acumula pelo MAIOR fim visto, senão
+  um evento das 9h às 18h fecharia o grupo cedo e desenharia por cima dos curtos.
+  Borda `--warning`; o fundo continua sendo da Esfera (a cor não codifica).
+- **A janela se estende sozinha** conforme a navegação (ADR-0026), e toda
+  ocorrência lembra de que turno da regra ela é (ADR-0022) — sem isso, arrastar a
+  última ocorrência abre um buraco na série ou ressuscita a que foi arrastada.
+- **Metas** com barra grossa, projeção por mínimos quadrados (com a fórmula a um
+  clique) e árvore de sub-desafios: checkbox, contador que se preenche pelos ticks
+  do hábito ligado, arrasto para reordenar e o toggle de qual barra manda.
+- **A ordem de lista arrastável virou domínio** (`domain::ordering`): a média dos
+  vizinhos que o M2 escreveu para tarefas agora serve também aos sub-desafios —
+  duas cópias divergiriam no dia em que só uma fosse corrigida.
 
 ### Medições reais (build `tauri build`, release)
 

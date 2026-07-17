@@ -39,12 +39,20 @@ const SELECT_GOAL: &str = "
 /// os ticks que ele já dá todo dia é que o alimentam. Num 'simple' o `habit_id`
 /// é NULL e a subquery devolve NULL, não zero: "não conta nada" e "conta zero"
 /// são coisas diferentes na barra da meta.
+///
+/// E ele conta a partir de `counts_from` (0009). Sem esse piso, um "30 dias de
+/// academia" criado hoje sobre um hábito com 120 dias de histórico nasce
+/// marcado, exibindo **51/30** — foi o que a tela mostrou quando o M3 foi
+/// dirigido de verdade. `counts_from` NULL = desde sempre, que é o que dizem as
+/// linhas anteriores à 0009. A comparação de texto 'YYYY-MM-DD' é exata e usa
+/// índice; nenhum `date(..., 'localtime')` aqui — ver a §3 da 0007.
 const SELECT_MILESTONE: &str = "
     SELECT n.id, n.parent_id, n.title, n.status,
-           m.kind, m.habit_id, m.target_count, m.weight, m.sort_order,
+           m.kind, m.habit_id, m.target_count, m.weight, m.sort_order, m.counts_from,
            CASE WHEN m.habit_id IS NULL THEN NULL ELSE (
                SELECT COUNT(*) FROM habit_ticks t
                 WHERE t.habit_id = m.habit_id AND t.status = 'done'
+                  AND (m.counts_from IS NULL OR t.day >= m.counts_from)
            ) END
       FROM nodes n
       JOIN milestone_details m ON m.node_id = n.id";
@@ -83,7 +91,8 @@ fn map_milestone(row: &Row) -> rusqlite::Result<Milestone> {
         target_count: row.get(6)?,
         weight: row.get(7)?,
         sort_order: row.get(8)?,
-        current_count: row.get(9)?,
+        counts_from: row.get(9)?,
+        current_count: row.get(10)?,
     })
 }
 
@@ -234,15 +243,16 @@ impl GoalRepository for SqliteGoalRepository {
 
             tx.execute(
                 "INSERT INTO milestone_details
-                   (node_id, kind, habit_id, target_count, weight, sort_order)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                   (node_id, kind, habit_id, target_count, weight, sort_order, counts_from)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 params![
                     id,
                     m.kind.as_str(),
                     m.habit_id,
                     m.target_count,
                     m.weight,
-                    next
+                    next,
+                    m.counts_from,
                 ],
             )?;
             append_in_tx(&tx, event)?;
@@ -308,6 +318,100 @@ impl GoalRepository for SqliteGoalRepository {
             )?;
             tx.commit()?;
             Ok(updated)
+        })
+    }
+
+    fn set_progress_source(&self, goal_id: &str, source: ProgressSource) -> Result<Goal> {
+        self.db.with_write(|c| {
+            let changed = c.execute(
+                "UPDATE goal_details SET progress_source = ?2 WHERE node_id = ?1",
+                params![goal_id, source.as_str()],
+            )?;
+            if changed == 0 {
+                return Err(NexusError::NotFound(format!("meta {goal_id}")));
+            }
+            Ok(c.query_row(
+                &format!("{SELECT_GOAL} WHERE n.id = ?1"),
+                params![goal_id],
+                map_goal,
+            )?)
+        })
+    }
+
+    fn milestone_neighbours(
+        &self,
+        goal_id: &str,
+        index: usize,
+    ) -> Result<(Option<f64>, Option<f64>)> {
+        self.db.with_read(|c| {
+            // O mesmo `ORDER BY` do `list_milestones`, e isso não é coincidência:
+            // `index` é a posição na lista que o usuário VÊ. Uma ordem diferente
+            // aqui faria o item cair entre os vizinhos de outra lista.
+            let mut stmt = c.prepare_cached(
+                "SELECT m.sort_order
+                   FROM milestone_details m
+                   JOIN nodes n ON n.id = m.node_id
+                  WHERE n.parent_id = ?1
+                  ORDER BY m.sort_order, n.id",
+            )?;
+            let orders: Vec<f64> = stmt
+                .query_map(params![goal_id], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?;
+
+            let before = if index == 0 {
+                None
+            } else {
+                orders.get(index - 1).copied()
+            };
+            Ok((before, orders.get(index).copied()))
+        })
+    }
+
+    fn reorder_milestone(&self, id: &str, new_order: f64) -> Result<()> {
+        self.db.with_write(|c| {
+            let changed = c.execute(
+                "UPDATE milestone_details SET sort_order = ?2 WHERE node_id = ?1",
+                params![id, new_order],
+            )?;
+            if changed == 0 {
+                return Err(NexusError::NotFound(format!("sub-desafio {id}")));
+            }
+            Ok(())
+        })
+    }
+
+    fn renumber_milestones(&self, goal_id: &str) -> Result<()> {
+        self.db.with_write(|conn| {
+            let tx = conn.transaction()?;
+
+            let ids: Vec<String> = {
+                let mut stmt = tx.prepare(
+                    "SELECT m.node_id
+                       FROM milestone_details m
+                       JOIN nodes n ON n.id = m.node_id
+                      WHERE n.parent_id = ?1
+                      ORDER BY m.sort_order, n.id",
+                )?;
+                // Coletado numa variável ligada: o iterador empresta `stmt`, que
+                // morre no fim deste bloco.
+                let rows: Vec<String> = stmt
+                    .query_map(params![goal_id], |r| r.get(0))?
+                    .collect::<rusqlite::Result<_>>()?;
+                rows
+            };
+
+            // Reespaça em inteiros, devolvendo folga máxima para as próximas
+            // médias. O(n), mas só roda quando o double satura — na prática,
+            // quase nunca.
+            for (i, id) in ids.iter().enumerate() {
+                tx.execute(
+                    "UPDATE milestone_details SET sort_order = ?2 WHERE node_id = ?1",
+                    params![id, i as f64],
+                )?;
+            }
+
+            tx.commit()?;
+            Ok(())
         })
     }
 }
@@ -391,6 +495,7 @@ mod tests {
             habit_id: None,
             target_count: None,
             weight,
+            counts_from: None,
         }
     }
 
@@ -501,12 +606,153 @@ mod tests {
                 habit_id: Some("h1".into()),
                 target_count: Some(30),
                 weight: 1.0,
+                // Sem piso: conta o histórico inteiro do hábito.
+                counts_from: None,
             },
         );
 
         let found = repo.get_milestone("m1").unwrap();
         assert_eq!(found.current_count, Some(2), "só os 'done' contam");
         assert_eq!(found.target_count, Some(30));
+    }
+
+    #[test]
+    fn a_counter_only_counts_from_the_day_it_started_counting() {
+        // O bug que a TELA mostrou: "30 dias de academia", criado hoje sobre um
+        // hábito com 120 dias de histórico, nasceu marcado exibindo 51/30. Um
+        // contador que conta o passado não mede um desafio, mede o arquivo.
+        //
+        // Este teste fixa o piso da 0009: os ticks anteriores a `counts_from`
+        // são do arquivo, não do desafio.
+        let (_dir, db, repo) = fixture();
+        goal(&repo);
+
+        let habits = SqliteHabitRepository::new(db.clone());
+        db.with_write(|c| {
+            c.execute(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('h1', 'habit', 'Academia', 0, 0)",
+                [],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+        habits
+            .create_details(
+                "h1",
+                &NewHabitDetails {
+                    schedule: Schedule::Daily,
+                    target_value: None,
+                    unit: None,
+                    routine_id: None,
+                    reminder_time: None,
+                },
+            )
+            .unwrap();
+
+        // Três dias de histórico ANTES do desafio, dois DEPOIS.
+        for day in [
+            "2026-07-10",
+            "2026-07-11",
+            "2026-07-12",
+            "2026-07-15",
+            "2026-07-16",
+        ] {
+            habits
+                .tick_with_event(
+                    "h1",
+                    day,
+                    Tick {
+                        status: TickStatus::Done,
+                        value: None,
+                    },
+                    0,
+                    &ledger_event("h1", Kind::Habit),
+                )
+                .unwrap();
+        }
+
+        milestone(
+            &repo,
+            "m1",
+            NewMilestone {
+                title: "30 dias de academia".into(),
+                goal_id: "g1".into(),
+                kind: MilestoneKind::Counter,
+                habit_id: Some("h1".into()),
+                target_count: Some(30),
+                weight: 1.0,
+                counts_from: Some("2026-07-15".into()),
+            },
+        );
+
+        let found = repo.get_milestone("m1").unwrap();
+        assert_eq!(
+            found.current_count,
+            Some(2),
+            "os três ticks anteriores ao desafio são do arquivo, não dele"
+        );
+        assert_eq!(found.counts_from.as_deref(), Some("2026-07-15"));
+    }
+
+    #[test]
+    fn the_floor_includes_the_day_it_starts() {
+        // `>=` e não `>`: quem cria o desafio hoje e treina hoje fez 1/30, não
+        // 0/30. Um piso exclusivo comeria o primeiro dia — e o usuário veria o
+        // contador ignorar o treino que ele acabou de marcar.
+        let (_dir, db, repo) = fixture();
+        goal(&repo);
+
+        let habits = SqliteHabitRepository::new(db.clone());
+        db.with_write(|c| {
+            c.execute(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('h1', 'habit', 'Academia', 0, 0)",
+                [],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+        habits
+            .create_details(
+                "h1",
+                &NewHabitDetails {
+                    schedule: Schedule::Daily,
+                    target_value: None,
+                    unit: None,
+                    routine_id: None,
+                    reminder_time: None,
+                },
+            )
+            .unwrap();
+        habits
+            .tick_with_event(
+                "h1",
+                "2026-07-15",
+                Tick {
+                    status: TickStatus::Done,
+                    value: None,
+                },
+                0,
+                &ledger_event("h1", Kind::Habit),
+            )
+            .unwrap();
+
+        milestone(
+            &repo,
+            "m1",
+            NewMilestone {
+                title: "30 dias de academia".into(),
+                goal_id: "g1".into(),
+                kind: MilestoneKind::Counter,
+                habit_id: Some("h1".into()),
+                target_count: Some(30),
+                weight: 1.0,
+                counts_from: Some("2026-07-15".into()),
+            },
+        );
+
+        assert_eq!(repo.get_milestone("m1").unwrap().current_count, Some(1));
     }
 
     #[test]
@@ -536,6 +782,94 @@ mod tests {
             .set_milestone_done_with_event("m1", false, &ledger_event("m1", Kind::Milestone))
             .unwrap();
         assert_eq!(undone.status, "active", "desmarcar é um clique legítimo");
+    }
+
+    #[test]
+    fn the_progress_source_survives_the_round_trip() {
+        let (_dir, _db, repo) = fixture();
+        goal(&repo);
+
+        let switched = repo
+            .set_progress_source("g1", ProgressSource::Milestones)
+            .unwrap();
+        assert_eq!(switched.progress_source, ProgressSource::Milestones);
+        assert_eq!(
+            repo.get("g1").unwrap().progress_source,
+            ProgressSource::Milestones,
+            "e ficou gravado, não só no que voltou"
+        );
+
+        assert!(
+            repo.set_progress_source("nao-existe", ProgressSource::Metric)
+                .is_err(),
+            "trocar a régua de uma meta que não existe é um erro, não um no-op"
+        );
+    }
+
+    #[test]
+    fn the_neighbours_of_a_position_come_from_the_list_the_user_sees() {
+        // `index` é a posição na lista VISÍVEL. Se este ORDER BY divergisse do
+        // `list_milestones`, o item cairia entre os vizinhos de outra lista — e
+        // o arrasto pousaria no lugar errado.
+        let (_dir, _db, repo) = fixture();
+        goal(&repo);
+        for (i, title) in ["Primeiro", "Segundo", "Terceiro"].iter().enumerate() {
+            milestone(&repo, &format!("m{i}"), simple("g1", title, 1.0));
+        }
+
+        // add_milestone numera 0, 1, 2 (MAX + 1).
+        assert_eq!(
+            repo.milestone_neighbours("g1", 0).unwrap(),
+            (None, Some(0.0)),
+            "o topo não tem vizinho antes"
+        );
+        assert_eq!(
+            repo.milestone_neighbours("g1", 1).unwrap(),
+            (Some(0.0), Some(1.0))
+        );
+        assert_eq!(
+            repo.milestone_neighbours("g1", 3).unwrap(),
+            (Some(2.0), None),
+            "o fim não tem vizinho depois"
+        );
+    }
+
+    #[test]
+    fn renumbering_respaces_the_tree_without_reordering_it() {
+        // O reespaçamento é a válvula de escape da média: ele devolve folga e
+        // NÃO pode mexer na ordem que o usuário vê — senão a lista embaralharia
+        // sozinha justamente no arrasto que a saturou.
+        let (_dir, _db, repo) = fixture();
+        goal(&repo);
+        for (i, title) in ["A", "B", "C"].iter().enumerate() {
+            milestone(&repo, &format!("m{i}"), simple("g1", title, 1.0));
+        }
+
+        // Encosta os três num ponto só, como ~50 arrastos no mesmo lugar fariam.
+        repo.reorder_milestone("m1", 1e-9).unwrap();
+        repo.reorder_milestone("m2", 2e-9).unwrap();
+        repo.reorder_milestone("m0", 0.0).unwrap();
+
+        let before: Vec<String> = repo
+            .list_milestones("g1")
+            .unwrap()
+            .into_iter()
+            .map(|m| m.title)
+            .collect();
+
+        repo.renumber_milestones("g1").unwrap();
+
+        let after = repo.list_milestones("g1").unwrap();
+        assert_eq!(
+            after.iter().map(|m| m.title.clone()).collect::<Vec<_>>(),
+            before,
+            "reespaçar não é reordenar"
+        );
+        assert_eq!(
+            after.iter().map(|m| m.sort_order).collect::<Vec<_>>(),
+            vec![0.0, 1.0, 2.0],
+            "e a folga voltou a ser 1.0"
+        );
     }
 
     #[test]

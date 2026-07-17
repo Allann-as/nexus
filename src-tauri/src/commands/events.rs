@@ -105,6 +105,17 @@ pub fn move_event(
     state.events.move_event(&id, occurrence_start, new_start)
 }
 
+/// Estica/encolhe UMA ocorrência (a borda inferior do bloco no timeblocking).
+#[tauri::command]
+pub fn resize_event(
+    state: State<'_, AppState>,
+    id: String,
+    occurrence_start: i64,
+    new_end: i64,
+) -> Result<Occurrence> {
+    state.events.resize_event(&id, occurrence_start, new_end)
+}
+
 #[tauri::command]
 pub fn cancel_occurrence(
     state: State<'_, AppState>,
@@ -117,6 +128,24 @@ pub fn cancel_occurrence(
 #[tauri::command]
 pub fn delete_event(state: State<'_, AppState>, id: String) -> Result<()> {
     state.events.delete(&id)
+}
+
+/// Estende a materialização até o fim de `untilMonth` ('AAAA-MM').
+///
+/// `async` e não `fn`: um command síncrono roda na thread principal do Tauri, e
+/// estender uma série de "todo dia" por mais dois anos é escrita em disco. A
+/// janela congelaria enquanto o usuário navega — que é exatamente o gesto que
+/// dispara isto. Marcado `async` sem `.await` dentro, o Tauri o despacha para o
+/// pool de tarefas, e a UI segue viva.
+///
+/// Devolve quantas ocorrências nasceram. 0 é a resposta normal: a UI chama ao
+/// chegar perto da borda, e quase sempre não há o que fazer.
+#[tauri::command]
+pub async fn extend_materialization(
+    state: State<'_, AppState>,
+    until_month: String,
+) -> Result<usize> {
+    state.events.extend_materialization(&until_month)
 }
 
 /// Os choques de horário de uma janela. Só avisa — nunca barra uma escrita.

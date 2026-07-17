@@ -63,14 +63,17 @@ pub fn goal_with_progress(state: State<'_, AppState>, id: String) -> Result<Goal
     state.goals.get_with_progress(&id)
 }
 
+/// Registra uma medição. `notedAt` ausente = agora; o passado é aceito, o
+/// futuro não — igual ao `day` do tick de hábito.
 #[tauri::command]
 pub fn add_goal_checkpoint(
     state: State<'_, AppState>,
     id: String,
     value: f64,
     note: Option<String>,
+    noted_at: Option<i64>,
 ) -> Result<Checkpoint> {
-    state.goals.add_checkpoint(&id, value, note)
+    state.goals.add_checkpoint(&id, value, note, noted_at)
 }
 
 /// Um sub-desafio vindo da UI.
@@ -89,6 +92,9 @@ pub struct NewMilestoneDto {
     pub target_count: Option<i64>,
     #[serde(default = "one")]
     pub weight: f64,
+    /// 'AAAA-MM-DD': de quando o contador conta. Ausente num 'counter' = hoje.
+    #[serde(default)]
+    pub counts_from: Option<String>,
 }
 
 fn simple() -> MilestoneKind {
@@ -108,6 +114,7 @@ pub fn add_milestone(state: State<'_, AppState>, milestone: NewMilestoneDto) -> 
         habit_id: milestone.habit_id,
         target_count: milestone.target_count,
         weight: milestone.weight,
+        counts_from: milestone.counts_from,
     })
 }
 
@@ -116,6 +123,22 @@ pub fn add_milestone(state: State<'_, AppState>, milestone: NewMilestoneDto) -> 
 #[tauri::command]
 pub fn set_milestone_done(state: State<'_, AppState>, id: String, done: bool) -> Result<Milestone> {
     state.goals.set_milestone_done(&id, done)
+}
+
+/// Qual barra manda nesta meta: a métrica ou os sub-desafios.
+#[tauri::command]
+pub fn set_goal_progress_source(
+    state: State<'_, AppState>,
+    id: String,
+    source: ProgressSource,
+) -> Result<Goal> {
+    state.goals.set_progress_source(&id, source)
+}
+
+/// Arrasta um sub-desafio para outra posição na árvore.
+#[tauri::command]
+pub fn move_milestone(state: State<'_, AppState>, id: String, to_index: usize) -> Result<()> {
+    state.goals.move_milestone(&id, to_index)
 }
 
 #[cfg(test)]

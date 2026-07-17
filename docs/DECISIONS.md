@@ -572,3 +572,179 @@ não conflita com quem começa às 10h, senão toda agenda cheia acusaria confli
 e o app mostra o conflito sem impedir a escrita. Marcar duas coisas no mesmo
 horário é uma decisão que o usuário tem o direito de tomar; o NEXUS avisa, não
 manda.
+
+---
+
+## ADR-0022 — Toda ocorrência lembra de que TURNO da regra ela é
+
+**Data:** 2026-07-17 · **Status:** aceito · **complementa o ADR-0021**
+
+**Contexto.** O M3 precisava estender a janela de 18 meses da 0007, e a extensão
+tem uma pergunta só: "até que turno desta regra o banco já foi materializado?".
+A resposta parecia ser `MAX(starts_at)`. Não é — e quem quebra isso é o
+timeblocking da mesma 0007: arrastar uma ocorrência **reescreve** o `starts_at`
+dela (é a PK, e o UPDATE acontece no lugar). Depois de um arrasto, `starts_at`
+não diz mais de que turno a linha é.
+
+**As duas bordas erradas, medidas no papel antes de existirem em produção:**
+
+- `MAX(starts_at)` sobre tudo: o usuário empurra a última terça materializada
+  (17/01/2028) para 01/03/2028. A borda vira março; a extensão continua de lá; as
+  terças de 18/01 a 28/02 **nunca nascem**. Um buraco de seis semanas, em
+  silêncio.
+- `MAX(starts_at)` ignorando as movidas: a borda volta para a terça anterior, e a
+  extensão **regenera o slot de 17/01** — a terça que o usuário tirou dali
+  reaparece às 19h. É o mesmo erro que a 0007 evita ao manter a linha da
+  cancelada na tabela, entrando pela porta do arrasto.
+
+**Decisão.** `event_occurrences.rule_start` (0008): `starts_at` é **quando** a
+ocorrência acontece (o usuário manda, arrastando); `rule_start` é **quem** ela é
+(a regra manda). Mais um índice UNIQUE `(event_id, rule_start)` — a invariante
+"uma linha por turno" dita ao banco, e não confiada ao código.
+
+**Consequência.** A idempotência da extensão sai de graça: `INSERT OR IGNORE`
+sobre a UNIQUE descarta o turno que já existe, e "já existe" passa a incluir o
+turno cuja linha foi arrastada para outro dia. Sem o índice, a idempotência seria
+uma promessa do Rust; com ele, é uma propriedade do arquivo.
+
+**Verificado dirigindo o app**, não só no teste: arrastar o "Dentista" das 15h
+para as 17h30 deixou `starts_at=17:30`, `rule_start=15:00`.
+
+---
+
+## ADR-0023 — O ledger registra fatos vividos, não configuração de medição
+
+**Data:** 2026-07-17 · **Status:** aceito · **ratificado pelo arquiteto 2026-07-17**
+
+**Contexto.** A constituição diz que toda mutação relevante grava no ledger na
+mesma transação. O toggle "qual barra manda" (métrica × sub-desafios, §5 da
+0007) é uma mutação. Grava?
+
+**Decisão.** Não. O ledger é a história do usuário — o que ele FEZ. Trocar a
+régua é dizer como o feito é medido, e o feito não mudou: o peso de hoje é o
+mesmo com a barra na métrica ou nos sub-desafios. O precedente já estava no M2:
+`set_habit_schedule` também não grava.
+
+**Consequência.** A Timeline (M4) não enche de "trocou a barra" — eventos que
+ninguém procuraria e que empurrariam para baixo os que importam. A mesma regra
+vale para o `move_milestone`: arrastar um sub-desafio é arrumar a mesa, e o M2 já
+tinha decidido isso para o `move_task`.
+
+**O critério geral (ratificado pelo arquiteto, regra para as próximas sessões).**
+Antes de gravar qualquer mutação no ledger, pergunte:
+
+> **Isso aconteceu na VIDA do usuário, ou na CONFIGURAÇÃO do app?**
+
+Só o primeiro entra no ledger. "Marquei o sub-desafio", "registrei a pesagem",
+"concluí a tarefa" — vida vivida, grava. "Mudei como a barra é calculada",
+"reordenei a lista", "troquei o horário do lembrete", "mudei a cor da Esfera" —
+configuração de como o app se comporta ou mede, **não grava**. Preferências não
+são história; enchê-la delas é afogar os fatos reais nos ajustes de mesa.
+
+---
+
+## ADR-0024 — "A terceira terça do mês": agendada para o M4, não inventada no M3
+
+**Data:** 2026-07-17 · **Status:** aceito · **complementa o ADR-0021** · **revisado 2026-07-17 pelo arquiteto**
+
+**Contexto.** O prompt do M3 pede um seed com um evento recorrente na "terceira
+terça do mês". O ADR-0021 fechou o vocabulário da recorrência em
+`daily`/`weekly`/`monthly`/`yearly` com intervalo — e cita **"na terceira
+sexta"** como exemplo do que ficou deliberadamente de fora. O `Monthly` é por dia
+do mês; `BYDAY=3TU` da RFC-5545 não é expressável.
+
+**Decisão (M3).** O código ganha. O M3 não inventa a variante para fazer um seed
+bonito — semeia uma mensal por dia do mês ("Reunião de condomínio, todo dia 15"),
+porque uma variante nova é gravada em JSON no banco do usuário **para sempre**, e
+isso é decisão de arquitetura, não detalhe de dado de demonstração.
+
+**Decisão do arquiteto (revisão).** A regra veio da spec original e é caso real
+de agenda — consultas, reuniões mensais, vencimentos. Ela **não vai para o V2**:
+fica **agendada para o M4**, junto do template "Agenda simples", que é o
+milestone que já toca o calendário. Assim o M3.5 (Saúde + Finanças, a prioridade
+do usuário) não atrasa por ela.
+
+**Escopo fechado do item M4:**
+
+- `Recurrence::MonthlyByWeekday { interval, week, weekday }` no enum (JSON legível,
+  `tag` explícito, igual às outras variantes).
+- Expansão em `domain::recurrence`, ancorada na âncora como as demais.
+- Testes, incluindo:
+  - **a 5ª ocorrência que não existe no mês** ("quinta sexta de fevereiro"): a
+    expansão pula o mês em vez de escorregar para o mês seguinte — o mesmo
+    princípio do dia 31 (ADR-0021), decidido na âncora.
+  - **interação com `rule_start` e a idempotência da extensão** (ADR-0022/0026):
+    materializar, estender a janela e reexpandir tem que respeitar a UNIQUE
+    `(event_id, rule_start)` e não duplicar nem ressuscitar ocorrência movida.
+
+**Consequência.** "Terceira terça do mês" deixa de ser uma lacuna e vira um item
+com dono (M4) e escopo escrito — nenhuma sessão futura precisa redescobrir o
+preço nem redecidir o lugar.
+
+---
+
+## ADR-0025 — O contador conta a partir de um piso, e o piso é o dia em que ele nasceu
+
+**Data:** 2026-07-17 · **Status:** aceito · **achado dirigindo a UI**
+
+**Contexto.** A 0007 criou o sub-desafio 'counter' ("30 dias de academia"), que
+se preenche pelos ticks do hábito ligado em vez de pedir um número à mão. O que
+ela não disse foi **de quando contar**, e a leitura ficou
+`COUNT(*) FROM habit_ticks WHERE habit_id = ? AND status = 'done'` — desde o
+começo dos tempos.
+
+**O que a tela mostrou.** O hábito "Academia" tem 120 dias de histórico. O
+sub-desafio "30 dias de academia", criado hoje, nasceu **marcado, exibindo
+51/30**: um desafio ganho sem ter sido feito. Nenhum teste pegou isso — todos
+usavam hábitos sem passado, que é o que um teste naturalmente cria.
+
+**Decisão.** `milestone_details.counts_from` (0009), 'YYYY-MM-DD' local
+calculado em Rust. O padrão é o dia da criação. O passado é aceito ("conte desde
+o início do mês"); o futuro, não — mesma regra do `day` de um tick e do
+`noted_at` de um checkpoint, e pelo mesmo motivo: uma data futura envenena em
+silêncio o número que a tela mostra.
+
+`NULL` continua significando "conta tudo": é o que dizem as linhas anteriores à
+0009, e reescrevê-las com uma data inventada trocaria o dado do usuário por um
+palpite nosso.
+
+**Consequência.** Um contador mede um desafio, não o arquivo. E a lição é a de
+sempre neste projeto: **a suíte verde não viu; a tela viu.** Um app dirigido só
+por teste é um app testado contra dados que nunca tiveram passado.
+
+---
+
+## ADR-0026 — A janela se estende por um comando explícito, disparado pela navegação
+
+**Data:** 2026-07-17 · **Status:** aceito · **fecha o gap #1 do M3**
+
+**Contexto.** A 0007 materializa 18 meses à frente da âncora e registrou, no
+próprio arquivo, que a extensão não existia: "navegar para o mês 19 mostra um mês
+vazio". Faltava decidir **quem** a dispara.
+
+**Decisão.** Um command de escrita, `extend_materialization(untilMonth)`, que a
+UI chama ao navegar — o `useMaterializationWindow` pede sempre 3 meses à frente
+do mês aberto.
+
+**Por que não na leitura do calendário.** Materializar é ESCREVER, e o pool de
+leitura abre `READ_ONLY` + `query_only=ON` (§4 da ARCHITECTURE) justamente para
+não escrever. Estender ali daria `SQLITE_READONLY` na cara de quem virou o mês.
+
+**Por que não um job de fundo.** Um job que roda "de tempos em tempos" precisa de
+uma thread viva e de uma resposta para "e se o usuário navegar antes de ele
+rodar?". O gesto que torna a extensão necessária é a navegação — e é ele que a
+paga.
+
+**Por que 3 meses, e por que idempotente.** Quem segura a seta passa por doze
+meses antes de soltar; a série tem que estar lá quando ele parar. A resposta
+normal é `0 escritas` (o mês pedido já existe), então o custo de perguntar é uma
+comparação. A UNIQUE da 0008 (ADR-0022) garante o resto.
+
+**Sem ledger.** Estender a janela não é um fato da vida do usuário: é o NEXUS
+terminando de escrever uma decisão que já foi registrada quando a série nasceu.
+Um evento por extensão encheria a Timeline de linhas que ninguém causou. Ver
+ADR-0023 para a fronteira.
+
+**Verificado dirigindo o app:** 19 cliques na seta do mês, de julho/2026 a
+fevereiro/2028 — o mês que a 0007 prometia vazio abriu com 37 compromissos, e a
+borda das séries andou de 2028-01-18 para 2028-05-30, sem uma linha duplicada.

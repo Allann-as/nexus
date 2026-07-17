@@ -19,6 +19,7 @@ import { ArrowLeft, Settings2 } from "lucide-react";
 import { getArea, sphereOverview, toNexusError, type Template } from "../../lib/ipc";
 import { Button, cx } from "../../design-system/primitives";
 import { SphereIcon } from "../hub/SphereIcon";
+import { GoalsList } from "../goals/GoalsList";
 import { SphereDashboard } from "./SphereDashboard";
 
 /**
@@ -35,26 +36,31 @@ interface Tab {
 const TABS: Record<Template, Tab[]> = {
   health: [
     { key: "dashboard", label: "Painel" },
+    { key: "goals", label: "Metas" },
     { key: "checkpoints", label: "Checkpoints", milestone: "M3.5" },
     { key: "training", label: "Treino", milestone: "M3.5" },
     { key: "exams", label: "Exames", milestone: "M3.5" },
   ],
   finance: [
     { key: "dashboard", label: "Painel" },
+    { key: "goals", label: "Metas" },
     { key: "contributions", label: "Aportes", milestone: "M3.5" },
     { key: "allocation", label: "Alocação", milestone: "M3.5" },
   ],
   fin_goals: [
     { key: "dashboard", label: "Painel" },
-    { key: "goals", label: "Caixinhas", milestone: "M4" },
+    { key: "goals", label: "Metas" },
+    { key: "boxes", label: "Caixinhas", milestone: "M4" },
   ],
   career: [
     { key: "dashboard", label: "Painel" },
+    { key: "goals", label: "Metas" },
     { key: "projects", label: "Projetos", milestone: "M4" },
     { key: "skills", label: "Habilidades", milestone: "M4" },
   ],
   studies: [
     { key: "dashboard", label: "Painel" },
+    { key: "goals", label: "Metas" },
     { key: "languages", label: "Idiomas", milestone: "M4" },
     { key: "college", label: "Faculdade", milestone: "M4" },
     { key: "courses", label: "Cursos", milestone: "M4" },
@@ -62,6 +68,7 @@ const TABS: Record<Template, Tab[]> = {
   ],
   simple: [
     { key: "dashboard", label: "Painel" },
+    { key: "goals", label: "Metas" },
     { key: "agenda", label: "Agenda", milestone: "M4" },
     { key: "checklists", label: "Checklists", milestone: "M4" },
   ],
@@ -174,7 +181,11 @@ export function SphereScreen() {
         </nav>
 
         <div className="mt-6">
-          {sphere && <SphereDashboard sphere={sphere} card={card} />}
+          {sphere && active?.key === "goals" ? (
+            <GoalsList areaId={sphere.id} />
+          ) : (
+            sphere && <SphereDashboard sphere={sphere} card={card} />
+          )}
         </div>
       </div>
     </div>

@@ -8,6 +8,7 @@
 pub mod entities;
 pub mod errors;
 pub mod ledger;
+pub mod ordering;
 pub mod projection;
 pub mod recurrence;
 pub mod schedule;
