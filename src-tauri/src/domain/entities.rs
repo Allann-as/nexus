@@ -263,6 +263,51 @@ impl BookStatus {
     }
 }
 
+/// O tipo de um marco de carreira (§2.3).
+///
+/// Não espelha um CHECK de banco: o marco é um fato do ledger (append-only, sem
+/// satélite), então a validação vive aqui, na fronteira do DTO. O `snake_case`
+/// vai para o `payload.kind` do evento, e a Timeline decide o ícone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CareerMilestoneKind {
+    Promotion,
+    Certification,
+    NewJob,
+    Raise,
+    Award,
+    Other,
+}
+
+impl CareerMilestoneKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CareerMilestoneKind::Promotion => "promotion",
+            CareerMilestoneKind::Certification => "certification",
+            CareerMilestoneKind::NewJob => "new_job",
+            CareerMilestoneKind::Raise => "raise",
+            CareerMilestoneKind::Award => "award",
+            CareerMilestoneKind::Other => "other",
+        }
+    }
+
+    pub fn parse(s: &str) -> Result<Self> {
+        Ok(match s {
+            "promotion" => CareerMilestoneKind::Promotion,
+            "certification" => CareerMilestoneKind::Certification,
+            "new_job" => CareerMilestoneKind::NewJob,
+            "raise" => CareerMilestoneKind::Raise,
+            "award" => CareerMilestoneKind::Award,
+            "other" => CareerMilestoneKind::Other,
+            other => {
+                return Err(NexusError::Validation(format!(
+                    "tipo de marco de carreira desconhecido: {other}"
+                )))
+            }
+        })
+    }
+}
+
 /// O template de uma Esfera: QUE tela ela abre.
 ///
 /// Fechado, como `Kind`, e pelo mesmo motivo: o `CHECK` de `areas.template`

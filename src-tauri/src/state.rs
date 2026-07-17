@@ -8,9 +8,9 @@ use std::sync::Arc;
 
 use crate::application::ports::{LedgerRepository, SearchRepository};
 use crate::application::use_cases::{
-    areas::AreaService, books::BookService, dashboard::DashboardService, events::EventService,
-    fin_goals::FinGoalService, finance::FinanceService, goals::GoalService, habits::HabitService,
-    nodes::NodeService, spheres::SphereService, tasks::TaskService,
+    areas::AreaService, books::BookService, career::CareerService, dashboard::DashboardService,
+    events::EventService, fin_goals::FinGoalService, finance::FinanceService, goals::GoalService,
+    habits::HabitService, nodes::NodeService, spheres::SphereService, tasks::TaskService,
 };
 use crate::domain::errors::Result;
 use crate::infrastructure::clock::{SystemClock, Uuid7Gen};
@@ -38,6 +38,7 @@ pub struct AppState {
     pub finance: FinanceService,
     pub fin_goals: FinGoalService,
     pub books: BookService,
+    pub career: CareerService,
     pub dashboard: DashboardService,
     pub spheres: SphereService,
     pub ledger: Arc<dyn LedgerRepository>,
@@ -116,6 +117,12 @@ impl AppState {
             clock: clock.clone(),
         };
 
+        let career = CareerService {
+            ledger: ledger.clone(),
+            ids: ids.clone(),
+            clock: clock.clone(),
+        };
+
         let dashboard = DashboardService {
             habits: habits.clone(),
             tasks: tasks.clone(),
@@ -149,6 +156,7 @@ impl AppState {
             finance,
             fin_goals,
             books,
+            career,
             dashboard,
             spheres,
             ledger,

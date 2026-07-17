@@ -37,6 +37,8 @@ import { FinanceDashboard } from "../finance/FinanceDashboard";
 import { ContributionsTab } from "../finance/ContributionsTab";
 import { AporteModal } from "../finance/AporteModal";
 import { CaixinhasTab } from "../fin-goals/CaixinhasTab";
+import { CareerContent } from "../career/CareerContent";
+import { StudiesContent } from "../studies/StudiesContent";
 
 /**
  * As tabs de cada template.
@@ -71,16 +73,16 @@ const TABS: Record<Template, Tab[]> = {
   career: [
     { key: "dashboard", label: "Painel" },
     { key: "goals", label: "Metas" },
-    { key: "projects", label: "Projetos", milestone: "M4" },
-    { key: "skills", label: "Habilidades", milestone: "M4" },
+    { key: "projects", label: "Projetos" },
+    { key: "skills", label: "Habilidades" },
   ],
   studies: [
     { key: "dashboard", label: "Painel" },
     { key: "goals", label: "Metas" },
-    { key: "languages", label: "Idiomas", milestone: "M4" },
-    { key: "college", label: "Faculdade", milestone: "M4" },
-    { key: "courses", label: "Cursos", milestone: "M4" },
-    { key: "library", label: "Biblioteca", milestone: "M4" },
+    { key: "languages", label: "Idiomas" },
+    { key: "college", label: "Faculdade" },
+    { key: "courses", label: "Cursos" },
+    { key: "library", label: "Biblioteca" },
   ],
   simple: [
     { key: "dashboard", label: "Painel" },
@@ -242,6 +244,14 @@ function SphereContent({
 
   if (sphere.template === "fin_goals") {
     return <CaixinhasTab areaId={sphere.id} />;
+  }
+
+  if (sphere.template === "career") {
+    return <CareerContent areaId={sphere.id} tab={tab} />;
+  }
+
+  if (sphere.template === "studies") {
+    return <StudiesContent areaId={sphere.id} tab={tab} />;
   }
 
   return <SphereDashboard sphere={sphere} card={card} />;

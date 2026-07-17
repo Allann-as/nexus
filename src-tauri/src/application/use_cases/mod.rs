@@ -2,6 +2,7 @@
 
 pub mod areas;
 pub mod books;
+pub mod career;
 pub mod dashboard;
 pub mod events;
 pub mod fin_goals;

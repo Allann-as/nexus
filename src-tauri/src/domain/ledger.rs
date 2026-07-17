@@ -61,6 +61,10 @@ pub enum LedgerEntityKind {
     Node(Kind),
     /// Um aporte ou resgate — um fato financeiro, não um node.
     Contribution,
+    /// Um marco de carreira (promoção, certificação, novo emprego) — um fato da
+    /// vida do usuário que não é um node (§2.3, ADR-0027): ele não tem tela nem
+    /// satélite, só existe na história. A Timeline o desenha com destaque.
+    CareerMilestone,
 }
 
 impl LedgerEntityKind {
@@ -68,6 +72,7 @@ impl LedgerEntityKind {
         match self {
             LedgerEntityKind::Node(k) => k.as_str(),
             LedgerEntityKind::Contribution => "contribution",
+            LedgerEntityKind::CareerMilestone => "career_milestone",
         }
     }
 }

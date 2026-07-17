@@ -130,6 +130,8 @@ pub fn run() {
             commands::books::finish_book,
             commands::books::studies_overview,
             commands::books::set_reading_goal,
+            commands::career::record_career_milestone,
+            commands::career::career_milestones,
             commands::goals::create_goal,
             commands::goals::list_goals,
             commands::goals::goal_with_progress,

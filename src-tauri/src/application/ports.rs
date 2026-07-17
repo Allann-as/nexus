@@ -155,6 +155,11 @@ pub trait LedgerRepository: Send + Sync {
         offset: i64,
     ) -> Result<Vec<LedgerEntry>>;
     fn for_entity(&self, entity_id: &str, limit: i64) -> Result<Vec<LedgerEntry>>;
+
+    /// Os eventos de um tipo de entidade (ex.: 'career_milestone'), do mais
+    /// recente ao mais antigo. O painel da Carreira lê os marcos por aqui.
+    fn by_entity_kind(&self, entity_kind: &str, limit: i64) -> Result<Vec<LedgerEntry>>;
+
     fn count(&self) -> Result<i64>;
 }
 

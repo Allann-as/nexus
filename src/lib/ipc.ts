@@ -1091,3 +1091,33 @@ export const studiesOverview = (areaId?: string | null) =>
 
 export const setReadingGoal = (target: number) =>
   call<void>("set_reading_goal", { target });
+
+/* ===== Carreira: os marcos profissionais ===== */
+
+/** O tipo de um marco. Espelha `domain::entities::CareerMilestoneKind`. */
+export type CareerMilestoneKind =
+  | "promotion"
+  | "certification"
+  | "new_job"
+  | "raise"
+  | "award"
+  | "other";
+
+/** Registra um marco de carreira no ledger (§2.3). */
+export const recordCareerMilestone = (m: {
+  title: string;
+  kind: CareerMilestoneKind;
+  happenedOn?: string | null;
+  note?: string | null;
+}) =>
+  call<LedgerEntry>("record_career_milestone", {
+    milestone: {
+      title: m.title,
+      kind: m.kind,
+      happenedOn: m.happenedOn ?? null,
+      note: m.note ?? null,
+    },
+  });
+
+/** Os marcos de carreira, do mais recente ao mais antigo. */
+export const careerMilestones = () => call<LedgerEntry[]>("career_milestones");
