@@ -27,12 +27,12 @@ import { autocompletion, completionKeymap } from "@codemirror/autocomplete";
 import type { CompletionContext, CompletionResult } from "@codemirror/autocomplete";
 
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { appDataDir } from "@tauri-apps/api/path";
 
 import { Button, cx } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
 import {
   attachToNote,
+  dataRoot,
   listNodes,
   renameNode,
   saveNoteBody,
@@ -144,7 +144,9 @@ export function NoteEditor({
   nodesRef.current = nodes ?? [];
 
   useEffect(() => {
-    appDataDir().then(setAppDir).catch(() => setAppDir(null));
+    // A raiz REAL dos dados (`.../Nexus`), não a do identificador do bundle que
+    // `appDataDir()` devolveria — é sob ela que os anexos moram.
+    dataRoot().then(setAppDir).catch(() => setAppDir(null));
   }, []);
 
   /* ----- Persistência (debounced) ----- */

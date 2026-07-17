@@ -82,10 +82,20 @@ impl TimelineRepository for SqliteTimelineRepository {
                     SUM(CASE WHEN event_type = 'checked'   THEN 1 ELSE 0 END)
                    FROM ledger WHERE day BETWEEN ?1 AND ?2",
                 params![day_from, day_to],
-                |r| Ok((r.get(0)?, r.get::<_, Option<i64>>(1)?.unwrap_or(0), r.get::<_, Option<i64>>(2)?.unwrap_or(0))),
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get::<_, Option<i64>>(1)?.unwrap_or(0),
+                        r.get::<_, Option<i64>>(2)?.unwrap_or(0),
+                    ))
+                },
             )?;
 
-            for (metric, value) in [("events", events), ("completed", completed), ("checked", checked)] {
+            for (metric, value) in [
+                ("events", events),
+                ("completed", completed),
+                ("checked", checked),
+            ] {
                 tx.execute(
                     "INSERT OR REPLACE INTO timeline_rollups (month, metric, value, computed_at)
                      VALUES (?1, ?2, ?3, ?4)",
@@ -111,7 +121,11 @@ impl TimelineRepository for SqliteTimelineRepository {
             )?;
             let mut months: std::collections::BTreeMap<String, MonthRollup> = Default::default();
             let rows = stmt.query_map(params![year], |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, f64>(2)?))
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, f64>(2)?,
+                ))
             })?;
             for row in rows {
                 let (month, metric, value) = row?;
@@ -138,7 +152,13 @@ impl TimelineRepository for SqliteTimelineRepository {
                         SUM(CASE WHEN event_type = 'checked'   THEN 1 ELSE 0 END)
                        FROM ledger WHERE day BETWEEN ?1 AND ?2",
                     params![format!("{current_month}-01"), format!("{current_month}-31")],
-                    |r| Ok((r.get(0)?, r.get::<_, Option<i64>>(1)?.unwrap_or(0), r.get::<_, Option<i64>>(2)?.unwrap_or(0))),
+                    |r| {
+                        Ok((
+                            r.get(0)?,
+                            r.get::<_, Option<i64>>(1)?.unwrap_or(0),
+                            r.get::<_, Option<i64>>(2)?.unwrap_or(0),
+                        ))
+                    },
                 )?;
                 months.insert(
                     current_month.to_string(),
@@ -174,13 +194,17 @@ impl TimelineRepository for SqliteTimelineRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::ledger::{EventType, LedgerEntityKind, NewLedgerEvent};
+    use crate::application::ports::LedgerRepository;
     use crate::domain::entities::Kind;
+    use crate::domain::ledger::{EventType, LedgerEntityKind, NewLedgerEvent};
     use crate::infrastructure::paths::Paths;
     use crate::infrastructure::repositories::ledger_repo::SqliteLedgerRepository;
-    use crate::application::ports::LedgerRepository;
 
-    fn fixture() -> (tempfile::TempDir, SqliteTimelineRepository, SqliteLedgerRepository) {
+    fn fixture() -> (
+        tempfile::TempDir,
+        SqliteTimelineRepository,
+        SqliteLedgerRepository,
+    ) {
         let dir = tempfile::tempdir().unwrap();
         let paths = Paths::at(dir.path().to_path_buf()).unwrap();
         let db = Arc::new(Db::open(&paths).unwrap());
@@ -230,7 +254,11 @@ mod tests {
         log(&ledger, "2026-07-01", EventType::Created); // mês corrente
 
         let candidates = tl.ledger_months_before("2026-07").unwrap();
-        assert_eq!(candidates, vec!["2026-05"], "julho está em curso, não congela");
+        assert_eq!(
+            candidates,
+            vec!["2026-05"],
+            "julho está em curso, não congela"
+        );
     }
 
     #[test]

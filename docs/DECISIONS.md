@@ -811,3 +811,166 @@ honesto.
 tem dado no M3.5 — os objetivos são M4. Ela se **redistribui** (ADR-0014), como
 a rotina matinal do Nexus Score: a nota não é castigada por uma feature que
 ainda não existe, e ganha a parcela sozinha quando o M4 chegar.
+
+---
+
+## ADR-0029 — Um `kind` novo custa uma recriação de `nodes`; dois custam uma só
+
+**Data:** 2026-07-17 · **Status:** aceito · **M4** · **complementa o ADR-0020**
+
+**Contexto.** O M4 traz dois tipos novos de node: `fin_goal` (as caixinhas) e
+`book` (a Biblioteca). Cada um, sozinho, exigiria a recriação de `nodes` — o
+SQLite não sabe alterar um CHECK (ADR-0020). Duas migrations separadas fariam o
+DROP/CREATE da tabela mais referenciada do schema **duas vezes**, com o dado do
+usuário dentro das duas.
+
+**Decisão.** A migration **0011** paga o 12-step UMA vez para o milestone inteiro:
+os dois kinds entram no mesmo CHECK, na mesma recriação. As três armadilhas
+(CASCADE, rowid, rename dos gatilhos de FTS) têm teste em `migrations.rs`, agora
+provando que uma SEGUNDA recriação sobre dados já existentes também as evita.
+
+**Por que kinds próprios, e não reúso.** `fin_goal` não é um `goal`: uma caixinha
+tem alvo em CENTAVOS e um banco, não métrica/unidade/direção — e vazaria para a
+tela de Metas. `book` não é nenhum dos existentes. Um kind errado fica gravado no
+banco do usuário para sempre (a lição do ADR-0020).
+
+**Consequência.** `fin_goal_details`, `fin_goal_deposits`, `book_details` e
+`reading_goals` nascem na mesma 0011. O custo do 12-step é pago o mínimo de vezes.
+
+---
+
+## ADR-0030 — "A terceira terça" existe agora, e pula o mês que não a tem
+
+**Data:** 2026-07-17 · **Status:** aceito · **M4** · **cumpre o ADR-0024**
+
+**Contexto.** O ADR-0024 agendou `MonthlyByWeekday` para o M4 com escopo fechado.
+
+**Decisão.** `Recurrence::MonthlyByWeekday { interval, week, weekday }` (JSON
+`monthly_by_weekday`, `week` 1–5, `weekday` 0=domingo). A expansão, quando o mês
+não tem a N-ésima ocorrência (a 5ª sexta que não existe), **pula o mês** — decidido
+na âncora, o mesmo princípio do dia 31 (ADR-0021), só que ali a saída é grudar no
+último dia e aqui é pular (uma "5ª sexta" que virasse a 1ª do mês seguinte seria um
+dia que ninguém pediu). Testes cobrem a 5ª inexistente e a idempotência da extensão
+(reexpandir uma janela sobreposta devolve as mesmas datas, então a UNIQUE
+`(event_id, rule_start)` nunca duplica).
+
+**Na UI.** O `EventModal` não pede "semana" e "dia" num abstrato: ele deriva
+`week`/`weekday` da DATA do evento ("Toda 3ª terça" aparece pronta quando o evento
+cai numa 3ª terça). O usuário marca um evento; a opção se oferece sozinha.
+
+---
+
+## ADR-0031 — A parcela "Objetivos" da Saúde Financeira ganhou fonte
+
+**Data:** 2026-07-17 · **Status:** aceito · **M4** · **cumpre o ADR-0028**
+
+**Contexto.** O ADR-0028 deixou os 25 pontos de "progresso dos objetivos" se
+**redistribuindo** no M3.5, porque as caixinhas eram do M4.
+
+**Decisão.** A parcela agora lê a **média de progresso (`saved/target`, saturado em
+1) das caixinhas ATIVAS** (`FinGoalRepository::active_progress`). `None` (nenhuma
+caixinha) continua redistribuindo — a nota não pune quem não usa a feature. Nada em
+`financial_health.rs` mudou: a redistribuição já estava lá, só faltava o número. O
+`FinanceService` ganhou a injeção de `FinGoalRepository` que já estava reservada.
+
+---
+
+## ADR-0032 — Um marco de carreira é um fato do ledger, não um node
+
+**Data:** 2026-07-17 · **Status:** aceito · **M4** · **aplica o ADR-0027**
+
+**Contexto.** Uma promoção, uma certificação, um novo emprego (§2.3) precisam
+aparecer na Timeline com destaque. São fatos da vida do usuário — mas não têm tela,
+satélite nem status a editar.
+
+**Decisão.** `LedgerEntityKind::CareerMilestone` — a terceira variante sem node
+(depois de `Contribution`), exatamente como o ADR-0027 previu ("um fato novo sem
+node ganha uma variante, não um `Kind` emprestado"). O `CareerService` fala direto
+com o ledger: `record_milestone` grava um evento com `entity_kind='career_milestone'`
+e `payload.kind` (promotion/certification/new_job…); o painel lê por
+`by_entity_kind`. Sem satélite, sem CHECK de banco — a validação do tipo vive no
+DTO (`CareerMilestoneKind`), porque um append-only não tem onde pôr um CHECK.
+
+**Consequência.** Marcos são imutáveis (append-only). Se um dia forem editáveis,
+viram nodes — mas isso é decisão de outro milestone.
+
+---
+
+## ADR-0033 — Notas: o corpo resincroniza só os wiki-links; anexos são outra coisa
+
+**Data:** 2026-07-17 · **Status:** aceito · **M4** · primeiro uso pleno de `links`
+
+**Contexto.** A tabela `links` (0001) existia sem consumidor de código. As Notas
+(§2.5) são o primeiro: `[[wiki-links]]` resolvidos viram elos, com backlinks do
+outro lado. Anexos também são elos (nota → arquivo).
+
+**Decisão.**
+- **Wiki-links** usam `link_type='references'`. Salvar o corpo REESCREVE só os
+  'references' desta nota (delete + insert dos resolvidos) — tirar um `[[elo]]` do
+  texto apaga o link, e o backlink some junto.
+- **Anexos** usam `link_type='attached_to'` e **não são tocados** ao salvar o corpo:
+  eles não vêm do texto. Sem essa separação, reeditar uma nota apagaria seus anexos.
+- Um `[[Título]]` sem node correspondente fica **pendente**: sem link no banco (não
+  se aponta para o que não há), pintado diferente na UI.
+- **Anexos** são copiados para `media/AAAA/MM/<sha>.<ext>` com **SHA-256** (sha2):
+  integridade e **dedup** — o mesmo conteúdo é gravado uma vez. Colar imagem do
+  clipboard é o mesmo caminho, são só bytes.
+- A URL do asset no front usa a **raiz real** (`data_root` → `%APPDATA%/Nexus`), não
+  o `appDataDir()` do Tauri (que aponta para a pasta do identificador do bundle, um
+  diretório diferente). O protocolo `asset:` é habilitado com escopo em
+  `$APPDATA/Nexus/media/**` (feature `protocol-asset`), e a CSP já o admitia.
+
+---
+
+## ADR-0034 — A Timeline congela meses pela navegação, não por um job de fundo
+
+**Data:** 2026-07-17 · **Status:** aceito · **M4** · **espelha o ADR-0026**
+
+**Contexto.** A visão ANO lê `timeline_rollups` (meses congelados) para abrir em
+< 100 ms sem varrer o ledger. Alguém tem que congelar.
+
+**Decisão.** `ensure_rollups` congela todo mês COMPLETO ainda pendente, e a UI o
+chama ao abrir a Timeline — o mesmo padrão da extensão do calendário (ADR-0026): o
+gesto que torna o congelamento necessário é a navegação, e é ele que paga a escrita
+(o pool de leitura é `query_only`; congelar ali daria `SQLITE_READONLY`). Idempotente
+e barato quando não há nada a fazer (compara duas listas de meses).
+
+**A visão ANO mescla congelado + ao vivo:** meses completos vêm dos rollups; o mês
+CORRENTE, que ainda não fechou, é computado ao vivo do ledger — a tela nunca mostra
+o mês em curso vazio.
+
+**O que os rollups guardam, e o que fica para o M4.5.** Contagens por mês (eventos,
+conquistas, marcações). O **Nexus Score histórico por mês** (que exigiria recomputar
+o score sobre o estado de cada mês) fica para o M4.5, junto do `bi_engine` — o
+rollup de contagem já entrega a visão ANO com textura, e o Score entra na mesma
+tabela quando o motor chegar.
+
+---
+
+## ADR-0035 — O wizard cria só 'simple'; a Agenda é o calendário; a Checklist é um projeto
+
+**Data:** 2026-07-17 · **Status:** aceito · **M4** · duas divergências da spec, registradas
+
+**Contexto.** A §2.4 pede o wizard "+ Nova Esfera" com escolha de template
+("Completa" ou "Agenda simples"), uma Agenda com "checkbox de concluído" e
+Checklists reordenáveis.
+
+**Decisão (divergências, porque o código ganha).**
+
+1. **O wizard cria só `simple`.** `Template::user_creatable()` já retornava
+   `[Simple]` (ADR-0013/0014): uma segunda Esfera "Completa" com dashboard de
+   Finanças partiria o patrimônio em duas telas que nunca somam. E o template
+   `simple` já traz Painel + Metas + Agenda + Checklists — a distinção "Completa vs
+   Agenda" colapsa numa Esfera só, flexível. O wizard mostra o campo template
+   desabilitado explicando por quê. (O wizard já existia no código; o M4 só ligou as
+   tabs `simple`.)
+
+2. **A Agenda é o calendário unificado.** Um compromisso é um `event` (mesma tabela,
+   mesma tela): criar na Agenda e abrir o Calendário mostra o mesmo item. O "checkbox
+   de concluído" por ocorrência **não** foi implementado: o modelo de eventos do M3
+   não tem estado de conclusão por ocorrência (só scheduled/cancelled/moved), e
+   forçá-lo exigiria uma coluna nova numa migration — decisão de outro milestone.
+   Quem quer marcar "feito" usa uma Checklist ou uma Tarefa.
+
+3. **Uma Checklist é um `project`; cada item é uma `task`.** `completed_at` da tarefa
+   É o checkbox, e `sort_order` (REAL, ADR-0015) dá o reordenável — zero tabela nova.

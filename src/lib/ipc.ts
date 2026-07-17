@@ -1197,6 +1197,9 @@ export interface NoteFull {
   attachments: Attachment[];
 }
 
+/** A raiz de dados (`%APPDATA%/Nexus`) — para montar a URL de um anexo. */
+export const dataRoot = () => call<string>("data_root");
+
 export const listNotes = (areaId?: string | null) =>
   call<NoteSummary[]>("list_notes", { areaId: areaId ?? null });
 

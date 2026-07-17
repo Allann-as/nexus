@@ -72,8 +72,11 @@ impl BookRepository for SqliteBookRepository {
             )?;
             append_in_tx(&tx, event)?;
 
-            let created =
-                tx.query_row(&format!("{SELECT_BOOK} WHERE n.id = ?1"), params![id], map_book)?;
+            let created = tx.query_row(
+                &format!("{SELECT_BOOK} WHERE n.id = ?1"),
+                params![id],
+                map_book,
+            )?;
             tx.commit()?;
             Ok(created)
         })
@@ -81,9 +84,13 @@ impl BookRepository for SqliteBookRepository {
 
     fn get(&self, id: &str) -> Result<Book> {
         self.db.with_read(|c| {
-            c.query_row(&format!("{SELECT_BOOK} WHERE n.id = ?1"), params![id], map_book)
-                .optional()?
-                .ok_or_else(|| NexusError::NotFound(format!("livro {id}")))
+            c.query_row(
+                &format!("{SELECT_BOOK} WHERE n.id = ?1"),
+                params![id],
+                map_book,
+            )
+            .optional()?
+            .ok_or_else(|| NexusError::NotFound(format!("livro {id}")))
         })
     }
 
@@ -147,8 +154,11 @@ impl BookRepository for SqliteBookRepository {
                 )?;
             }
 
-            let updated =
-                tx.query_row(&format!("{SELECT_BOOK} WHERE n.id = ?1"), params![id], map_book)?;
+            let updated = tx.query_row(
+                &format!("{SELECT_BOOK} WHERE n.id = ?1"),
+                params![id],
+                map_book,
+            )?;
             tx.commit()?;
             Ok(updated)
         })
@@ -224,8 +234,11 @@ impl BookRepository for SqliteBookRepository {
                 append_in_tx(&tx, &r.event)?;
             }
 
-            let updated =
-                tx.query_row(&format!("{SELECT_BOOK} WHERE n.id = ?1"), params![id], map_book)?;
+            let updated = tx.query_row(
+                &format!("{SELECT_BOOK} WHERE n.id = ?1"),
+                params![id],
+                map_book,
+            )?;
             tx.commit()?;
             Ok(updated)
         })
@@ -345,7 +358,13 @@ mod tests {
 
         let events: i64 = repo
             .db
-            .with_read(|c| Ok(c.query_row("SELECT COUNT(*) FROM ledger WHERE entity_id='b1'", [], |r| r.get(0))?))
+            .with_read(|c| {
+                Ok(c.query_row(
+                    "SELECT COUNT(*) FROM ledger WHERE entity_id='b1'",
+                    [],
+                    |r| r.get(0),
+                )?)
+            })
             .unwrap();
         assert_eq!(events, 1, "só o Created; mudar de página não é um fato");
     }
@@ -354,8 +373,15 @@ mod tests {
     fn finishing_marks_lido_sets_the_node_done_and_logs_it() {
         let (_d, repo) = fixture();
         make_book(&repo, "b1", Some(600));
-        repo.finish_with_event("b1", Some(5), "2026-07-15", 9_000, &ev("b1", EventType::Completed), None)
-            .unwrap();
+        repo.finish_with_event(
+            "b1",
+            Some(5),
+            "2026-07-15",
+            9_000,
+            &ev("b1", EventType::Completed),
+            None,
+        )
+        .unwrap();
 
         let b = repo.get("b1").unwrap();
         assert_eq!(b.status, BookStatus::Lido);
@@ -365,7 +391,9 @@ mod tests {
 
         let node_status: String = repo
             .db
-            .with_read(|c| Ok(c.query_row("SELECT status FROM nodes WHERE id='b1'", [], |r| r.get(0))?))
+            .with_read(|c| {
+                Ok(c.query_row("SELECT status FROM nodes WHERE id='b1'", [], |r| r.get(0))?)
+            })
             .unwrap();
         assert_eq!(node_status, "done");
     }
@@ -389,8 +417,15 @@ mod tests {
                 title_snapshot: "Resenha: O Nome do Vento".into(),
             },
         };
-        repo.finish_with_event("b1", Some(4), "2026-07-15", 9_000, &ev("b1", EventType::Completed), Some(&review))
-            .unwrap();
+        repo.finish_with_event(
+            "b1",
+            Some(4),
+            "2026-07-15",
+            9_000,
+            &ev("b1", EventType::Completed),
+            Some(&review),
+        )
+        .unwrap();
 
         // A nota existe, herdou a Esfera e está linkada ao livro.
         let (note_area, linked): (Option<String>, i64) = repo
@@ -404,7 +439,11 @@ mod tests {
                 )?)
             })
             .unwrap();
-        assert_eq!(note_area.as_deref(), Some("sphere-studies"), "a nota herda a Esfera do livro");
+        assert_eq!(
+            note_area.as_deref(),
+            Some("sphere-studies"),
+            "a nota herda a Esfera do livro"
+        );
         assert_eq!(linked, 1, "o link livro → nota existe");
     }
 
@@ -413,10 +452,24 @@ mod tests {
         let (_d, repo) = fixture();
         make_book(&repo, "b1", Some(100));
         make_book(&repo, "b2", Some(100));
-        repo.finish_with_event("b1", Some(5), "2026-03-01", 0, &ev("b1", EventType::Completed), None)
-            .unwrap();
-        repo.finish_with_event("b2", Some(4), "2025-12-30", 0, &ev("b2", EventType::Completed), None)
-            .unwrap();
+        repo.finish_with_event(
+            "b1",
+            Some(5),
+            "2026-03-01",
+            0,
+            &ev("b1", EventType::Completed),
+            None,
+        )
+        .unwrap();
+        repo.finish_with_event(
+            "b2",
+            Some(4),
+            "2025-12-30",
+            0,
+            &ev("b2", EventType::Completed),
+            None,
+        )
+        .unwrap();
 
         assert_eq!(repo.finished_in_year("2026").unwrap(), 1);
         assert_eq!(repo.finished_in_year("2025").unwrap(), 1);

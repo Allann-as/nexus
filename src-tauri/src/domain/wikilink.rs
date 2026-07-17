@@ -79,7 +79,10 @@ mod tests {
 
     #[test]
     fn plain_brackets_are_not_links() {
-        assert_eq!(extract("um array[0] e [x] não são elos"), Vec::<String>::new());
+        assert_eq!(
+            extract("um array[0] e [x] não são elos"),
+            Vec::<String>::new()
+        );
     }
 
     #[test]

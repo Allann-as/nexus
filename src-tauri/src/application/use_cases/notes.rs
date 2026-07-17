@@ -87,7 +87,8 @@ impl NoteService {
             // O título do node não muda aqui; a UI renomeia por outro caminho.
             title_snapshot: self.nodes.get(id)?.title,
         };
-        self.notes.save_body_with_event(id, body_md, &resolved, now, &event)
+        self.notes
+            .save_body_with_event(id, body_md, &resolved, now, &event)
     }
 
     pub fn set_pinned(&self, id: &str, pinned: bool) -> Result<()> {
@@ -99,7 +100,9 @@ impl NoteService {
     /// clipboard cai aqui também — são só bytes.
     pub fn attach(&self, note_id: &str, filename: &str, bytes: &[u8]) -> Result<Attachment> {
         if bytes.is_empty() {
-            return Err(NexusError::Validation("um anexo vazio não é um anexo".into()));
+            return Err(NexusError::Validation(
+                "um anexo vazio não é um anexo".into(),
+            ));
         }
         // O node destino tem que ser uma nota existente — e dá a Esfera do anexo.
         let note = self.notes.get_full(note_id)?;
@@ -202,7 +205,11 @@ mod tests {
         assert_eq!(extension("print.PNG"), "png");
         assert_eq!(extension("foto.jpeg"), "jpeg");
         assert_eq!(extension("semponto"), "");
-        assert_eq!(extension("nome.esquisão"), "", "extensão não-ascii é ignorada");
+        assert_eq!(
+            extension("nome.esquisão"),
+            "",
+            "extensão não-ascii é ignorada"
+        );
         assert_eq!(extension("arquivo.tar.gz"), "gz");
     }
 

@@ -13,6 +13,7 @@
 use std::sync::Arc;
 
 use nexus_lib::application::ports::Clock;
+use nexus_lib::application::ports::LedgerRepository;
 use nexus_lib::application::ports::{
     NewContribution, NewEvent, NewEventDetails, NewGoal, NewGoalDetails, NewMilestone,
 };
@@ -21,7 +22,6 @@ use nexus_lib::application::use_cases::{
     fin_goals::FinGoalService, finance::FinanceService, goals::GoalService, habits::HabitService,
     nodes::NodeService, notes::NoteService, tasks::TaskService,
 };
-use nexus_lib::application::ports::LedgerRepository;
 use nexus_lib::domain::entities::CareerMilestoneKind;
 use nexus_lib::domain::entities::{
     AssetClass, Direction, Kind, MilestoneKind, ProgressSource, Template,
@@ -701,7 +701,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(431),
         Some("carreira".into()),
     )?;
-    books.finish(&clean.id, Some(5), Some("Mudou como escrevo funções.".into()))?;
+    books.finish(
+        &clean.id,
+        Some(5),
+        Some("Mudou como escrevo funções.".into()),
+    )?;
 
     let sapiens = books.create(
         "Sapiens",

@@ -12,7 +12,7 @@ use serde_json::json;
 use crate::application::ports::{Clock, IdGen, LedgerRepository};
 use crate::domain::entities::{validate_title, CareerMilestoneKind};
 use crate::domain::errors::Result;
-use crate::domain::ledger::{EventType, LedgerEntry, LedgerEntityKind, NewLedgerEvent};
+use crate::domain::ledger::{EventType, LedgerEntityKind, LedgerEntry, NewLedgerEvent};
 use crate::domain::schedule::{format_day, parse_day};
 
 /// Quantos marcos o painel da Carreira mostra por vez.
@@ -68,6 +68,7 @@ impl CareerService {
 
     /// Os marcos de carreira, do mais recente ao mais antigo.
     pub fn milestones(&self) -> Result<Vec<LedgerEntry>> {
-        self.ledger.by_entity_kind("career_milestone", MILESTONE_LIMIT)
+        self.ledger
+            .by_entity_kind("career_milestone", MILESTONE_LIMIT)
     }
 }

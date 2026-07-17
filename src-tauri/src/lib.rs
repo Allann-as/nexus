@@ -136,6 +136,7 @@ pub fn run() {
             commands::timeline::timeline_year,
             commands::timeline::on_this_day,
             commands::timeline::ensure_timeline_rollups,
+            commands::notes::data_root,
             commands::notes::list_notes,
             commands::notes::get_note,
             commands::notes::create_note,

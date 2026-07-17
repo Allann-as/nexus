@@ -6,6 +6,16 @@ use crate::application::ports::{Attachment, NoteFull, NoteSummary};
 use crate::domain::errors::Result;
 use crate::state::AppState;
 
+/// A raiz de dados (`%APPDATA%/Nexus`), para o front montar a URL de um anexo.
+///
+/// O `appDataDir()` do Tauri aponta para a pasta do IDENTIFICADOR do bundle, não
+/// para a raiz que o NEXUS escolheu (`.../Nexus`). Os anexos moram sob esta
+/// raiz, então é ela que a URL do asset precisa — não a do Tauri.
+#[tauri::command]
+pub fn data_root(state: State<'_, AppState>) -> String {
+    state.paths.root.to_string_lossy().to_string()
+}
+
 #[tauri::command]
 pub fn list_notes(state: State<'_, AppState>, area_id: Option<String>) -> Result<Vec<NoteSummary>> {
     state.notes.list(area_id.as_deref())
@@ -17,7 +27,11 @@ pub fn get_note(state: State<'_, AppState>, id: String) -> Result<NoteFull> {
 }
 
 #[tauri::command]
-pub fn create_note(state: State<'_, AppState>, title: String, area_id: Option<String>) -> Result<NoteFull> {
+pub fn create_note(
+    state: State<'_, AppState>,
+    title: String,
+    area_id: Option<String>,
+) -> Result<NoteFull> {
     state.notes.create(&title, area_id)
 }
 

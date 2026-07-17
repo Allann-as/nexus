@@ -25,9 +25,13 @@ pub struct NewBookDto {
 
 #[tauri::command]
 pub fn create_book(state: State<'_, AppState>, book: NewBookDto) -> Result<Book> {
-    state
-        .books
-        .create(&book.title, book.area_id, book.author, book.total_pages, book.shelf)
+    state.books.create(
+        &book.title,
+        book.area_id,
+        book.author,
+        book.total_pages,
+        book.shelf,
+    )
 }
 
 #[tauri::command]
@@ -50,12 +54,20 @@ pub fn set_book_status(state: State<'_, AppState>, id: String, status: BookStatu
 }
 
 #[tauri::command]
-pub fn set_book_shelf(state: State<'_, AppState>, id: String, shelf: Option<String>) -> Result<Book> {
+pub fn set_book_shelf(
+    state: State<'_, AppState>,
+    id: String,
+    shelf: Option<String>,
+) -> Result<Book> {
     state.books.set_shelf(&id, shelf)
 }
 
 #[tauri::command]
-pub fn set_book_rating(state: State<'_, AppState>, id: String, rating: Option<i64>) -> Result<Book> {
+pub fn set_book_rating(
+    state: State<'_, AppState>,
+    id: String,
+    rating: Option<i64>,
+) -> Result<Book> {
     state.books.set_rating(&id, rating)
 }
 

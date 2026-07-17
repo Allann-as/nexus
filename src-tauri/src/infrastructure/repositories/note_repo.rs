@@ -148,12 +148,16 @@ impl NoteRepository for SqliteNoteRepository {
             match area_id {
                 Some(a) => {
                     let mut stmt = c.prepare_cached(&format!("{sql} AND n.area_id = ?1{order}"))?;
-                    let rows = stmt.query_map(params![a], map)?.collect::<rusqlite::Result<Vec<_>>>()?;
+                    let rows = stmt
+                        .query_map(params![a], map)?
+                        .collect::<rusqlite::Result<Vec<_>>>()?;
                     Ok(rows)
                 }
                 None => {
                     let mut stmt = c.prepare_cached(&format!("{sql}{order}"))?;
-                    let rows = stmt.query_map([], map)?.collect::<rusqlite::Result<Vec<_>>>()?;
+                    let rows = stmt
+                        .query_map([], map)?
+                        .collect::<rusqlite::Result<Vec<_>>>()?;
                     Ok(rows)
                 }
             }
@@ -286,7 +290,13 @@ impl NoteRepository for SqliteNoteRepository {
             tx.execute(
                 "INSERT INTO file_details (node_id, relative_path, mime, size_bytes, sha256)
                  VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![file_id, att.relative_path, att.mime, att.size_bytes, att.sha256],
+                params![
+                    file_id,
+                    att.relative_path,
+                    att.mime,
+                    att.size_bytes,
+                    att.sha256
+                ],
             )?;
             tx.execute(
                 "INSERT INTO links (source_id, target_id, link_type, created_at)
@@ -311,12 +321,16 @@ impl NoteRepository for SqliteNoteRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::ports::NodeRepository;
     use crate::domain::ledger::{EventType, LedgerEntityKind, NewLedgerEvent};
     use crate::infrastructure::paths::Paths;
     use crate::infrastructure::repositories::node_repo::SqliteNodeRepository;
-    use crate::application::ports::NodeRepository;
 
-    fn fixture() -> (tempfile::TempDir, SqliteNoteRepository, SqliteNodeRepository) {
+    fn fixture() -> (
+        tempfile::TempDir,
+        SqliteNoteRepository,
+        SqliteNodeRepository,
+    ) {
         let dir = tempfile::tempdir().unwrap();
         let paths = Paths::at(dir.path().to_path_buf()).unwrap();
         let db = Arc::new(Db::open(&paths).unwrap());
@@ -359,7 +373,13 @@ mod tests {
         let (_d, notes, nodes) = fixture();
         note(&nodes, "n1", "Sono");
         notes
-            .save_body_with_event("n1", "Dormir 7h30 por noite.", &[], 10, &ev("n1", EventType::NoteEdited))
+            .save_body_with_event(
+                "n1",
+                "Dormir 7h30 por noite.",
+                &[],
+                10,
+                &ev("n1", EventType::NoteEdited),
+            )
             .unwrap();
 
         let full = notes.get_full("n1").unwrap();
@@ -400,14 +420,29 @@ mod tests {
         note(&nodes, "n2", "Academia");
 
         notes
-            .save_body_with_event("n1", "[[Academia]]", &["n2".into()], 10, &ev("n1", EventType::NoteEdited))
+            .save_body_with_event(
+                "n1",
+                "[[Academia]]",
+                &["n2".into()],
+                10,
+                &ev("n1", EventType::NoteEdited),
+            )
             .unwrap();
         notes
-            .save_body_with_event("n1", "sem elos agora", &[], 11, &ev("n1", EventType::NoteEdited))
+            .save_body_with_event(
+                "n1",
+                "sem elos agora",
+                &[],
+                11,
+                &ev("n1", EventType::NoteEdited),
+            )
             .unwrap();
 
         assert!(notes.get_full("n1").unwrap().outgoing.is_empty());
-        assert!(notes.get_full("n2").unwrap().backlinks.is_empty(), "o backlink some");
+        assert!(
+            notes.get_full("n2").unwrap().backlinks.is_empty(),
+            "o backlink some"
+        );
     }
 
     #[test]
@@ -415,7 +450,10 @@ mod tests {
         let (_d, notes, nodes) = fixture();
         note(&nodes, "n1", "Protocolo de Sono");
         note(&nodes, "n2", "Protocolo de Sono");
-        assert_eq!(notes.find_by_title("protocolo de sono", "n1").unwrap(), Some("n2".into()));
+        assert_eq!(
+            notes.find_by_title("protocolo de sono", "n1").unwrap(),
+            Some("n2".into())
+        );
         assert_eq!(notes.find_by_title("Inexistente", "n1").unwrap(), None);
     }
 
@@ -446,7 +484,10 @@ mod tests {
         assert_eq!(full.attachments[0].relative_path, "media/2026/07/abc.png");
         // O anexo NÃO polui os wiki-links de saída.
         assert!(full.outgoing.is_empty());
-        assert_eq!(notes.path_for_sha("abc").unwrap().as_deref(), Some("media/2026/07/abc.png"));
+        assert_eq!(
+            notes.path_for_sha("abc").unwrap().as_deref(),
+            Some("media/2026/07/abc.png")
+        );
     }
 
     #[test]
@@ -455,18 +496,34 @@ mod tests {
         note(&nodes, "n1", "Nota");
         notes
             .attach_with_event(
-                "f1", "n1",
+                "f1",
+                "n1",
                 &NewAttachment {
-                    title: "x.png".into(), relative_path: "media/x.png".into(),
-                    mime: "image/png".into(), size_bytes: 1, sha256: "s".into(), area_id: None,
+                    title: "x.png".into(),
+                    relative_path: "media/x.png".into(),
+                    mime: "image/png".into(),
+                    size_bytes: 1,
+                    sha256: "s".into(),
+                    area_id: None,
                 },
-                5, &ev("f1", EventType::Created),
+                5,
+                &ev("f1", EventType::Created),
             )
             .unwrap();
         notes
-            .save_body_with_event("n1", "texto novo", &[], 10, &ev("n1", EventType::NoteEdited))
+            .save_body_with_event(
+                "n1",
+                "texto novo",
+                &[],
+                10,
+                &ev("n1", EventType::NoteEdited),
+            )
             .unwrap();
 
-        assert_eq!(notes.get_full("n1").unwrap().attachments.len(), 1, "o anexo sobrevive ao save");
+        assert_eq!(
+            notes.get_full("n1").unwrap().attachments.len(),
+            1,
+            "o anexo sobrevive ao save"
+        );
     }
 }
