@@ -158,6 +158,82 @@ irrelevante num app desktop sem barra de endereço.
 
 ---
 
+## ADR-0013 — Streak de `TimesPerWeek` é contado por semana
+
+**Data:** 2026-07-17 · **Status:** aceito
+
+**Contexto.** "Dia não agendado não quebra streak" é regra explícita do prompt.
+Para `Daily` e `Weekdays` isso é direto: pule o dia. Mas "3× por semana" não tem
+dia certo — **todo** dia serve e **nenhum** é obrigatório. Contado por dia, o
+streak seria 1 para sempre.
+
+**Decisão.** `TimesPerWeek` conta **semanas** que bateram a meta; as demais
+contam dias. A semana corrente em curso tem carência (não conta, não quebra),
+espelhando a carência de "hoje" no streak diário.
+
+**Consequência.** O número passa a significar o que a pessoa entende por
+"sequência" em cada modalidade. `is_weekly()` no `Schedule` é o que separa os
+dois caminhos em `streak::compute`.
+
+---
+
+## ADR-0014 — Nexus Score: pesos redistribuídos e `None` quando não há nada
+
+**Data:** 2026-07-17 · **Status:** aceito
+
+**Contexto.** Os pesos (40/30/20/10) pressupõem que a pessoa tem hábitos,
+tarefas e rotina matinal. E quem não tem rotina matinal? E o dia sem nada
+agendado?
+
+**Decisão.**
+
+1. **Redistribuir**: só as parcelas aplicáveis entram, normalizadas para 100.
+   Sem rotina, os 20% se diluem nas outras.
+2. **`None`, não zero**, quando nada se aplica.
+
+**Consequência.** Um score que castiga por não usar uma feature mede a feature,
+não o dia; um que presenteia com 20 grátis vira enfeite. E zero num dia sem nada
+agendado seria uma acusação falsa — `None` diz a verdade: não havia o que medir.
+A UI mostra os pesos **efetivos**, não a tabela teórica.
+
+---
+
+## ADR-0015 — Ordem de tarefas em `REAL`, não `INTEGER`
+
+**Data:** 2026-07-17 · **Status:** aceito
+
+**Contexto.** O drag reorder precisa de ordem manual persistida.
+
+**Decisão.** `task_details.sort_order REAL`. Arrastar entre dois vizinhos grava a
+**média** deles.
+
+**Consequência.** Mover é **1 update de 1 linha**. Com inteiros seria renumerar
+todas as linhas seguintes a cada arrasto — O(n) escritas por gesto. **Custo:** a
+precisão do double satura após ~50 inserções no mesmo ponto; quando o intervalo
+cai abaixo de `MIN_GAP` (1e-6), `renumber_project_tasks` reespaça em inteiros e a
+conta refaz com folga. Coberto por teste que arrasta 60× no mesmo ponto e exige
+que a ordem continue estritamente crescente.
+
+---
+
+## ADR-0016 — `double_option` no patch de tarefa
+
+**Data:** 2026-07-17 · **Status:** aceito
+
+**Contexto.** Um patch parcial precisa distinguir "não mexer neste campo" de
+"apagar este campo". O `Option<Option<T>>` do serde colapsa os dois em `None`, e
+atributos serde não existem em parâmetro de função Tauri.
+
+**Decisão.** Um `TaskPatchDto` com `#[serde(default, deserialize_with = "double_option")]`
+por campo anulável, recebido como um único argumento.
+
+**Consequência.** `campo ausente` → não mexer; `"dueAt": null` → limpar;
+`"dueAt": 123` → definir. Sem isso, editar a prioridade de uma tarefa apagaria
+silenciosamente a data dela. Cinco testes fixam o contrato — é sutil demais para
+ficar por conta da intenção.
+
+---
+
 ## ADR-0010 — FTS5 contentless: o vínculo é o `rowid`, não uma coluna `node_id`
 
 **Data:** 2026-07-17 · **Status:** aceito

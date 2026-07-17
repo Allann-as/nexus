@@ -7,6 +7,8 @@
 use crate::domain::entities::{Area, Kind, Node, Status};
 use crate::domain::errors::Result;
 use crate::domain::ledger::{LedgerEntry, NewLedgerEvent};
+use crate::domain::schedule::Schedule;
+use crate::domain::streak::TickStatus;
 
 /// O tempo, como dependência explícita.
 ///
@@ -139,4 +141,154 @@ pub struct SearchHit {
 pub trait SearchRepository: Send + Sync {
     fn search(&self, query: &str, limit: i64, offset: i64) -> Result<Vec<SearchHit>>;
     fn rebuild(&self) -> Result<()>;
+}
+
+/* ===== Hábitos ===== */
+
+#[derive(Debug, Clone)]
+pub struct NewHabitDetails {
+    pub schedule: Schedule,
+    pub target_value: Option<f64>,
+    pub unit: Option<String>,
+    pub routine_id: Option<String>,
+    pub reminder_time: Option<String>,
+}
+
+/// Um hábito: o node + os detalhes do satélite, já juntos.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Habit {
+    pub id: String,
+    pub title: String,
+    pub area_id: Option<String>,
+    pub status: String,
+    pub schedule: Schedule,
+    pub target_value: Option<f64>,
+    pub unit: Option<String>,
+    pub routine_id: Option<String>,
+    pub routine_order: Option<i64>,
+    pub reminder_time: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Tick {
+    pub status: TickStatus,
+    pub value: Option<f64>,
+}
+
+pub trait HabitRepository: Send + Sync {
+    fn create_details(&self, node_id: &str, details: &NewHabitDetails) -> Result<()>;
+    fn get(&self, id: &str) -> Result<Habit>;
+    fn list(&self, area_id: Option<&str>, include_archived: bool) -> Result<Vec<Habit>>;
+    fn list_in_routine(&self, routine_id: &str) -> Result<Vec<Habit>>;
+    fn update_schedule(&self, id: &str, schedule: &Schedule) -> Result<()>;
+
+    /// Marca um hábito num dia E grava o evento, na mesma transação.
+    fn tick_with_event(
+        &self,
+        habit_id: &str,
+        day: &str,
+        tick: Tick,
+        ts: i64,
+        event: &NewLedgerEvent,
+    ) -> Result<()>;
+
+    /// Desmarca (o usuário errou o clique).
+    fn untick_with_event(&self, habit_id: &str, day: &str, event: &NewLedgerEvent) -> Result<()>;
+
+    /// Ticks de um hábito num intervalo de dias — a série do heatmap.
+    fn ticks_in_range(&self, habit_id: &str, from: &str, to: &str) -> Result<Vec<(String, Tick)>>;
+
+    /// Ticks de TODOS os hábitos num único dia. Uma query, não N.
+    fn ticks_on_day(&self, day: &str) -> Result<Vec<(String, Tick)>>;
+
+    /// Marca uma rotina inteira: N ticks + N eventos, UMA transação.
+    fn complete_routine(
+        &self,
+        routine_id: &str,
+        day: &str,
+        ts: i64,
+        events: &[(String, NewLedgerEvent)],
+    ) -> Result<u32>;
+
+    /// Taxa de falha por dia da semana (0=domingo). Alimenta os "ofensores".
+    fn failure_rate_by_weekday(&self, habit_id: &str, since: &str) -> Result<Vec<(u8, u32, u32)>>;
+}
+
+/* ===== Tarefas ===== */
+
+#[derive(Debug, Clone, Default)]
+pub struct NewTaskDetails {
+    pub due_at: Option<i64>,
+    pub scheduled_at: Option<i64>,
+    pub duration_min: Option<i64>,
+    pub priority: i64,
+    pub energy: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Task {
+    pub id: String,
+    pub title: String,
+    pub area_id: Option<String>,
+    pub parent_id: Option<String>,
+    pub status: String,
+    pub due_at: Option<i64>,
+    pub scheduled_at: Option<i64>,
+    pub duration_min: Option<i64>,
+    pub priority: i64,
+    pub energy: Option<String>,
+    pub completed_at: Option<i64>,
+    pub sort_order: f64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TaskPatch {
+    pub due_at: Option<Option<i64>>,
+    pub scheduled_at: Option<Option<i64>>,
+    pub duration_min: Option<Option<i64>>,
+    pub priority: Option<i64>,
+    pub energy: Option<Option<String>>,
+}
+
+/// Progresso de um projeto = tarefas concluídas / total.
+#[derive(Debug, Clone, Copy, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Progress {
+    pub done: i64,
+    pub total: i64,
+}
+
+pub trait TaskRepository: Send + Sync {
+    fn create_details(&self, node_id: &str, details: &NewTaskDetails) -> Result<()>;
+    fn get(&self, id: &str) -> Result<Task>;
+    fn list_for_project(&self, project_id: &str, include_done: bool) -> Result<Vec<Task>>;
+
+    /// Tarefas agendadas para um dia (janela epoch-ms) — a coluna "Hoje".
+    fn scheduled_between(&self, from_ms: i64, to_ms: i64) -> Result<Vec<Task>>;
+
+    fn update(&self, id: &str, patch: &TaskPatch) -> Result<Task>;
+
+    /// Conclui/reabre e grava o evento, na mesma transação.
+    fn set_completed_with_event(
+        &self,
+        id: &str,
+        completed_at: Option<i64>,
+        event: &NewLedgerEvent,
+    ) -> Result<Task>;
+
+    /// Reordena por média dos vizinhos: um update, uma linha.
+    fn reorder(&self, id: &str, new_order: f64) -> Result<()>;
+
+    /// Vizinhos de uma posição, para calcular a média do arrasto.
+    fn neighbours(&self, project_id: &str, index: usize) -> Result<(Option<f64>, Option<f64>)>;
+
+    /// Reespaça a ordem quando o intervalo entre vizinhos satura o double.
+    fn renumber_project_tasks(&self, project_id: &str) -> Result<()>;
+
+    fn progress(&self, project_id: &str) -> Result<Progress>;
+
+    /// Contagem de tarefas planejadas/concluídas num dia — entrada do score.
+    fn day_counts(&self, from_ms: i64, to_ms: i64) -> Result<(u32, u32)>;
 }

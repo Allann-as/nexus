@@ -94,7 +94,7 @@ logs/      rotação diária
 |---|---|---|
 | **M0** | Fundação: scaffold, pool+PRAGMAs+migrations, tokens, shell, `check.ps1` | ✅ **concluído** |
 | **M1** | CRUD Áreas/Nodes, Inbox, ledger, FTS5, palette com busca real | ✅ **concluído** |
-| M2 | Tarefas, Projetos, Hábitos, Rotinas, ticks, streaks, Dashboard v1 | ⬜ |
+| **M2** | Tarefas, Projetos, Hábitos, Rotinas, ticks, streaks, Dashboard v1 | ✅ **concluído** |
 | M3 | Calendário (timeblocking, RFC-5545, conflitos), Metas + projeção | ⬜ |
 | M4 | Notas (CodeMirror, wiki-links), Timeline, `bi_engine`, Insights | ⬜ |
 | M5 | Backup/restore, export, Revisão Semanal, Modo Foco, seed de 5 anos | ⬜ |
@@ -122,13 +122,27 @@ logs/      rotação diária
 - **Paleta**: ações (fuzzy local) + resultados FTS do banco, numa lista só.
 - 58 testes (31 unitários + 27 de integração contra SQLite real em arquivo).
 
+### O que o M2 entrega de verdade
+
+- **Streaks corretos**: dia não agendado não quebra sequência; `skipped` é
+  neutro e `failed` quebra; hoje sem tick tem carência (o dia não acabou);
+  `TimesPerWeek` conta por semana, não por dia. 18 testes só nisso.
+- **Nexus Score** determinístico com pesos **redistribuídos** entre o que se
+  aplica, `None` (não zero) quando não havia nada a fazer, e "ⓘ como calculamos"
+  exibindo a fórmula inteira.
+- **Rotinas em cascata**: N ticks + N eventos numa única transação.
+- **Projetos** com lista virtualizada e drag reorder por média dos vizinhos —
+  mover é 1 update de 1 linha, com reespaçamento automático quando o double
+  satura.
+- **Heatmap anual** em SVG puro (nada de biblioteca de gráficos para 365 rects).
+
 ### Medições reais (build `tauri build`, release)
 
-| Métrica | Orçamento | M0 | M1 |
-|---|---|---|---|
-| Binário | — | 4,8 MB | **5,2 MB** |
-| Cold start até janela | < 1,5 s | 0,86 s | **0,92 s** |
-| RSS do processo host | < 300 MB total | 31 MB | **32 MB** |
+| Métrica | Orçamento | M0 | M1 | M2 |
+|---|---|---|---|---|
+| Binário | — | 4,8 MB | 5,2 MB | **5,3 MB** |
+| Cold start até janela | < 1,5 s | 0,86 s | 0,92 s | **0,91 s** |
+| RSS do processo host | < 300 MB total | 31 MB | 32 MB | **35 MB** |
 
 > Ressalva honesta: RAM total (host + WebView2) e os orçamentos de busca,
 > timeline e scroll só podem ser validados contra o seed de 5 anos, no M5. Os

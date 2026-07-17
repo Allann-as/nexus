@@ -124,6 +124,24 @@
   --ease-aurora: var(--ease);
 }
 
+/* --- Micro-motion ---------------------------------------
+   O pulso do check de hábito. Discreto por regra: o "uau" do
+   Aurora vem de tipografia e hierarquia, não de espetáculo. */
+@keyframes nexus-pulse {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.4;
+  }
+  60% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 /* --- Motion accessibility -------------------------------
    Not a nicety: motion can trigger vestibular symptoms. The
    app must remain fully usable with animation off. */

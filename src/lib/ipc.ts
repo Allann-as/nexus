@@ -230,3 +230,222 @@ export const ledgerRange = (
 
 export const ledgerForEntity = (entityId: string, limit = 50) =>
   call<LedgerEntry[]>("ledger_for_entity", { entityId, limit });
+
+/* ===== habits ===== */
+
+/** Mirrors `domain::schedule::Schedule`. `days`: 0=Sunday … 6=Saturday. */
+export type Schedule =
+  | { type: "daily" }
+  | { type: "weekdays"; days: number[] }
+  | { type: "times_per_week"; n: number };
+
+export type TickStatus = "done" | "skipped" | "failed";
+
+export interface Streaks {
+  current: number;
+  record: number;
+  isRecord: boolean;
+}
+
+export interface Habit {
+  id: string;
+  title: string;
+  areaId: string | null;
+  status: string;
+  schedule: Schedule;
+  targetValue: number | null;
+  unit: string | null;
+  routineId: string | null;
+  routineOrder: number | null;
+  reminderTime: string | null;
+}
+
+/** `Habit` flattened together with today's state — mirrors `HabitWithStats`. */
+export interface HabitWithStats extends Habit {
+  streaks: Streaks;
+  today: TickStatus | null;
+  todayValue: number | null;
+}
+
+export interface HeatmapCell {
+  day: string;
+  status: TickStatus | null;
+  value: number | null;
+  scheduled: boolean;
+}
+
+export interface WeekdayStat {
+  weekday: number;
+  label: string;
+  done: number;
+  total: number;
+  failureRate: number;
+}
+
+export const createHabit = (h: {
+  title: string;
+  areaId?: string | null;
+  schedule: Schedule;
+  targetValue?: number | null;
+  unit?: string | null;
+  routineId?: string | null;
+  reminderTime?: string | null;
+}) =>
+  call<Habit>("create_habit", {
+    title: h.title,
+    areaId: h.areaId ?? null,
+    // O backend valida o Schedule de novo ao desserializar: o front é
+    // conveniência, não a autoridade.
+    scheduleJson: JSON.stringify(h.schedule),
+    targetValue: h.targetValue ?? null,
+    unit: h.unit ?? null,
+    routineId: h.routineId ?? null,
+    reminderTime: h.reminderTime ?? null,
+  });
+
+export const createRoutine = (title: string, areaId?: string | null) =>
+  call<string>("create_routine", { title, areaId: areaId ?? null });
+
+export const listHabits = (areaId?: string | null) =>
+  call<Habit[]>("list_habits", { areaId: areaId ?? null });
+
+export const getHabit = (id: string) => call<Habit>("get_habit", { id });
+
+export const tickHabit = (
+  id: string,
+  status: TickStatus,
+  day?: string | null,
+  value?: number | null,
+) =>
+  call<Streaks>("tick_habit", {
+    id,
+    status,
+    day: day ?? null,
+    value: value ?? null,
+  });
+
+export const untickHabit = (id: string, day?: string | null) =>
+  call<Streaks>("untick_habit", { id, day: day ?? null });
+
+export const completeRoutine = (id: string, day?: string | null) =>
+  call<number>("complete_routine", { id, day: day ?? null });
+
+export const habitStreaks = (id: string) => call<Streaks>("habit_streaks", { id });
+
+export const habitsToday = () => call<HabitWithStats[]>("habits_today");
+
+export const habitHeatmap = (id: string, days = 365) =>
+  call<HeatmapCell[]>("habit_heatmap", { id, days });
+
+export const habitWeekdayStats = (id: string, days = 180) =>
+  call<WeekdayStat[]>("habit_weekday_stats", { id, days });
+
+export const setHabitSchedule = (id: string, schedule: Schedule) =>
+  call<void>("set_habit_schedule", { id, scheduleJson: JSON.stringify(schedule) });
+
+/* ===== tasks & projects ===== */
+
+export interface Task {
+  id: string;
+  title: string;
+  areaId: string | null;
+  parentId: string | null;
+  status: string;
+  dueAt: number | null;
+  scheduledAt: number | null;
+  durationMin: number | null;
+  /** 1 = alta, 2 = média, 3 = baixa. */
+  priority: number;
+  energy: string | null;
+  completedAt: number | null;
+  sortOrder: number;
+}
+
+export interface Progress {
+  done: number;
+  total: number;
+}
+
+export const createTask = (t: {
+  title: string;
+  areaId?: string | null;
+  projectId?: string | null;
+  dueAt?: number | null;
+  scheduledAt?: number | null;
+  durationMin?: number | null;
+  priority?: number;
+  energy?: "deep" | "shallow" | null;
+}) =>
+  call<Task>("create_task", {
+    title: t.title,
+    areaId: t.areaId ?? null,
+    projectId: t.projectId ?? null,
+    dueAt: t.dueAt ?? null,
+    scheduledAt: t.scheduledAt ?? null,
+    durationMin: t.durationMin ?? null,
+    priority: t.priority ?? 2,
+    energy: t.energy ?? null,
+  });
+
+export const createProject = (title: string, areaId?: string | null) =>
+  call<string>("create_project", { title, areaId: areaId ?? null });
+
+export const listProjectTasks = (projectId: string, includeDone = false) =>
+  call<Task[]>("list_project_tasks", { projectId, includeDone });
+
+export const getTask = (id: string) => call<Task>("get_task", { id });
+
+export const setTaskCompleted = (id: string, done: boolean) =>
+  call<Task>("set_task_completed", { id, done });
+
+/**
+ * Patch parcial de tarefa.
+ *
+ * A chave AUSENTE significa "não mexer"; a chave presente valendo `null`
+ * significa "limpar". São pedidos diferentes, e o backend os distingue
+ * (`double_option`). Por isso o objeto é repassado como veio — montar os
+ * campos aqui com `?? null` transformaria "não mexer" em "apagar".
+ */
+export const updateTask = (
+  id: string,
+  patch: {
+    dueAt?: number | null;
+    scheduledAt?: number | null;
+    durationMin?: number | null;
+    priority?: number;
+    energy?: "deep" | "shallow" | null;
+  },
+) => call<Task>("update_task", { id, patch });
+
+export const moveTask = (id: string, projectId: string, toIndex: number) =>
+  call<void>("move_task", { id, projectId, toIndex });
+
+export const projectProgress = (projectId: string) =>
+  call<Progress>("project_progress", { projectId });
+
+/* ===== dashboard ===== */
+
+export interface ScoreComponent {
+  label: string;
+  /** Peso efetivo, já redistribuído. */
+  weight: number;
+  ratio: number;
+  detail: string;
+}
+
+export interface Score {
+  /** `null` quando não havia nada agendado — não é zero. */
+  value: number | null;
+  components: ScoreComponent[];
+  formula: string;
+}
+
+export interface Today {
+  day: string;
+  habits: HabitWithStats[];
+  tasks: Task[];
+  score: Score;
+  inboxOpen: number;
+}
+
+export const dashboardToday = () => call<Today>("dashboard_today");

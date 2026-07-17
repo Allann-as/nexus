@@ -7,11 +7,11 @@ import { DashboardScreen } from "../features/dashboard/DashboardScreen";
 import { SettingsScreen } from "../features/settings/SettingsScreen";
 import { InboxScreen } from "../features/inbox/InboxScreen";
 import { AreasScreen } from "../features/areas/AreasScreen";
+import { HabitsScreen } from "../features/habits/HabitsScreen";
+import { ProjectsScreen } from "../features/projects/ProjectsScreen";
 import {
   TodayScreen,
   CalendarScreen,
-  HabitsScreen,
-  GoalsScreen,
   NotesScreen,
   TimelineScreen,
   InsightsScreen,
@@ -47,7 +47,7 @@ const router = createHashRouter([
       { path: "today", element: <TodayScreen /> },
       { path: "calendar", element: <CalendarScreen /> },
       { path: "habits", element: <HabitsScreen /> },
-      { path: "goals", element: <GoalsScreen /> },
+      { path: "goals", element: <ProjectsScreen /> },
       { path: "notes", element: <NotesScreen /> },
       { path: "timeline", element: <TimelineScreen /> },
       { path: "insights", element: <InsightsScreen /> },

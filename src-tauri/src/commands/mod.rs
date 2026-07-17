@@ -5,6 +5,8 @@
 //! tipado em `src/lib/ipc.ts` no frontend.
 
 pub mod areas;
+pub mod habits;
 pub mod nodes;
 pub mod search;
 pub mod system;
+pub mod tasks;

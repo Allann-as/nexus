@@ -7,15 +7,19 @@
 use std::sync::Arc;
 
 use crate::application::ports::{LedgerRepository, SearchRepository};
-use crate::application::use_cases::{areas::AreaService, nodes::NodeService};
+use crate::application::use_cases::{
+    areas::AreaService, dashboard::DashboardService, habits::HabitService, nodes::NodeService,
+    tasks::TaskService,
+};
 use crate::domain::errors::Result;
 use crate::infrastructure::clock::{SystemClock, Uuid7Gen};
 use crate::infrastructure::db::Db;
 use crate::infrastructure::fts::SqliteSearchRepository;
 use crate::infrastructure::paths::Paths;
 use crate::infrastructure::repositories::{
-    area_repo::SqliteAreaRepository, ledger_repo::SqliteLedgerRepository,
-    node_repo::SqliteNodeRepository,
+    area_repo::SqliteAreaRepository, habit_repo::SqliteHabitRepository,
+    ledger_repo::SqliteLedgerRepository, node_repo::SqliteNodeRepository,
+    task_repo::SqliteTaskRepository,
 };
 
 pub struct AppState {
@@ -23,6 +27,9 @@ pub struct AppState {
     pub paths: Paths,
     pub areas: AreaService,
     pub nodes: NodeService,
+    pub habits: Arc<HabitService>,
+    pub tasks: Arc<TaskService>,
+    pub dashboard: DashboardService,
     pub ledger: Arc<dyn LedgerRepository>,
     pub search: Arc<dyn SearchRepository>,
 }
@@ -33,11 +40,36 @@ impl AppState {
 
         let area_repo = Arc::new(SqliteAreaRepository::new(db.clone()));
         let node_repo = Arc::new(SqliteNodeRepository::new(db.clone()));
+        let habit_repo = Arc::new(SqliteHabitRepository::new(db.clone()));
+        let task_repo = Arc::new(SqliteTaskRepository::new(db.clone()));
         let ledger: Arc<dyn LedgerRepository> = Arc::new(SqliteLedgerRepository::new(db.clone()));
         let search: Arc<dyn SearchRepository> = Arc::new(SqliteSearchRepository::new(db.clone()));
 
         let clock = Arc::new(SystemClock);
         let ids = Arc::new(Uuid7Gen);
+
+        let habits = Arc::new(HabitService {
+            habits: habit_repo.clone(),
+            nodes: node_repo.clone(),
+            areas: area_repo.clone(),
+            ids: ids.clone(),
+            clock: clock.clone(),
+        });
+
+        let tasks = Arc::new(TaskService {
+            tasks: task_repo,
+            nodes: node_repo.clone(),
+            areas: area_repo.clone(),
+            ids: ids.clone(),
+            clock: clock.clone(),
+        });
+
+        let dashboard = DashboardService {
+            habits: habits.clone(),
+            tasks: tasks.clone(),
+            habit_repo,
+            nodes: node_repo.clone(),
+        };
 
         Ok(Self {
             areas: AreaService {
@@ -51,6 +83,9 @@ impl AppState {
                 ids,
                 clock,
             },
+            habits,
+            tasks,
+            dashboard,
             ledger,
             search,
             db,

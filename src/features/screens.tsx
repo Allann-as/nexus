@@ -10,8 +10,6 @@
 import {
   Sun,
   Calendar,
-  Repeat,
-  Target,
   FileText,
   History,
   Sparkles,
@@ -60,26 +58,6 @@ export const CalendarScreen = () => (
     icon={Calendar}
     emptyTitle="Nenhum evento"
     hint="Timeblocking por arrasto, recorrência RFC-5545 e detecção de conflitos chegam no M3."
-  />
-);
-
-export const HabitsScreen = () => (
-  <Module
-    title="Hábitos"
-    subtitle="Hábitos, rotinas e sequências"
-    icon={Repeat}
-    emptyTitle="Nenhum hábito ainda"
-    hint="Hábitos binários ou quantitativos, rotinas encadeadas, heatmap anual e streaks chegam no M2."
-  />
-);
-
-export const GoalsScreen = () => (
-  <Module
-    title="Metas & Projetos"
-    subtitle="Do objetivo à próxima ação"
-    icon={Target}
-    emptyTitle="Nenhuma meta ainda"
-    hint="Metas com métrica, checkpoints e projeção linear; projetos com tarefas virtualizadas. Chegam no M3."
   />
 );
 

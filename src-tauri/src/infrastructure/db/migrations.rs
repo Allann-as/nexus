@@ -15,6 +15,7 @@ fn migrations() -> Migrations<'static> {
         M::up(include_str!("../../../migrations/0001_core_schema.sql")),
         M::up(include_str!("../../../migrations/0002_fts.sql")),
         M::up(include_str!("../../../migrations/0003_ledger.sql")),
+        M::up(include_str!("../../../migrations/0004_task_order.sql")),
     ])
 }
 
