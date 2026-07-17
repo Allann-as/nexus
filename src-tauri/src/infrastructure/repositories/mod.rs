@@ -9,6 +9,7 @@ pub mod goal_repo;
 pub mod habit_repo;
 pub mod ledger_repo;
 pub mod node_repo;
+pub mod note_repo;
 pub mod sphere_repo;
 pub mod task_repo;
 pub mod timeline_repo;

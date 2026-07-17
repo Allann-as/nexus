@@ -10,6 +10,7 @@ pub mod finance;
 pub mod goals;
 pub mod habits;
 pub mod nodes;
+pub mod notes;
 pub mod spheres;
 pub mod tasks;
 pub mod timeline;

@@ -1151,3 +1151,69 @@ export const onThisDay = () => call<LedgerEntry[]>("on_this_day");
 /** Congela os meses completos ainda pendentes. Chamado ao abrir a Timeline. */
 export const ensureTimelineRollups = () =>
   call<number>("ensure_timeline_rollups");
+
+/* ===== Notas: corpo, wiki-links e anexos ===== */
+
+export interface NoteSummary {
+  id: string;
+  title: string;
+  areaId: string | null;
+  isPinned: boolean;
+  updatedAt: number;
+}
+
+/** Um elo de/para uma nota. */
+export interface NoteLink {
+  nodeId: string;
+  kind: Kind;
+  title: string;
+  linkType: "related" | "blocks" | "references" | "attached_to";
+}
+
+export interface Attachment {
+  nodeId: string;
+  title: string;
+  /** Relativo à raiz de dados: 'media/AAAA/MM/<sha>.<ext>'. */
+  relativePath: string;
+  mime: string;
+  sizeBytes: number;
+  sha256: string;
+}
+
+/** Uma nota inteira — mirrors `ports::NoteFull`. */
+export interface NoteFull {
+  id: string;
+  title: string;
+  areaId: string | null;
+  bodyMd: string;
+  isPinned: boolean;
+  updatedAt: number;
+  /** Wiki-links resolvidos que esta nota emite. */
+  outgoing: NoteLink[];
+  /** Quem aponta para esta nota. */
+  backlinks: NoteLink[];
+  attachments: Attachment[];
+}
+
+export const listNotes = (areaId?: string | null) =>
+  call<NoteSummary[]>("list_notes", { areaId: areaId ?? null });
+
+export const getNote = (id: string) => call<NoteFull>("get_note", { id });
+
+export const createNote = (title: string, areaId?: string | null) =>
+  call<NoteFull>("create_note", { title, areaId: areaId ?? null });
+
+/** Salva o corpo e resincroniza os wiki-links. Chamar debounced. */
+export const saveNoteBody = (id: string, bodyMd: string) =>
+  call<NoteFull>("save_note_body", { id, bodyMd });
+
+export const pinNote = (id: string, pinned: boolean) =>
+  call<void>("pin_note", { id, pinned });
+
+/** Anexa um arquivo (ou imagem colada) à nota. `bytes` = bytes crus. */
+export const attachToNote = (noteId: string, filename: string, bytes: Uint8Array) =>
+  call<Attachment>("attach_to_note", {
+    noteId,
+    filename,
+    bytes: Array.from(bytes),
+  });

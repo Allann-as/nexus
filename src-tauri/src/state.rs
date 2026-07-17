@@ -10,8 +10,8 @@ use crate::application::ports::{LedgerRepository, SearchRepository};
 use crate::application::use_cases::{
     areas::AreaService, books::BookService, career::CareerService, dashboard::DashboardService,
     events::EventService, fin_goals::FinGoalService, finance::FinanceService, goals::GoalService,
-    habits::HabitService, nodes::NodeService, spheres::SphereService, tasks::TaskService,
-    timeline::TimelineService,
+    habits::HabitService, nodes::NodeService, notes::NoteService, spheres::SphereService,
+    tasks::TaskService, timeline::TimelineService,
 };
 use crate::domain::errors::Result;
 use crate::infrastructure::clock::{SystemClock, Uuid7Gen};
@@ -23,8 +23,9 @@ use crate::infrastructure::repositories::{
     contribution_repo::SqliteContributionRepository, event_repo::SqliteEventRepository,
     fin_goal_repo::SqliteFinGoalRepository, goal_repo::SqliteGoalRepository,
     habit_repo::SqliteHabitRepository, ledger_repo::SqliteLedgerRepository,
-    node_repo::SqliteNodeRepository, sphere_repo::SqliteSphereRepository,
-    task_repo::SqliteTaskRepository, timeline_repo::SqliteTimelineRepository,
+    node_repo::SqliteNodeRepository, note_repo::SqliteNoteRepository,
+    sphere_repo::SqliteSphereRepository, task_repo::SqliteTaskRepository,
+    timeline_repo::SqliteTimelineRepository,
 };
 
 pub struct AppState {
@@ -41,6 +42,7 @@ pub struct AppState {
     pub books: BookService,
     pub career: CareerService,
     pub timeline: TimelineService,
+    pub notes: NoteService,
     pub dashboard: DashboardService,
     pub spheres: SphereService,
     pub ledger: Arc<dyn LedgerRepository>,
@@ -131,6 +133,14 @@ impl AppState {
             clock: clock.clone(),
         };
 
+        let notes = NoteService {
+            notes: Arc::new(SqliteNoteRepository::new(db.clone())),
+            nodes: node_repo.clone(),
+            ids: ids.clone(),
+            clock: clock.clone(),
+            paths: paths.clone(),
+        };
+
         let dashboard = DashboardService {
             habits: habits.clone(),
             tasks: tasks.clone(),
@@ -166,6 +176,7 @@ impl AppState {
             books,
             career,
             timeline,
+            notes,
             dashboard,
             spheres,
             ledger,

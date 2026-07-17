@@ -191,6 +191,108 @@ pub trait TimelineRepository: Send + Sync {
     fn on_this_day(&self, today: &str) -> Result<Vec<LedgerEntry>>;
 }
 
+/* ===== Notas: corpo, wiki-links e anexos ===== */
+
+/// O resumo de uma nota — o item da lista.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteSummary {
+    pub id: String,
+    pub title: String,
+    pub area_id: Option<String>,
+    pub is_pinned: bool,
+    pub updated_at: i64,
+}
+
+/// Um elo de/para uma nota, com o alvo já resolvido para exibir.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteLink {
+    pub node_id: String,
+    pub kind: Kind,
+    pub title: String,
+    /// 'related' | 'blocks' | 'references' | 'attached_to'.
+    pub link_type: String,
+}
+
+/// Um anexo (um node 'file' linkado à nota).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Attachment {
+    pub node_id: String,
+    pub title: String,
+    pub relative_path: String,
+    pub mime: String,
+    pub size_bytes: i64,
+    pub sha256: String,
+}
+
+/// Uma nota inteira: corpo, elos de saída (wiki-links resolvidos + anexos) e
+/// backlinks (quem aponta para ela).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteFull {
+    pub id: String,
+    pub title: String,
+    pub area_id: Option<String>,
+    pub body_md: String,
+    pub is_pinned: bool,
+    pub updated_at: i64,
+    pub outgoing: Vec<NoteLink>,
+    pub backlinks: Vec<NoteLink>,
+    pub attachments: Vec<Attachment>,
+}
+
+/// Os dados de um anexo já copiado para a mídia — o que o repo grava.
+#[derive(Debug, Clone)]
+pub struct NewAttachment {
+    pub title: String,
+    pub relative_path: String,
+    pub mime: String,
+    pub size_bytes: i64,
+    pub sha256: String,
+    pub area_id: Option<String>,
+}
+
+pub trait NoteRepository: Send + Sync {
+    fn list(&self, area_id: Option<&str>) -> Result<Vec<NoteSummary>>;
+    fn get_full(&self, id: &str) -> Result<NoteFull>;
+
+    /// Salva o corpo (upsert em `note_details`), RESINCRONIZA os wiki-links
+    /// (substitui os elos 'references' desta nota pelos `resolved`) e grava o
+    /// evento — tudo na mesma transação. Os elos 'attached_to' (anexos) NÃO são
+    /// tocados: eles não vêm do texto.
+    fn save_body_with_event(
+        &self,
+        id: &str,
+        body_md: &str,
+        resolved: &[String],
+        updated_at: i64,
+        event: &NewLedgerEvent,
+    ) -> Result<NoteFull>;
+
+    fn set_pinned(&self, id: &str, pinned: bool) -> Result<()>;
+
+    /// Resolve um título para o id de um node (case-insensitive, o mais recente),
+    /// exceto o próprio `exclude_id`. `None` = elo pendente (o alvo não existe).
+    fn find_by_title(&self, title: &str, exclude_id: &str) -> Result<Option<String>>;
+
+    /// Se já existe um arquivo com este SHA, devolve o caminho relativo dele — a
+    /// dedup: o mesmo conteúdo é gravado uma vez só.
+    fn path_for_sha(&self, sha256: &str) -> Result<Option<String>>;
+
+    /// Cria o node 'file', o satélite e o link 'attached_to' com a nota, e grava
+    /// o evento — na mesma transação.
+    fn attach_with_event(
+        &self,
+        file_id: &str,
+        note_id: &str,
+        att: &NewAttachment,
+        now: i64,
+        event: &NewLedgerEvent,
+    ) -> Result<Attachment>;
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchHit {

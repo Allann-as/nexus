@@ -16,3 +16,4 @@ pub mod savings;
 pub mod schedule;
 pub mod score;
 pub mod streak;
+pub mod wikilink;

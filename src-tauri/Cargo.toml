@@ -35,6 +35,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 directories = "6"
 
+# Hash de conteúdo para anexos (integridade + dedup) e, no M5, para os backups.
+# Puro Rust, sem rede — o SHA-256 é calculado localmente sobre os bytes.
+sha2 = "0.10"
+
 [dev-dependencies]
 tempfile = "3"
 
