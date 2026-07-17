@@ -7,8 +7,8 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::application::ports::{
-    Account, Bucket, Clock, Contribution, ContributionRepository, IdGen, MonthTotal,
-    NewContribution,
+    Account, Bucket, Clock, Contribution, ContributionRepository, FinGoalRepository, IdGen,
+    MonthTotal, NewContribution,
 };
 use crate::domain::entities::AssetClass;
 use crate::domain::errors::{NexusError, Result};
@@ -43,11 +43,12 @@ pub struct FinanceOverview {
 
 pub struct FinanceService {
     pub contributions: Arc<dyn ContributionRepository>,
+    /// Os objetivos financeiros alimentam a parcela "Objetivos" da Saúde
+    /// Financeira (ADR-0028). No M3.5 ela se redistribuía por não haver dado; o
+    /// M4 trouxe as caixinhas, e a parcela ganhou fonte.
+    pub fin_goals: Arc<dyn FinGoalRepository>,
     pub ids: Arc<dyn IdGen>,
     pub clock: Arc<dyn Clock>,
-    // O `GoalRepository` entra no M4, quando os objetivos financeiros
-    // alimentam a parcela "progresso" da Saúde Financeira. Hoje ela se
-    // redistribui (ADR-0014), então não há o que injetar ainda.
 }
 
 impl FinanceService {
@@ -151,10 +152,10 @@ impl FinanceService {
         let health = financial_health::compute(&FinancialInputs {
             months_with_contribution_12m,
             class_cents,
-            // Objetivos financeiros são do M4. Ausentes, a parcela deles se
-            // redistribui (ADR-0014) — a nota não é castigada por uma feature
-            // que ainda não existe.
-            active_goal_progress: None,
+            // A parcela dos objetivos (ADR-0028): a média de progresso das
+            // caixinhas ativas. `None` (nenhuma caixinha) ainda redistribui,
+            // como antes — a nota não pune quem não usa a feature.
+            active_goal_progress: self.fin_goals.active_progress()?,
             this_month_cents,
             avg_6m_cents: avg_6m_cents as f64,
         });

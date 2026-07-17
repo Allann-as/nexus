@@ -33,6 +33,17 @@ pub enum Kind {
     /// listas de tarefa e para o Nexus Score, e um sub-desafio não é trabalho
     /// planejado do dia. Ver o cabeçalho da 0007.
     Milestone,
+    /// Uma "caixinha" dos Objetivos Financeiros ("PS5", "Viagem Japão").
+    ///
+    /// Kind próprio, e não um `Goal` (ADR-0029): uma caixinha tem alvo em
+    /// centavos e um banco onde o dinheiro mora — não métrica, unidade nem
+    /// direção. Enfiá-la num `Goal` a faria vazar para a tela de Metas.
+    FinGoal,
+    /// Um livro da Biblioteca ("O Nome do Vento").
+    ///
+    /// Kind próprio: um livro tem autor, páginas, status de leitura e nota, e não
+    /// é nenhum dos kinds existentes.
+    Book,
 }
 
 impl Kind {
@@ -48,6 +59,8 @@ impl Kind {
             Kind::File => "file",
             Kind::InboxItem => "inbox_item",
             Kind::Milestone => "milestone",
+            Kind::FinGoal => "fin_goal",
+            Kind::Book => "book",
         }
     }
 
@@ -63,6 +76,8 @@ impl Kind {
             "file" => Kind::File,
             "inbox_item" => Kind::InboxItem,
             "milestone" => Kind::Milestone,
+            "fin_goal" => Kind::FinGoal,
+            "book" => Kind::Book,
             other => {
                 return Err(NexusError::Validation(format!(
                     "kind desconhecido: {other}"
@@ -198,6 +213,50 @@ impl MilestoneKind {
             other => {
                 return Err(NexusError::Validation(format!(
                     "tipo de sub-desafio desconhecido: {other}"
+                )))
+            }
+        })
+    }
+}
+
+/// O ciclo de vida de um livro na estante. Espelha o CHECK de
+/// `book_details.status` (0011).
+///
+/// Fechado porque é o eixo dos filtros e do painel ("livros lendo agora"). A
+/// ordem de declaração é a ordem natural da leitura, mas nada deve ler
+/// significado do `Ord` — ele não deriva aqui de propósito.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BookStatus {
+    /// Na fila, ainda não começado.
+    Fila,
+    /// Lendo agora.
+    Lendo,
+    /// Terminado.
+    Lido,
+    /// Largado no meio — um estado honesto, não uma falha escondida.
+    Abandonado,
+}
+
+impl BookStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            BookStatus::Fila => "fila",
+            BookStatus::Lendo => "lendo",
+            BookStatus::Lido => "lido",
+            BookStatus::Abandonado => "abandonado",
+        }
+    }
+
+    pub fn parse(s: &str) -> Result<Self> {
+        Ok(match s {
+            "fila" => BookStatus::Fila,
+            "lendo" => BookStatus::Lendo,
+            "lido" => BookStatus::Lido,
+            "abandonado" => BookStatus::Abandonado,
+            other => {
+                return Err(NexusError::Validation(format!(
+                    "status de livro desconhecido: {other}"
                 )))
             }
         })
@@ -401,6 +460,8 @@ mod tests {
             Kind::File,
             Kind::InboxItem,
             Kind::Milestone,
+            Kind::FinGoal,
+            Kind::Book,
         ] {
             assert_eq!(Kind::parse(k.as_str()).unwrap(), k);
         }
@@ -413,6 +474,24 @@ mod tests {
         // neste teste.
         assert_eq!(Kind::Milestone.as_str(), "milestone");
         assert_eq!(Kind::InboxItem.as_str(), "inbox_item");
+        assert_eq!(Kind::FinGoal.as_str(), "fin_goal");
+        assert_eq!(Kind::Book.as_str(), "book");
+    }
+
+    #[test]
+    fn book_status_round_trips_and_matches_the_check() {
+        // As strings estão no CHECK de `book_details.status` (0011) e no banco do
+        // usuário para sempre.
+        for s in [
+            BookStatus::Fila,
+            BookStatus::Lendo,
+            BookStatus::Lido,
+            BookStatus::Abandonado,
+        ] {
+            assert_eq!(BookStatus::parse(s.as_str()).unwrap(), s);
+        }
+        assert_eq!(BookStatus::Abandonado.as_str(), "abandonado");
+        assert!(BookStatus::parse("relendo").is_err());
     }
 
     #[test]

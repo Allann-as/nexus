@@ -17,8 +17,8 @@ use nexus_lib::application::ports::{
     NewContribution, NewEvent, NewEventDetails, NewGoal, NewGoalDetails, NewMilestone,
 };
 use nexus_lib::application::use_cases::{
-    areas::AreaService, events::EventService, finance::FinanceService, goals::GoalService,
-    habits::HabitService, nodes::NodeService, tasks::TaskService,
+    areas::AreaService, events::EventService, fin_goals::FinGoalService, finance::FinanceService,
+    goals::GoalService, habits::HabitService, nodes::NodeService, tasks::TaskService,
 };
 use nexus_lib::domain::entities::{
     AssetClass, Direction, Kind, MilestoneKind, ProgressSource, Template,
@@ -31,9 +31,9 @@ use nexus_lib::infrastructure::db::Db;
 use nexus_lib::infrastructure::paths::Paths;
 use nexus_lib::infrastructure::repositories::{
     area_repo::SqliteAreaRepository, contribution_repo::SqliteContributionRepository,
-    event_repo::SqliteEventRepository, goal_repo::SqliteGoalRepository,
-    habit_repo::SqliteHabitRepository, node_repo::SqliteNodeRepository,
-    task_repo::SqliteTaskRepository,
+    event_repo::SqliteEventRepository, fin_goal_repo::SqliteFinGoalRepository,
+    goal_repo::SqliteGoalRepository, habit_repo::SqliteHabitRepository,
+    node_repo::SqliteNodeRepository, task_repo::SqliteTaskRepository,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -85,12 +85,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let goals = GoalService {
         goals: goal_repo,
         nodes: node_repo,
-        areas: area_repo,
+        areas: area_repo.clone(),
         ids: ids.clone(),
         clock: clock.clone(),
     };
+    let fin_goal_repo = Arc::new(SqliteFinGoalRepository::new(db.clone()));
     let finance = FinanceService {
         contributions: Arc::new(SqliteContributionRepository::new(db.clone())),
+        fin_goals: fin_goal_repo.clone(),
+        ids: ids.clone(),
+        clock: clock.clone(),
+    };
+    let fin_goals = FinGoalService {
+        fin_goals: fin_goal_repo,
+        areas: area_repo,
         ids,
         clock: clock.clone(),
     };
@@ -591,6 +599,58 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
     n_aportes += 1;
     println!("  {n_aportes} aportes em 8 meses");
+
+    // ===== Objetivos Financeiros — as caixinhas (M4) =====
+    //
+    // Duas caixinhas com histórias diferentes: uma quase fechando (para a barra
+    // encher e a projeção dar uma data perto), e uma recém-começada (para a
+    // projeção mostrar um horizonte mais longo). Depósitos ao longo de 3 meses
+    // para a média mensal ter substância.
+    let fin_goals_area = all_areas
+        .iter()
+        .find(|a| a.template == Template::FinGoals)
+        .expect("a Esfera Objetivos Financeiros é semeada pela 0005");
+
+    let ps5 = fin_goals.create(
+        "PlayStation 5",
+        Some(fin_goals_area.id.clone()),
+        450_000,
+        Some("acct-btg-invest".into()),
+        None,
+        Some("🎮".into()),
+    )?;
+    let viagem = fin_goals.create(
+        "Viagem ao Japão",
+        Some(fin_goals_area.id.clone()),
+        1_800_000,
+        Some("acct-nubank".into()),
+        today
+            .checked_add_months(chrono::Months::new(10))
+            .map(format_day),
+        Some("🗾".into()),
+    )?;
+
+    let mut n_deposits = 0;
+    // PS5: três depósitos, chegando perto do alvo (mas sem fechar — a celebração
+    // é para o usuário disparar clicando).
+    for (months_ago, cents) in [(2u32, 120_000i64), (1, 130_000), (0, 150_000)] {
+        let day = today
+            .checked_sub_months(chrono::Months::new(months_ago))
+            .map(|d| d.with_day(8).unwrap_or(d))
+            .unwrap_or(today);
+        fin_goals.deposit(&ps5.id, cents, Some(format_day(day)), None)?;
+        n_deposits += 1;
+    }
+    // Viagem: começou agora, dois depósitos.
+    for (months_ago, cents) in [(1u32, 200_000i64), (0, 250_000)] {
+        let day = today
+            .checked_sub_months(chrono::Months::new(months_ago))
+            .map(|d| d.with_day(12).unwrap_or(d))
+            .unwrap_or(today);
+        fin_goals.deposit(&viagem.id, cents, Some(format_day(day)), None)?;
+        n_deposits += 1;
+    }
+    println!("  2 caixinhas com {n_deposits} depósitos");
 
     // ===== Inbox =====
     for title in [

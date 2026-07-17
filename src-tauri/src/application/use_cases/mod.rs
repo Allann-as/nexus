@@ -3,6 +3,7 @@
 pub mod areas;
 pub mod dashboard;
 pub mod events;
+pub mod fin_goals;
 pub mod finance;
 pub mod goals;
 pub mod habits;

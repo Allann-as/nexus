@@ -64,7 +64,9 @@ export type Kind =
   | "event"
   | "file"
   | "inbox_item"
-  | "milestone";
+  | "milestone"
+  | "fin_goal"
+  | "book";
 
 export type Status = "active" | "done" | "archived" | "dropped";
 
@@ -927,3 +929,93 @@ export const financeOverview = () => call<FinanceOverview>("finance_overview");
 /** O patrimônio informado à mão para um mês ('AAAA-MM'). */
 export const setPortfolioSnapshot = (month: string, totalCents: number) =>
   call<void>("set_portfolio_snapshot", { month, totalCents });
+
+/* ===== Objetivos Financeiros: as "caixinhas" ===== */
+
+/** Uma caixinha. Espelha `ports::FinGoal`. */
+export interface FinGoal {
+  id: string;
+  title: string;
+  areaId: string | null;
+  status: Status;
+  targetCents: number;
+  accountId: string | null;
+  /** O nome do banco onde o dinheiro está guardado, se houver conta. */
+  accountName: string | null;
+  deadline: string | null;
+  emoji: string;
+  /** Somado dos depósitos — nunca um número à mão. */
+  savedCents: number;
+  createdAt: number;
+}
+
+/** A projeção de conclusão — espelha `domain::savings::SavingsProjection`. */
+export interface SavingsProjection {
+  /** 'YYYY-MM' de conclusão, ou `null` (já fechou, ou sem ritmo). */
+  etaMonth: string | null;
+  monthsRemaining: number | null;
+  monthlyRateCents: number;
+  formula: string;
+}
+
+/** Uma caixinha com a projeção — o que o card mostra. */
+export interface FinGoalCard extends FinGoal {
+  projection: SavingsProjection;
+}
+
+export interface FinGoalDeposit {
+  id: string;
+  goalId: string;
+  amountCents: number;
+  happenedOn: string;
+  note: string | null;
+  createdAt: number;
+}
+
+/** O resultado de um depósito: se ele FECHOU a caixinha (dispara a celebração). */
+export interface DepositOutcome {
+  deposit: FinGoalDeposit;
+  completed: boolean;
+}
+
+export const createFinGoal = (goal: {
+  title: string;
+  areaId?: string | null;
+  targetCents: number;
+  accountId?: string | null;
+  deadline?: string | null;
+  emoji?: string | null;
+}) =>
+  call<FinGoal>("create_fin_goal", {
+    goal: {
+      title: goal.title,
+      areaId: goal.areaId ?? null,
+      targetCents: goal.targetCents,
+      accountId: goal.accountId ?? null,
+      deadline: goal.deadline ?? null,
+      emoji: goal.emoji ?? null,
+    },
+  });
+
+/** As caixinhas de uma Esfera (ou todas, com `areaId` ausente), com projeção. */
+export const listFinGoals = (areaId?: string | null) =>
+  call<FinGoalCard[]>("list_fin_goals", { areaId: areaId ?? null });
+
+/** Deposita (ou saca, com `amountCents` negativo) numa caixinha. */
+export const depositFinGoal = (deposit: {
+  goalId: string;
+  amountCents: number;
+  happenedOn?: string | null;
+  note?: string | null;
+}) =>
+  call<DepositOutcome>("deposit_fin_goal", {
+    deposit: {
+      goalId: deposit.goalId,
+      amountCents: deposit.amountCents,
+      happenedOn: deposit.happenedOn ?? null,
+      note: deposit.note ?? null,
+    },
+  });
+
+export const finGoalDeposits = (goalId: string) =>
+  call<FinGoalDeposit[]>("fin_goal_deposits", { goalId });

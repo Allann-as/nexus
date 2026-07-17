@@ -786,3 +786,100 @@ pub trait ContributionRepository: Send + Sync {
     /// Grava/atualiza o retrato do patrimônio de um mês (INSERT OR REPLACE).
     fn set_snapshot(&self, month: &str, total_cents: i64, noted_at: i64) -> Result<()>;
 }
+
+/* ===== Objetivos Financeiros: as "caixinhas" ===== */
+
+#[derive(Debug, Clone)]
+pub struct NewFinGoal {
+    pub title: String,
+    pub area_id: Option<String>,
+    /// Centavos. O alvo é sempre positivo.
+    pub target_cents: i64,
+    /// O banco onde o dinheiro está guardado. Opcional: uma caixinha pode ser só
+    /// uma intenção antes de ter conta.
+    pub account_id: Option<String>,
+    /// 'YYYY-MM-DD' local. Opcional.
+    pub deadline: Option<String>,
+    pub emoji: String,
+}
+
+/// Uma caixinha: o node + o satélite + o total já guardado, juntos.
+///
+/// `saved_cents` vem de query (a soma dos depósitos), nunca de um número
+/// digitado — é o mesmo princípio do contador do sub-desafio.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FinGoal {
+    pub id: String,
+    pub title: String,
+    pub area_id: Option<String>,
+    pub status: String,
+    pub target_cents: i64,
+    pub account_id: Option<String>,
+    /// O nome do banco, se houver conta — a UI mostra o badge sem uma 2ª query.
+    pub account_name: Option<String>,
+    pub deadline: Option<String>,
+    pub emoji: String,
+    pub saved_cents: i64,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewFinGoalDeposit {
+    pub goal_id: String,
+    /// Centavos. Negativo é um saque da caixinha (mudei de ideia, tirei de volta).
+    pub amount_cents: i64,
+    pub happened_on: String,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FinGoalDeposit {
+    pub id: String,
+    pub goal_id: String,
+    pub amount_cents: i64,
+    pub happened_on: String,
+    pub note: Option<String>,
+    pub created_at: i64,
+}
+
+pub trait FinGoalRepository: Send + Sync {
+    /// Node + satélite + ledger, na mesma transação.
+    fn create_with_event(
+        &self,
+        id: &str,
+        node: &NewNode,
+        new: &NewFinGoal,
+        event: &NewLedgerEvent,
+    ) -> Result<FinGoal>;
+
+    fn get(&self, id: &str) -> Result<FinGoal>;
+
+    /// As caixinhas de uma Esfera (ou todas, com `None`), com `saved_cents` já
+    /// somado. Devolve também o total depositado desde `rate_since` (o começo da
+    /// janela de projeção) — na MESMA query, para a projeção não custar N idas ao
+    /// banco.
+    fn list(&self, area_id: Option<&str>, rate_since: &str) -> Result<Vec<(FinGoal, i64)>>;
+
+    /// Grava o depósito E o evento, na mesma transação. Se `completion` for
+    /// `Some`, o node vira 'done' e o evento de conquista entra junto — tudo
+    /// atômico, para a caixinha nunca ficar "fechada sem conquista" nem o
+    /// contrário.
+    fn deposit_with_event(
+        &self,
+        id: &str,
+        deposit: &NewFinGoalDeposit,
+        created_at: i64,
+        deposit_event: &NewLedgerEvent,
+        completion: Option<&NewLedgerEvent>,
+    ) -> Result<FinGoalDeposit>;
+
+    /// Os depósitos de uma caixinha, do mais recente ao mais antigo.
+    fn deposits(&self, goal_id: &str) -> Result<Vec<FinGoalDeposit>>;
+
+    /// A média de progresso (saved/target, 0..=1) das caixinhas ATIVAS, ou
+    /// `None` quando não há nenhuma. Alimenta a parcela "Objetivos" da Saúde
+    /// Financeira (ADR-0028).
+    fn active_progress(&self) -> Result<Option<f64>>;
+}
