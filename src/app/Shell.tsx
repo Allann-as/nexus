@@ -4,6 +4,7 @@ import { Outlet } from "react-router-dom";
 import { Rail } from "./Rail";
 import { Topbar } from "./Topbar";
 import { useKeyboard } from "./useKeyboard";
+import { useBootTasks } from "./useBootTasks";
 import { CommandPalette } from "../features/command-palette/CommandPalette";
 import { QuickCapture } from "../features/inbox/QuickCapture";
 import { AporteHost } from "../features/finance/AporteHost";
@@ -12,6 +13,9 @@ import { Toaster } from "../design-system/Toaster";
 export function Shell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
+
+  // Congela o Score e sincroniza conquistas/temporadas na abertura (ADR-0038/0039).
+  useBootTasks();
 
   useKeyboard({
     // Os dois overlays são mutuamente exclusivos: abrir um fecha o outro.

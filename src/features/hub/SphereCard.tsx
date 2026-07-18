@@ -15,7 +15,7 @@
 import { useNavigate } from "react-router-dom";
 import { Flame } from "lucide-react";
 
-import type { SphereCard as SphereCardData } from "../../lib/ipc";
+import type { Level, SphereCard as SphereCardData } from "../../lib/ipc";
 import { cx } from "../../design-system/primitives";
 import { CountUp } from "../../design-system/cards";
 import { ProgressRing, Sparkline } from "../../design-system/charts";
@@ -24,10 +24,13 @@ import { SphereIcon } from "./SphereIcon";
 export function SphereCard({
   sphere,
   index,
+  level,
 }: {
   sphere: SphereCardData;
   /** Posição no grid — vira o atalho numérico (1–9). */
   index: number;
+  /** XP/nível da Esfera (M4.6). Ausente enquanto a gamificação carrega. */
+  level?: Level;
 }) {
   const navigate = useNavigate();
   const { habitsTodayDone: done, habitsTodayTotal: total } = sphere;
@@ -71,13 +74,28 @@ export function SphereCard({
           </h3>
         </div>
 
-        {/* O atalho numérico. Aparece no hover: presente para quem procura,
-            silencioso para quem não. */}
-        {index < 9 && (
-          <kbd className="grid size-5 shrink-0 place-items-center rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-base)] font-mono text-[10px] text-[var(--text-tertiary)] opacity-0 transition-opacity duration-[var(--dur-fast)] group-hover:opacity-100">
-            {index + 1}
-          </kbd>
-        )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {/* Nível da Esfera (M4.6) — a cor tinge, mas o "Nv" nomeia. */}
+          {level && level.xp > 0 && (
+            <span
+              className="tabular rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+              style={{
+                background: "color-mix(in srgb, var(--sphere) 16%, transparent)",
+                color: "var(--sphere)",
+              }}
+              title={`${level.xp.toLocaleString("pt-BR")} XP`}
+            >
+              Nv {level.level}
+            </span>
+          )}
+          {/* O atalho numérico. Aparece no hover: presente para quem procura,
+              silencioso para quem não. */}
+          {index < 9 && (
+            <kbd className="grid size-5 place-items-center rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-base)] font-mono text-[10px] text-[var(--text-tertiary)] opacity-0 transition-opacity duration-[var(--dur-fast)] group-hover:opacity-100">
+              {index + 1}
+            </kbd>
+          )}
+        </div>
       </div>
 
       {/* Uma Esfera vazia convida em vez de exibir uma parede de zeros. O ícone
@@ -146,6 +164,19 @@ export function SphereCard({
           <Sparkline data={sphere.spark} width={104} height={36} className="shrink-0" />
         )}
       </div>
+
+      {/* A barra de XP no fio da borda: o progresso dentro do nível, tingido. */}
+      {level && level.span > 0 && (
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-[3px] bg-[var(--bg-base)]">
+          <div
+            className="h-full"
+            style={{
+              width: `${(level.intoLevel / level.span) * 100}%`,
+              background: "var(--sphere)",
+            }}
+          />
+        </div>
+      )}
     </button>
   );
 }

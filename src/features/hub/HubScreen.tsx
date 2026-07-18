@@ -16,9 +16,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Info, Plus, Settings } from "lucide-react";
+import { Info, Plus, Settings, Trophy } from "lucide-react";
 
-import { dashboardToday, sphereOverview, toNexusError } from "../../lib/ipc";
+import {
+  dashboardToday,
+  gamificationOverview,
+  sphereOverview,
+  toNexusError,
+  type Level,
+} from "../../lib/ipc";
 import { Button, cx } from "../../design-system/primitives";
 import { Gauge } from "../../design-system/charts";
 import { ScoreDetail } from "./ScoreDetail";
@@ -32,6 +38,11 @@ export function HubScreen() {
 
   const spheres = useQuery({ queryKey: ["spheres", "overview"], queryFn: sphereOverview });
   const today = useQuery({ queryKey: ["dashboard", "today"], queryFn: dashboardToday });
+  const gami = useQuery({ queryKey: ["gamification"], queryFn: gamificationOverview });
+
+  const levelByArea = new Map<string, Level>(
+    (gami.data?.spheres ?? []).map((s) => [s.areaId, s.level]),
+  );
 
   // Atalhos 1–9: abre a Esfera daquela posição. O Hub é a tela mais aberta do
   // app, e teclado-primeiro é regra da constituição.
@@ -96,6 +107,34 @@ export function HubScreen() {
                 Configurações
               </Button>
             </div>
+
+            {gami.data && (
+              <button
+                onClick={() => navigate("/game")}
+                className="mt-4 flex items-center gap-2.5 text-[11px] text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
+              >
+                <Trophy size={13} className="text-[var(--accent)]" aria-hidden />
+                <span>
+                  Nível geral{" "}
+                  <strong className="tabular text-[var(--text-secondary)]">
+                    {gami.data.overall.level}
+                  </strong>
+                </span>
+                <span className="h-1 w-24 overflow-hidden rounded-full bg-[var(--bg-base)]">
+                  <span
+                    className="block h-full rounded-full bg-[var(--accent)]"
+                    style={{
+                      width: `${
+                        gami.data.overall.span > 0
+                          ? (gami.data.overall.intoLevel / gami.data.overall.span) * 100
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </span>
+                <span className="tabular">{gami.data.overall.xp.toLocaleString("pt-BR")} XP</span>
+              </button>
+            )}
           </div>
 
           <div className="relative flex shrink-0 flex-col items-center">
@@ -149,7 +188,12 @@ export function HubScreen() {
           ) : (
             <div className="mt-3 grid grid-cols-2 gap-4">
               {list.map((sphere, i) => (
-                <SphereCard key={sphere.id} sphere={sphere} index={i} />
+                <SphereCard
+                  key={sphere.id}
+                  sphere={sphere}
+                  index={i}
+                  level={levelByArea.get(sphere.id)}
+                />
               ))}
             </div>
           )}
