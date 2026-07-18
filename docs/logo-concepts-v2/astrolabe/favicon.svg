@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" role="img" aria-label="NEXUS">
+<defs></defs>
+
+    <circle cx="8" cy="8" r="6.6" fill="none" stroke="#7C8CF8" stroke-width="1.5"/>
+    <circle cx="8" cy="8" r="6.6" fill="none" stroke="#CAD3FF" stroke-width="0.5" opacity="0.6"/>
+    <circle cx="8" cy="8" r="2.9" fill="#A7B4FB"/>
+    <circle cx="6.9" cy="6.9" r="0.9" fill="#EEF1FF"/>
+  
+</svg>

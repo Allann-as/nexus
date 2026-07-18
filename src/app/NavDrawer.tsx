@@ -20,6 +20,7 @@ import { Settings, X, type LucideIcon } from "lucide-react";
 import { NAV_ITEMS } from "./navigation";
 import { countNodes } from "../lib/ipc";
 import { cx } from "../design-system/primitives";
+import { NexusMark } from "../design-system/NexusMark";
 
 export function NavDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { data: inboxCount = 0 } = useQuery({
@@ -59,7 +60,7 @@ export function NavDrawer({ open, onClose }: { open: boolean; onClose: () => voi
       >
         <div className="flex items-center justify-between px-4 py-4">
           <div className="flex items-center gap-2.5">
-            <NexusMark />
+            <NexusMark size={28} />
             <span className="text-[15px] font-semibold tracking-[0.06em] text-[var(--text-primary)]">
               NEXUS
             </span>
@@ -143,27 +144,5 @@ function DrawerLink({
         </span>
       )}
     </NavLink>
-  );
-}
-
-/** O "N" em traço contínuo dentro de um squircle com o gradiente do NEXUS. */
-function NexusMark() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-      <defs>
-        <linearGradient id="nexus-drawer-mark" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="var(--accent-bright)" />
-          <stop offset="100%" stopColor="var(--accent-deep)" />
-        </linearGradient>
-      </defs>
-      <rect width="32" height="32" rx="9" fill="url(#nexus-drawer-mark)" />
-      <path
-        d="M10.5 22V10L21.5 22V10"
-        stroke="white"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }

@@ -13,11 +13,113 @@
       html[data-theme="light"] {
         background: #f7f8fa;
       }
+
+      /* Splash: o astrolábio pinta antes do React montar. O React limpa o
+         #root ao montar, então este bloco some sozinho no primeiro render.
+         Só opacity/transform animam (a §6 do design system), e o movimento
+         respeita prefers-reduced-motion. */
+      .nx-splash {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        gap: 22px;
+        background:
+          radial-gradient(60% 55% at 50% 42%, rgba(124, 140, 248, 0.12), transparent 70%),
+          radial-gradient(120% 120% at 30% 20%, #141a38, #080b1a);
+      }
+      html[data-theme="light"] .nx-splash {
+        background:
+          radial-gradient(60% 55% at 50% 42%, rgba(124, 140, 248, 0.16), transparent 70%),
+          radial-gradient(120% 120% at 30% 20%, #ffffff, #eef0f8);
+      }
+      .nx-splash svg {
+        animation: nx-splash-in 0.6s ease both;
+      }
+      .nx-splash .nx-splash-core {
+        transform-origin: center;
+        animation: nx-splash-pulse 2.4s ease-in-out infinite;
+      }
+      .nx-splash figcaption {
+        font-family: system-ui, "Segoe UI", sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.22em;
+        color: #a7b4fb;
+        animation: nx-splash-in 0.6s ease 0.1s both;
+      }
+      @keyframes nx-splash-in {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: none; }
+      }
+      @keyframes nx-splash-pulse {
+        0%, 100% { opacity: 0.85; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.06); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .nx-splash svg,
+        .nx-splash .nx-splash-core,
+        .nx-splash figcaption {
+          animation: none;
+        }
+      }
     </style>
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <figure class="nx-splash" aria-label="NEXUS">
+        <svg width="112" height="112" viewBox="0 0 240 240" fill="none">
+          <defs>
+            <radialGradient id="s-core" cx="38%" cy="34%" r="72%">
+              <stop offset="0%" stop-color="#EEF1FF" />
+              <stop offset="30%" stop-color="#A7B4FB" />
+              <stop offset="70%" stop-color="#7C8CF8" />
+              <stop offset="100%" stop-color="#414FB4" />
+            </radialGradient>
+            <radialGradient id="s-halo" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#7C8CF8" stop-opacity="0.5" />
+              <stop offset="60%" stop-color="#7C8CF8" stop-opacity="0.12" />
+              <stop offset="100%" stop-color="#7C8CF8" stop-opacity="0" />
+            </radialGradient>
+            <linearGradient id="s-ring" x1="18%" y1="8%" x2="86%" y2="94%">
+              <stop offset="0%" stop-color="#CAD3FF" />
+              <stop offset="42%" stop-color="#5D6BDC" />
+              <stop offset="100%" stop-color="#1B2258" />
+            </linearGradient>
+          </defs>
+          <g stroke="#7C8CF8" stroke-linecap="round">
+            <line x1="120" y1="18" x2="120" y2="29" stroke-width="1.5" opacity="0.9" />
+            <line x1="171" y1="31.67" x2="165.5" y2="41.19" stroke-width="1.5" opacity="0.9" />
+            <line x1="208.33" y1="69" x2="198.81" y2="74.5" stroke-width="1.5" opacity="0.9" />
+            <line x1="222" y1="120" x2="211" y2="120" stroke-width="1.5" opacity="0.9" />
+            <line x1="208.33" y1="171" x2="198.81" y2="165.5" stroke-width="1.5" opacity="0.9" />
+            <line x1="171" y1="208.33" x2="165.5" y2="198.81" stroke-width="1.5" opacity="0.9" />
+            <line x1="120" y1="222" x2="120" y2="211" stroke-width="1.5" opacity="0.9" />
+            <line x1="69" y1="208.33" x2="74.5" y2="198.81" stroke-width="1.5" opacity="0.9" />
+            <line x1="31.67" y1="171" x2="41.19" y2="165.5" stroke-width="1.5" opacity="0.9" />
+            <line x1="18" y1="120" x2="29" y2="120" stroke-width="1.5" opacity="0.9" />
+            <line x1="31.67" y1="69" x2="41.19" y2="74.5" stroke-width="1.5" opacity="0.9" />
+            <line x1="69" y1="31.67" x2="74.5" y2="41.19" stroke-width="1.5" opacity="0.9" />
+          </g>
+          <circle cx="120" cy="120" r="104" fill="none" stroke="url(#s-ring)" stroke-width="3.4" />
+          <circle cx="120" cy="120" r="84" fill="none" stroke="url(#s-ring)" stroke-width="2.2" />
+          <circle cx="120" cy="120" r="65" fill="none" stroke="url(#s-ring)" stroke-width="1.7" />
+          <circle cx="120" cy="120" r="47" fill="none" stroke="#A7B4FB" stroke-width="1.35" opacity="0.7" />
+          <g stroke-linecap="round">
+            <line x1="175.92" y1="202.9" x2="64.08" y2="37.1" stroke="#1B2258" stroke-width="6" opacity="0.35" />
+            <line x1="175.92" y1="202.9" x2="64.08" y2="37.1" stroke="#A7B4FB" stroke-width="2.2" />
+          </g>
+          <g class="nx-splash-core">
+            <circle cx="120" cy="120" r="46" fill="url(#s-halo)" />
+            <circle cx="120" cy="120" r="27" fill="url(#s-core)" />
+            <circle cx="120" cy="120" r="20" fill="none" stroke="#EEF1FF" stroke-width="0.7" opacity="0.55" />
+            <circle cx="114" cy="113" r="4.5" fill="#EEF1FF" opacity="0.9" />
+          </g>
+        </svg>
+        <figcaption>NEXUS</figcaption>
+      </figure>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

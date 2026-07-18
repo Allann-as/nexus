@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NEXUS — conceitos de logo (v2)</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #0a0d1f;
+    color: #cdd3f0;
+    padding: 40px 32px 80px;
+    line-height: 1.5;
+  }
+  h1 { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; color: #eef1ff; }
+  .sub { font-size: 13px; color: #7c86b8; margin-top: 6px; max-width: 680px; }
+  .concept { margin-top: 44px; border-top: 1px solid #1c2140; padding-top: 28px; }
+  .concept h2 { font-size: 16px; font-weight: 600; color: #a7b4fb; letter-spacing: -0.01em; }
+  .concept .logic { font-size: 12.5px; color: #8a93c2; margin-top: 8px; max-width: 720px; }
+  .concept .logic b { color: #cdd3f0; font-weight: 600; }
+  .row { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 24px; align-items: stretch; }
+  .panel {
+    border-radius: 18px; padding: 26px; display: flex; flex-direction: column;
+    align-items: center; gap: 16px; min-width: 150px;
+  }
+  .panel.dark { background: radial-gradient(120% 120% at 30% 20%, #141a38, #080b1a); border: 1px solid #1c2140; }
+  .panel.light { background: radial-gradient(120% 120% at 30% 20%, #ffffff, #eef0f8); border: 1px solid #dfe3f2; }
+  .cap { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: #6b74a3; }
+  .panel.light .cap { color: #9aa0c0; }
+  .marks { display: flex; align-items: center; gap: 22px; }
+  .favtile { display: flex; align-items: center; gap: 10px; }
+  .favtile .zoom { image-rendering: pixelated; width: 64px; height: 64px; }
+  .favtile .real { width: 16px; height: 16px; }
+  .wordmark { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
+  .wordmark .name { font-size: 26px; font-weight: 600; letter-spacing: 0.14em; color: #eef1ff; }
+  .panel.light .wordmark .name { color: #1b2258; }
+  img { display: block; }
+</style>
+</head>
+<body>
+  <h1>NEXUS — conceitos de logo (v2)</h1>
+  <p class="sub">Uma cor dominante (índigo #7C8CF8) numa rampa tonal, luz do canto superior-esquerdo,
+  geometria construída a partir da grade. Três níveis por conceito: marca completa → ícone de app → favicon 16px.
+  A geometria está em <code>generate.mjs</code>.</p>
+
+  <!-- ASTROLÁBIO -->
+  <section class="concept">
+    <h2>1 · Astrolábio</h2>
+    <p class="logic">
+      Quatro <b>anéis concêntricos</b> (as esferas da vida) em raios 104/84/65/47, clareando para dentro
+      para que a luz convirja no <b>núcleo</b> — o nexo. O <b>limbo</b> externo é graduado como um instrumento
+      de medida (tiques a cada 3°, hierarquizados a cada 15°/30°). A <b>alidade</b> cruza o centro a −34°, o mesmo
+      ângulo da diagonal do N do conceito 2. Em 16px colapsa para anel + núcleo.
+    </p>
+    <div class="row">
+      <div class="panel dark">
+        <span class="cap">Fundo escuro</span>
+        <div class="marks">
+          <img src="astrolabe/mark.svg" width="128" height="128" alt="" />
+          <img src="astrolabe/icon.svg" width="76" height="76" alt="" />
+        </div>
+        <div class="favtile">
+          <img class="zoom" src="astrolabe/favicon.svg" alt="" />
+          <img class="real" src="astrolabe/favicon.svg" alt="" />
+          <span class="cap">16px</span>
+        </div>
+      </div>
+      <div class="panel light">
+        <span class="cap">Fundo claro</span>
+        <div class="marks">
+          <img src="astrolabe/mark.svg" width="128" height="128" alt="" />
+          <img src="astrolabe/icon.svg" width="76" height="76" alt="" />
+        </div>
+        <div class="wordmark">
+          <img src="astrolabe/favicon.svg" width="30" height="30" alt="" />
+          <span class="name">NEXUS</span>
+        </div>
+      </div>
+      <div class="panel dark">
+        <span class="cap">Grade de construção</span>
+        <img src="astrolabe/grid.svg" width="150" height="150" alt="" />
+      </div>
+    </div>
+  </section>
+
+  <!-- FITA-N -->
+  <section class="concept">
+    <h2>2 · Fita-N contínua</h2>
+    <p class="logic">
+      O <b>N</b> é uma fita de largura 30 que dobra sobre si mesma: poste esquerdo → diagonal → poste direito.
+      A <b>luz muda a cada dobra</b> — o poste esquerdo é médio, a diagonal escurece (a face virou pra longe da luz),
+      o poste direito clareia (voltou pra luz) — profundidade sem 3D. O <b>centro</b> geométrico ganha o brilho do nexo.
+    </p>
+    <div class="row">
+      <div class="panel dark">
+        <span class="cap">Fundo escuro</span>
+        <div class="marks">
+          <img src="ribbon/mark.svg" width="128" height="128" alt="" />
+          <img src="ribbon/icon.svg" width="76" height="76" alt="" />
+        </div>
+        <div class="favtile">
+          <img class="zoom" src="ribbon/favicon.svg" alt="" />
+          <img class="real" src="ribbon/favicon.svg" alt="" />
+          <span class="cap">16px</span>
+        </div>
+      </div>
+      <div class="panel light">
+        <span class="cap">Fundo claro</span>
+        <div class="marks">
+          <img src="ribbon/mark.svg" width="128" height="128" alt="" />
+          <img src="ribbon/icon.svg" width="76" height="76" alt="" />
+        </div>
+        <div class="wordmark">
+          <img src="ribbon/favicon.svg" width="30" height="30" alt="" />
+          <span class="name">NEXUS</span>
+        </div>
+      </div>
+      <div class="panel dark">
+        <span class="cap">Grade de construção</span>
+        <img src="ribbon/grid.svg" width="150" height="150" alt="" />
+      </div>
+    </div>
+  </section>
+
+  <!-- SELO -->
+  <section class="concept">
+    <h2>3 · Selo facetado</h2>
+    <p class="logic">
+      Um <b>octógono biselado</b>: 8 trapézios na moldura, cada um com o tom que a sua orientação recebe da luz —
+      a gema pega luz na borda. No <b>campo central</b> recuado, um <b>N em prisma</b>: cada haste tem duas facetas
+      (lado claro / lado escuro) e uma crista especular. As arestas internas formam o N. Passa permanência.
+    </p>
+    <div class="row">
+      <div class="panel dark">
+        <span class="cap">Fundo escuro</span>
+        <div class="marks">
+          <img src="seal/mark.svg" width="128" height="128" alt="" />
+          <img src="seal/icon.svg" width="76" height="76" alt="" />
+        </div>
+        <div class="favtile">
+          <img class="zoom" src="seal/favicon.svg" alt="" />
+          <img class="real" src="seal/favicon.svg" alt="" />
+          <span class="cap">16px</span>
+        </div>
+      </div>
+      <div class="panel light">
+        <span class="cap">Fundo claro</span>
+        <div class="marks">
+          <img src="seal/mark.svg" width="128" height="128" alt="" />
+          <img src="seal/icon.svg" width="76" height="76" alt="" />
+        </div>
+        <div class="wordmark">
+          <img src="seal/favicon.svg" width="30" height="30" alt="" />
+          <span class="name">NEXUS</span>
+        </div>
+      </div>
+      <div class="panel dark">
+        <span class="cap">Grade de construção</span>
+        <img src="seal/grid.svg" width="150" height="150" alt="" />
+      </div>
+    </div>
+  </section>
+</body>
+</html>

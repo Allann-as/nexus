@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" role="img" aria-label="NEXUS">
+<defs>
+    <linearGradient id="a-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2B3585"/>
+      <stop offset="100%" stop-color="#10163A"/>
+    </linearGradient>
+    
+    <radialGradient id="a-core" cx="38%" cy="34%" r="72%">
+      <stop offset="0%" stop-color="#EEF1FF"/>
+      <stop offset="30%" stop-color="#A7B4FB"/>
+      <stop offset="70%" stop-color="#7C8CF8"/>
+      <stop offset="100%" stop-color="#414FB4"/>
+    </radialGradient>
+    <radialGradient id="a-halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#7C8CF8" stop-opacity="0.5"/>
+      <stop offset="60%" stop-color="#7C8CF8" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#7C8CF8" stop-opacity="0"/>
+    </radialGradient>
+    
+    <linearGradient id="a-ring0" x1="18%" y1="8%" x2="86%" y2="94%">
+      <stop offset="0%" stop-color="#CAD3FF"/>
+      <stop offset="42%" stop-color="#414FB4"/>
+      <stop offset="100%" stop-color="#1B2258"/>
+    </linearGradient>
+    <linearGradient id="a-ring1" x1="18%" y1="8%" x2="86%" y2="94%">
+      <stop offset="0%" stop-color="#CAD3FF"/>
+      <stop offset="42%" stop-color="#5D6BDC"/>
+      <stop offset="100%" stop-color="#1B2258"/>
+    </linearGradient>
+    <linearGradient id="a-ring2" x1="18%" y1="8%" x2="86%" y2="94%">
+      <stop offset="0%" stop-color="#CAD3FF"/>
+      <stop offset="42%" stop-color="#7C8CF8"/>
+      <stop offset="100%" stop-color="#1B2258"/>
+    </linearGradient>
+    <linearGradient id="a-ring3" x1="18%" y1="8%" x2="86%" y2="94%">
+      <stop offset="0%" stop-color="#CAD3FF"/>
+      <stop offset="42%" stop-color="#A7B4FB"/>
+      <stop offset="100%" stop-color="#1B2258"/>
+    </linearGradient>
+  </defs>
+
+    <path d="M240,120L239.85,163.35L239.41,177.14L238.66,187.06L237.62,195.02L236.26,201.72L234.59,207.5L232.59,212.56L230.25,217.02L227.55,220.97L224.47,224.47L220.97,227.55L217.02,230.25L212.56,232.59L207.5,234.59L201.72,236.26L195.02,237.62L187.06,238.66L177.14,239.41L163.35,239.85L120,240L76.65,239.85L62.86,239.41L52.94,238.66L44.98,237.62L38.28,236.26L32.5,234.59L27.44,232.59L22.98,230.25L19.03,227.55L15.53,224.47L12.45,220.97L9.75,217.02L7.41,212.56L5.41,207.5L3.74,201.72L2.38,195.02L1.34,187.06L0.59,177.14L0.15,163.35L0,120L0.15,76.65L0.59,62.86L1.34,52.94L2.38,44.98L3.74,38.28L5.41,32.5L7.41,27.44L9.75,22.98L12.45,19.03L15.53,15.53L19.03,12.45L22.98,9.75L27.44,7.41L32.5,5.41L38.28,3.74L44.98,2.38L52.94,1.34L62.86,0.59L76.65,0.15L120,0L163.35,0.15L177.14,0.59L187.06,1.34L195.02,2.38L201.72,3.74L207.5,5.41L212.56,7.41L217.02,9.75L220.97,12.45L224.47,15.53L227.55,19.03L230.25,22.98L232.59,27.44L234.59,32.5L236.26,38.28L237.62,44.98L238.66,52.94L239.41,62.86L239.85,76.65L240,120Z" fill="url(#a-bg)"/>
+    <path d="M236,120L235.86,161.91L235.43,175.23L234.71,184.82L233.69,192.52L232.38,198.99L230.77,204.58L228.83,209.47L226.57,213.79L223.96,217.61L220.98,220.98L217.61,223.96L213.79,226.57L209.47,228.83L204.58,230.77L198.99,232.38L192.52,233.69L184.82,234.71L175.23,235.43L161.91,235.86L120,236L78.09,235.86L64.77,235.43L55.18,234.71L47.48,233.69L41.01,232.38L35.42,230.77L30.53,228.83L26.21,226.57L22.39,223.96L19.02,220.98L16.04,217.61L13.43,213.79L11.17,209.47L9.23,204.58L7.62,198.99L6.31,192.52L5.29,184.82L4.57,175.23L4.14,161.91L4,120L4.14,78.09L4.57,64.77L5.29,55.18L6.31,47.48L7.62,41.01L9.23,35.42L11.17,30.53L13.43,26.21L16.04,22.39L19.02,19.02L22.39,16.04L26.21,13.43L30.53,11.17L35.42,9.23L41.01,7.62L47.48,6.31L55.18,5.29L64.77,4.57L78.09,4.14L120,4L161.91,4.14L175.23,4.57L184.82,5.29L192.52,6.31L198.99,7.62L204.58,9.23L209.47,11.17L213.79,13.43L217.61,16.04L220.98,19.02L223.96,22.39L226.57,26.21L228.83,30.53L230.77,35.42L232.38,41.01L233.69,47.48L234.71,55.18L235.43,64.77L235.86,78.09L236,120Z" fill="none" stroke="#414FB4" stroke-width="2" opacity="0.7"/>
+    <line x1="120" y1="22" x2="120" y2="36" stroke="#CAD3FF" stroke-width="3.2" stroke-linecap="round"/><line x1="169" y1="35.13" x2="162" y2="47.25" stroke="#CAD3FF" stroke-width="3.2" stroke-linecap="round"/><line x1="204.87" y1="71" x2="192.75" y2="78" stroke="#CAD3FF" stroke-width="3.2" stroke-linecap="round"/><line x1="218" y1="120" x2="204" y2="120" stroke="#CAD3FF" stroke-width="3.2" stroke-linecap="round"/><line x1="204.87" y1="169" x2="192.75" y2="162" stroke="#CAD3FF" stroke-width="3.2" stroke-linecap="round"/><line x1="169" y1="204.87" x2="162" y2="192.75" stroke="#CAD3FF" stroke-width="3.2" stroke-linecap="round"/><line x1="120" y1="218" x2="120" y2="204" stroke="#CAD3FF" stroke-width="3.2" stroke-linecap="round"/><line x1="71" y1="204.87" x2="78" y2="192.75" stroke="#CAD3FF" stroke-width="3.2" stroke-linecap="round"/><line x1="35.13" y1="169" x2="47.25" y2="162" stroke="#CAD3FF" stroke-width="3.2" stroke-linecap="round"/><line x1="22" y1="120" x2="36" y2="120" stroke="#CAD3FF" stroke-width="3.2" stroke-linecap="round"/><line x1="35.13" y1="71" x2="47.25" y2="78" stroke="#CAD3FF" stroke-width="3.2" stroke-linecap="round"/><line x1="71" y1="35.13" x2="78" y2="47.25" stroke="#CAD3FF" stroke-width="3.2" stroke-linecap="round"/>
+    <circle cx="120" cy="120" r="100" fill="none" stroke="url(#a-ring0)" stroke-width="6.5"/>
+    <circle cx="120" cy="120" r="64" fill="none" stroke="url(#a-ring2)" stroke-width="4"/>
+    <line x1="173.68" y1="199.59" x2="66.32" y2="40.41" stroke="#10163A" stroke-width="8" opacity="0.4" stroke-linecap="round"/>
+    <line x1="173.68" y1="199.59" x2="66.32" y2="40.41" stroke="#A7B4FB" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="120" cy="120" r="52" fill="url(#a-halo)"/>
+    <circle cx="120" cy="120" r="34" fill="url(#a-core)"/>
+    <circle cx="112" cy="111" r="6" fill="#EEF1FF" opacity="0.92"/>
+    <circle cx="120" cy="120" r="3" fill="#1B2258"/>
+  
+</svg>

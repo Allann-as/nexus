@@ -1241,3 +1241,43 @@ escolhia um EMOJI para cada caixinha, guardado em `fin_goal_details.emoji` (0011
 no dado histórico. O único emoji que sobrevive é o de linhas de ledger antigas — e
 esse é intocável por princípio. O `favicon` de um Artifact de preview não conta: é
 a aba do navegador, não a UI do NEXUS.
+
+## ADR-0043 — A marca é o astrolábio, e um logo é ativo fixo — não se tinge com o tema
+
+**Data:** 2026-07-18 · **Status:** aceito · **M4.6** · §1 do redesign
+
+**Contexto.** A primeira leva de logos (M4.6 1/n, "bolinhas ligadas por traços")
+foi rejeitada por genérica. O arquiteto pediu execução de outro nível: grade de
+construção real, UMA cor dominante numa rampa tonal (não matizes chapados), luz
+consistente, hierarquia de traço, detalhe que recompensa o zoom, e três níveis de
+detalhe (marca → ícone → favicon 16px). Foram gerados três conceitos novos em
+`docs/logo-concepts-v2/` (astrolábio, fita-N, selo facetado), cada um construído
+por `generate.mjs` — a geometria nasce de math a partir do centro, nada "a olho".
+
+**Decisão.**
+
+1. **O conceito escolhido é o ASTROLÁBIO.** Anéis concêntricos = as esferas da
+   vida; o limbo externo graduado como instrumento de medida; a alidade cruzando o
+   centro a −34°; o núcleo como o nexo, e é ele que brilha. A metáfora fecha com o
+   produto: o NEXUS é o instrumento com que se navega a própria vida.
+
+2. **A geometria mora em `generate.mjs` (docs) e em `design-system/NexusMark.tsx`
+   (app), com os MESMOS números** (centro 120, raios 104/84/65/47, alidade −34°). O
+   componente React é a marca in-app (cabeçalho do menu, e o Sobre quando o item 8
+   chegar); o splash do `index.html` desenha a mesma figura antes do React montar.
+
+3. **Um logo é ativo de marca com UMA identidade — não se tinge com o tema nem com a
+   Esfera.** Por isso `NexusMark` usa a rampa índigo (`#7C8CF8` e vizinhos) em hex
+   cru, a exceção consciente à regra "hex cru em componente é bug": a variável de
+   tema seria o erro aqui. O `NexusMark` antigo (um "N" em `var(--accent)`) tingia
+   com o tema — era placeholder, não marca.
+
+4. **Os ícones do bundle vêm de uma variante BOLD** (`astrolabe/appicon.svg`): anéis
+   grossos, núcleo grande, 12 tiques. O astrolábio detalhado vira borrão em 32px; a
+   variante bold é o nível "ícone simplificado" da receita, e sobrevive ao downscale
+   do `tauri icon` para 32/16px com dignidade. O afinamento por-tamanho do `.ico`
+   (arte diferente por resolução) fica para o M6, que finaliza o ícone e o instalador.
+
+**Consequência.** A marca tem permanência e uma só identidade em qualquer fundo. Os
+outros dois conceitos ficam arquivados em `docs/logo-concepts-v2/` — se um dia a
+marca for revista, o ponto de partida é rico, não um recomeço do zero.
