@@ -1,11 +1,12 @@
 # NEXUS — Arquitetura
 
 > Documento vivo. Atualize-o no mesmo commit que muda a estrutura.
-> Estado atual: **M5 concluído** (Confiança: auto-backup + restauro, exportação
-> humana, Revisão Semanal, Modo Foco, e os orçamentos de performance provados a
-> 5 anos). O código agora vive num repositório privado no GitHub (ADR-0051).
-> Próximo: M5.5 — PRIME (refundação visual, o menu O NEXO, a tela de bloqueio
-> por PIN) e então M6 — a entrega da v1.0.0.
+> Estado atual: **M5.5 concluído** (PRIME: sistema de layout, a geometria do
+> astrolábio nos fundos, o menu O NEXO, empty states próprios, e a tela de
+> bloqueio por PIN). O M5 (Confiança) e o código no GitHub (ADR-0051) já estavam.
+> Próximo: M5.6 — ARSENAL (tracker plugável, semana perfeita, recordes, ano em
+> pixels, comparativos, horizonte, retrospectiva, bandeja) e então M6 — a
+> entrega da v1.0.0.
 
 ## 1. O que o NEXUS é
 
@@ -114,7 +115,8 @@ logs/      rotação diária
 | **M4.5** | `bi_engine`, XP/níveis, Conquistas, Temporadas, Metas Anuais, Score congelado | ✅ **concluído** |
 | **M4.6** | Aurora 2.0: hambúrguer, marca astrolábio, nav por Esfera, Carreira/Estudos, Configurações-hub, fundo em camadas, Hub-painel, isolamento de dev | ✅ **concluído** |
 | **M5** | Auto-backup + restauro, exportação humana, Revisão Semanal, Modo Foco, orçamentos provados a 5 anos, GitHub | ✅ **concluído** |
-| M5.5 | PRIME: sistema de layout, fundos geométricos, o menu O NEXO, empty states, bloqueio por PIN | ⬜ |
+| **M5.5** | PRIME: sistema de layout, fundos geométricos, o menu O NEXO, empty states, bloqueio por PIN | ✅ **concluído** |
+| M5.6 | ARSENAL: tracker plugável, semana perfeita, recordes, ano em pixels, comparativos, horizonte, retrospectiva, bandeja | ⬜ |
 | M6 | Ícone, instalador, manual, entrega da v1.0.0 | ⬜ |
 
 ### O que o M0 entrega de verdade
@@ -258,6 +260,31 @@ logs/      rotação diária
   (`/annual-goals`), todas com ícones Lucide/SVG e "ⓘ como calculamos"
   (`design-system/Formula`). As rotas e a rail vêm de `app/navigation.ts` (fonte
   única), sem acoplar à sidebar — o M4.6 troca a casca lendo o mesmo array.
+
+### O que o M5.5 entrega de verdade
+
+- **Sistema de layout** (§3.1): um `PageContainer`/`PAGE_CONTAINER` único (max-w
+  1360, padding lateral), para nenhuma tela inventar a própria margem. `PageHeader`
+  vira barra de largura total; a coluna de dado é contida logo abaixo.
+- **A geometria do astrolábio nos fundos** (§3.2): a marca vira o fundo. Dois
+  pseudo-elementos de `.nx-page` (zero DOM, presentes em toda tela por construção)
+  desenham a mesma família geométrica do NexusMark — anéis, limbo graduado,
+  alidade, constelação — fora de centro, tingida pela Esfera via **máscara** (SVG
+  branco data-URI + `background-color: var(--sphere)`). Estático, `--astro-alpha`.
+- **O NEXO** (§3.3): o menu central que substitui a gaveta-lista do hambúrguer.
+  A faixa orbital (as Esferas num arco elíptico, cada uma com o anel de hoje e o
+  nível), a busca que reusa o MESMO motor do Ctrl+K (`useCommandRows`, uma
+  superfície só), os destinos curados com micro-dado vivo, e o rodapé de estado
+  (backup, nível, Score). Teclado total: 1–9, setas+Enter, Esc.
+- **Empty states próprios** (§3.4): o `EmptyState` passa a desenhar o
+  `AstrolabeGlyph` — o emblema da marca tingido pela Esfera com o ícone do módulo
+  no núcleo. As ~29 telas ganham a assinatura de uma vez; cada uma já passa a
+  própria frase e ação.
+- **A tela de bloqueio por PIN** (§3.5, ADR-0054): privacidade de TELA, não cifra
+  de disco. `infrastructure::security` guarda `SHA-256^120000(salt‖pin)` num
+  `security.json` fora do banco (sobrevive a restauro, lido no boot). PIN de
+  fábrica `242807`; `LockScreen` no design da marca; `Ctrl+L` bloqueia; trocar e
+  desligar exigem o atual. Backup/restauração independem do PIN.
 
 ### Medições reais (build `tauri build`, release)
 
