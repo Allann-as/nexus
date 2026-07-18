@@ -322,6 +322,18 @@
   }
 }
 
+/* A órbita da tela de bloqueio: os anéis giram lentíssimo em idle (só transform,
+   custo ~zero). É a exceção cerimonial de "nada anima parado" — a tela de abrir o
+   app —, e o bloco de reduced-motion abaixo a congela. */
+@keyframes nexus-orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* O PIN errado: um tremor curto e seco, e os círculos se apagam. Só transform. */
 @keyframes nexus-shake {
   0%,
