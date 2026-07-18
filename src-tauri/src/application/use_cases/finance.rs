@@ -117,6 +117,39 @@ impl FinanceService {
         )
     }
 
+    /// Exclui um aporte lançado por engano (REFINO R6). Dado financeiro errado
+    /// tem que poder sair: apaga o ESTADO, e saldos/médias/meses recalculam
+    /// sozinhos porque são derivados dos aportes. O evento original PERMANECE no
+    /// ledger (append-only) e um evento de correção é apendado — a história diz
+    /// que o aporte foi removido, sem jamais reescrever o passado (ADR-0056).
+    pub fn delete_contribution(&self, id: &str) -> Result<()> {
+        let existing = self.contributions.find(id)?;
+        let now = self.clock.now_ms();
+        let reais = existing.amount_cents.abs() as f64 / 100.0;
+        let verb = if existing.amount_cents >= 0 {
+            "Aporte"
+        } else {
+            "Resgate"
+        };
+
+        let event = NewLedgerEvent {
+            ts: now,
+            day: self.clock.today_local(),
+            entity_id: id.to_string(),
+            entity_kind: LedgerEntityKind::Contribution,
+            event_type: EventType::Deleted,
+            payload: json!({
+                "accountId": existing.account_id,
+                "assetClass": existing.asset_class.as_str(),
+                "amountCents": existing.amount_cents,
+                "happenedOn": existing.happened_on,
+            }),
+            title_snapshot: format!("{verb} de R$ {reais:.2} removido"),
+        };
+
+        self.contributions.delete_with_event(id, &event)
+    }
+
     pub fn set_snapshot(&self, month: &str, total_cents: i64) -> Result<()> {
         validate_month(month)?;
         if total_cents < 0 {

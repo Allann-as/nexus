@@ -902,6 +902,15 @@ pub trait ContributionRepository: Send + Sync {
     /// Os aportes mais recentes — a lista da tab.
     fn recent(&self, limit: i64) -> Result<Vec<Contribution>>;
 
+    /// Busca um aporte pelo id (para a exclusão montar o evento de correção).
+    fn find(&self, id: &str) -> Result<Contribution>;
+
+    /// Exclui um aporte lançado por engano. Apaga só a LINHA de estado; o evento
+    /// original fica no ledger (append-only) e este método APÊNDE um evento de
+    /// correção — a história registra que o aporte foi removido, sem reescrever
+    /// nada. Saldos, médias e meses seguidos recalculam sozinhos (são derivados).
+    fn delete_with_event(&self, id: &str, event: &NewLedgerEvent) -> Result<()>;
+
     /// Total líquido por classe de ativo, do mais alto ao mais baixo — o donut e
     /// a diversificação. Agrupa pela `asset_class` que o aporte declara: a
     /// classe é a aposta, e cada aporte já diz a sua (inclusive 'reserva').

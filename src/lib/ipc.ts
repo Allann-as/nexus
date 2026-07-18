@@ -959,6 +959,10 @@ export const addContribution = (c: {
 export const recentContributions = (limit = 50) =>
   call<Contribution[]>("recent_contributions", { limit });
 
+/** Exclui um aporte lançado por engano — corrige o estado; o ledger fica. */
+export const deleteContribution = (id: string) =>
+  call<void>("delete_contribution", { id });
+
 /** Todo o dashboard das Finanças, numa chamada. */
 export const financeOverview = () => call<FinanceOverview>("finance_overview");
 

@@ -23,24 +23,7 @@ import { Button } from "../../design-system/primitives";
 import { areaGradient, glowLine } from "../../design-system/nexusTheme";
 import { formatMoney, formatMoneyShort } from "../../lib/format";
 import { financeOverview, type Bucket, type FinanceOverview } from "../../lib/ipc";
-
-/**
- * As cores das classes de ativo — uma paleta categórica.
- *
- * Fixa e não a cor da Esfera: o donut PRECISA codificar por cor (é o que uma
- * fatia é), e por isso cada classe tem matiz próprio e a legenda traz o rótulo
- * junto — a exceção do ADR-0017 para dados que nascem para ser distinguidos por
- * cor. Escolhidas com matizes afastados para separar mesmo em tela pequena.
- */
-const CLASS_COLOURS: Record<string, string> = {
-  renda_fixa: "#4D8DFF",
-  acoes: "#34D399",
-  fiis: "#FBBF24",
-  etf_exterior: "#A78BFA",
-  cripto: "#FB7185",
-  reserva: "#22D3EE",
-  outros: "#94A3B8",
-};
+import { CLASS_COLOURS } from "./classes";
 
 export function FinanceDashboard({ onAporte }: { onAporte: () => void }) {
   const [formula, setFormula] = useState(false);

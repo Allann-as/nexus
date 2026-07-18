@@ -47,6 +47,13 @@ pub fn recent_contributions(state: State<'_, AppState>, limit: i64) -> Result<Ve
     state.finance.recent(limit)
 }
 
+/// Exclui um aporte lançado por engano (REFINO R6). Corrige o estado; o ledger
+/// ganha um evento de correção, sem reescrever o original.
+#[tauri::command]
+pub fn delete_contribution(state: State<'_, AppState>, id: String) -> Result<()> {
+    state.finance.delete_contribution(&id)
+}
+
 /// O dashboard inteiro das Finanças — total, alocação, bancos, série e a Saúde
 /// Financeira, numa chamada.
 #[tauri::command]

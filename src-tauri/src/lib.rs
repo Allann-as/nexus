@@ -127,6 +127,7 @@ pub fn run() {
             commands::finance::list_accounts,
             commands::finance::add_contribution,
             commands::finance::recent_contributions,
+            commands::finance::delete_contribution,
             commands::finance::finance_overview,
             commands::finance::set_portfolio_snapshot,
             commands::fin_goals::create_fin_goal,

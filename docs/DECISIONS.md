@@ -1803,3 +1803,32 @@ tema ECharts resolve o token em runtime, então gráficos seguem sozinhos.
 
 **Consequência.** O primário deixa de brigar com a marca e o app inteiro assenta num índigo
 sério nos dois temas. Como é um swap de token, a mudança é global e reversível numa linha.
+
+## ADR-0056 — Excluir um aporte apaga o ESTADO e apenda uma correção; o ledger nunca reescreve
+
+**Contexto.** Dinheiro errado tem que poder sair. Um aporte lançado por engano (valor, banco
+ou classe trocados) estava preso — a lista de aportes não oferecia exclusão. Para dado
+financeiro, isso é inaceitável: o saldo, a alocação e a Saúde Financeira ficam mentindo até o
+usuário poder corrigir. Mas o ledger do NEXUS é **append-only por gatilho** (`RAISE(ABORT)`
+em UPDATE/DELETE) — nem o próprio app reescreve a história.
+
+**Decisão.** Excluir um aporte segue a regra da constituição — "correção apaga estado, nunca
+ledger":
+
+1. **Apaga só a LINHA de estado** (`DELETE FROM contributions`). Saldos, médias dos últimos
+   meses, meses-seguidos e a Saúde Financeira **recalculam sozinhos** — são todos derivados
+   dos aportes, nunca colunas gravadas (o mesmo princípio do ADR-0028). Não há o que
+   "atualizar" além de remover a fonte.
+
+2. **O evento original PERMANECE no ledger** e um evento de **correção** (`EventType::Deleted`,
+   `entity_kind = Contribution`) é **apendado**, na mesma transação do DELETE. A história não é
+   reescrita: ela registra que o aporte existiu e depois foi removido — dois fatos, ambos
+   verdadeiros no seu instante. A Timeline mostra a remoção no dia em que ela aconteceu.
+
+3. **A UI arma a exclusão** (um clique pergunta, o segundo confirma — o padrão do RestoreRow e
+   das Metas Anuais), porque apagar dado financeiro não pode ser um toque acidental.
+
+**Consequência.** O extrato ganha a correção que faltava sem furar a imutabilidade do ledger.
+O padrão vale para qualquer LOG-fato futuro (a sessão de foco já apagava estado mantendo a
+história; agora o aporte também apenda a correção, um degrau mais honesto para dado que a
+Timeline desenha).

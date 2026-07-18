@@ -121,6 +121,34 @@ impl ContributionRepository for SqliteContributionRepository {
         })
     }
 
+    fn find(&self, id: &str) -> Result<Contribution> {
+        self.db.with_read(|c| {
+            c.query_row(
+                "SELECT id, account_id, asset_class, amount_cents, happened_on, note, created_at
+                   FROM contributions WHERE id = ?1",
+                params![id],
+                map_contribution,
+            )
+            .map_err(|_| crate::domain::errors::NexusError::NotFound(format!("aporte {id}")))
+        })
+    }
+
+    fn delete_with_event(&self, id: &str, event: &NewLedgerEvent) -> Result<()> {
+        self.db.with_write(|conn| {
+            let tx = conn.transaction()?;
+            // Só a linha de estado sai; a história fica e ganha o evento de correção.
+            let changed = tx.execute("DELETE FROM contributions WHERE id = ?1", params![id])?;
+            if changed == 0 {
+                return Err(crate::domain::errors::NexusError::NotFound(format!(
+                    "aporte {id}"
+                )));
+            }
+            append_in_tx(&tx, event)?;
+            tx.commit()?;
+            Ok(())
+        })
+    }
+
     fn totals_by_class(&self) -> Result<Vec<Bucket>> {
         self.db.with_read(|c| {
             // `HAVING SUM > 0`: uma classe zerada por resgate não é uma fatia. O
@@ -299,6 +327,54 @@ mod tests {
             })
             .unwrap();
         assert_eq!(logged, 1, "um aporte é um fato: ele existe na história");
+    }
+
+    #[test]
+    fn deleting_an_aporte_removes_state_but_keeps_and_appends_to_the_ledger() {
+        let (_d, repo) = fixture();
+        contribute(
+            &repo,
+            "c1",
+            "acct-btg-invest",
+            AssetClass::RendaFixa,
+            50_000,
+            "2026-07-10",
+        );
+
+        let correction = NewLedgerEvent {
+            event_type: EventType::Deleted,
+            title_snapshot: "Aporte de R$ 500.00 removido".into(),
+            ..ledger_event("c1")
+        };
+        repo.delete_with_event("c1", &correction).unwrap();
+
+        // O estado sumiu: saldos e médias recalculam a partir daqui.
+        assert_eq!(repo.recent(10).unwrap().len(), 0);
+        assert!(repo.find("c1").is_err());
+
+        // A história ficou E ganhou o evento de correção: o original não foi
+        // reescrito (append-only), então há DOIS eventos para 'c1'.
+        let logged: i64 = repo
+            .db
+            .with_read(|c| {
+                Ok(c.query_row(
+                    "SELECT COUNT(*) FROM ledger WHERE entity_id = 'c1'",
+                    [],
+                    |r| r.get(0),
+                )?)
+            })
+            .unwrap();
+        assert_eq!(logged, 2, "o created original fica; o deleted é apendado");
+    }
+
+    #[test]
+    fn deleting_a_missing_aporte_is_not_found() {
+        let (_d, repo) = fixture();
+        let ev = NewLedgerEvent {
+            event_type: EventType::Deleted,
+            ..ledger_event("nope")
+        };
+        assert!(repo.delete_with_event("nope", &ev).is_err());
     }
 
     #[test]
