@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Outlet } from "react-router-dom";
 
-import { Rail } from "./Rail";
+import { NavDrawer } from "./NavDrawer";
 import { Topbar } from "./Topbar";
 import { useKeyboard } from "./useKeyboard";
 import { useBootTasks } from "./useBootTasks";
@@ -13,6 +13,7 @@ import { Toaster } from "../design-system/Toaster";
 export function Shell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
 
   // Congela o Score e sincroniza conquistas/temporadas na abertura (ADR-0038/0039).
   useBootTasks();
@@ -23,19 +24,21 @@ export function Shell() {
     // Midnight, também dois `backdrop-filter` compondo (ver `.nx-glass`).
     onOpenPalette: () => {
       setCaptureOpen(false);
+      setNavOpen(false);
       setPaletteOpen(true);
     },
     onQuickCapture: () => {
       setPaletteOpen(false);
+      setNavOpen(false);
       setCaptureOpen(true);
     },
   });
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--bg-void)]">
-      <Rail />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
+          onOpenNav={() => setNavOpen(true)}
           onOpenPalette={() => setPaletteOpen(true)}
           onQuickCapture={() => setCaptureOpen(true)}
         />
@@ -48,6 +51,7 @@ export function Shell() {
         </main>
       </div>
 
+      <NavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <QuickCapture open={captureOpen} onClose={() => setCaptureOpen(false)} />
       <AporteHost />

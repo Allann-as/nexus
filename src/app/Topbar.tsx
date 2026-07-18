@@ -1,6 +1,6 @@
 import { useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Search, Plus, Moon, Sun } from "lucide-react";
+import { Menu, Search, Plus, Moon, Sun } from "lucide-react";
 
 import { NAV_ITEMS, SECONDARY_ROUTES } from "./navigation";
 import { listAreas } from "../lib/ipc";
@@ -15,9 +15,11 @@ const EXTRA_CRUMBS: Record<string, string> = {
 };
 
 export function Topbar({
+  onOpenNav,
   onOpenPalette,
   onQuickCapture,
 }: {
+  onOpenNav: () => void;
   onOpenPalette: () => void;
   onQuickCapture: () => void;
 }) {
@@ -38,6 +40,15 @@ export function Topbar({
       className="z-10 flex shrink-0 items-center gap-3 border-b border-[var(--border-subtle)] bg-[var(--bg-void)] px-4"
       style={{ height: "var(--topbar-h)" }}
     >
+      <button
+        onClick={onOpenNav}
+        title="Menu"
+        aria-label="Abrir menu de navegação"
+        className="-ml-1 flex size-8 items-center justify-center rounded-[var(--radius-md)] text-[var(--text-secondary)] transition-colors duration-[var(--dur-fast)] hover:bg-[var(--bg-raised)] hover:text-[var(--text-primary)]"
+      >
+        <Menu size={18} strokeWidth={2} />
+      </button>
+
       <Crumb pathname={pathname} areas={areas} />
 
       <div className="flex-1" />
