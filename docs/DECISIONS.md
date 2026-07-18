@@ -1686,3 +1686,48 @@ quanto vale, e onde mora.
 de LOG, mesma disciplina de XP derivado, mesma honestidade de estatística. O timer é
 livre para evoluir no frontend (durações, pausas, som) sem tocar na arquitetura — o
 backend só sabe de um fato, "focou N minutos, concluído", e o resto é derivação.
+
+## ADR-0053 — Os orçamentos de performance, provados a 5 anos: `seed_scale` + `bench_scale`
+
+**Data:** 2026-07-18 · **Status:** aceito · **M5**
+
+**Contexto.** A constituição fixa orçamentos de performance (cold start < 1,5s, busca
+< 50ms, um mês da Timeline < 100ms, scroll 60fps, RAM < 300MB). Até o M5 eles eram
+uma promessa arquitetural (CQRS, índices certos, `WITHOUT ROWID`, rollups) sem uma
+medição contra o volume de uma vida inteira. "Orçamento estourado = corrigir AGORA"
+exige um número, não uma intenção.
+
+**Decisão.**
+
+1. **Duas ferramentas de dev permanentes**, não um teste que se joga fora:
+   `examples/seed_scale.rs` popula um banco de teste com **50.000 nodes e 400.000
+   eventos de ledger** (5 anos a ~219 eventos/dia), e `examples/bench_scale.rs` abre
+   esse banco **a frio** e cronometra os caminhos de leitura pelos MESMOS
+   repositórios que a UI usa. Ficam no repositório para reprovar qualquer regressão
+   futura de escala.
+
+2. **O seed de escala insere em LOTE, ao contrário do `seed_demo`.** O `seed_demo`
+   escreve pelos casos de uso, para provar as REGRAS; o `seed_scale` insere direto
+   nas tabelas, porque o alvo é o VOLUME dos caminhos de LEITURA. As linhas seguem
+   válidas — o gatilho de FTS indexa cada node no INSERT, o ledger é append-only por
+   gatilho. Determinístico, sem RNG.
+
+3. **Isolamento inegociável (ADR-0048):** ambos abortam se `NEXUS_DATA_DIR` não
+   estiver definida — o banco de escala vive em `.devdata-scale/` (gitignorado), nunca
+   no `%APPDATA%/Nexus` real.
+
+**Resultado medido** (release, banco de 5 anos, a frio):
+
+| Orçamento | Medido | Teto |
+|---|---|---|
+| Abertura do banco (parcela de cold start) | **318 ms** | 1500 ms |
+| Busca FTS | **4,2 ms** | 50 ms |
+| Um mês da Timeline (1ª página) | **1,2 ms** | 100 ms |
+
+Todos passam com folga de uma ordem de grandeza — o CQRS e os índices seguram a
+escala como projetados. **Scroll 60fps e RAM < 300MB** dependem do app rodando e são
+verificados na dirigida ao vivo do M6 (app instalado, não o dev).
+
+**Consequência.** Os orçamentos deixam de ser fé e viram número reproduzível. Se um
+dia uma query nova varrer o ledger inteiro (o erro clássico), o `bench_scale` a pega
+antes do usuário — a rede de segurança de escala que faltava.

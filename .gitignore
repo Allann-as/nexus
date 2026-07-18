@@ -15,8 +15,9 @@ pnpm-debug.log*
 *.local
 
 # Dados de teste do app dev (NEXUS_DATA_DIR) — dirigidas de UI nunca tocam o
-# %APPDATA% real (ADR-0048). Este é o banco sintético descartável.
-.devdata/
+# %APPDATA% real (ADR-0048). Este é o banco sintético descartável. O `*` cobre o
+# `.devdata-scale` do seed de 5 anos (bench de performance, M5).
+.devdata*/
 
 # Editor
 .vscode/*
