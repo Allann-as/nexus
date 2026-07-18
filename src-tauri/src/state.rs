@@ -34,6 +34,7 @@ use crate::domain::errors::Result;
 use crate::infrastructure::backup::BackupEngine;
 use crate::infrastructure::clock::{SystemClock, Uuid7Gen};
 use crate::infrastructure::db::Db;
+use crate::infrastructure::export::ExportEngine;
 use crate::infrastructure::fts::SqliteSearchRepository;
 use crate::infrastructure::paths::Paths;
 use crate::infrastructure::repositories::{
@@ -79,6 +80,8 @@ pub struct AppState {
     pub search: Arc<dyn SearchRepository>,
     /// O motor de backup (M5): snapshot consistente, poda por retenção e restauro.
     pub backups: BackupEngine,
+    /// A exportação humana (M5): JSON por tabela + CSVs + mídia + README.
+    pub exports: ExportEngine,
 }
 
 impl AppState {
@@ -249,6 +252,7 @@ impl AppState {
         // O motor de backup (M5): adjacente ao storage, usa o domínio para a
         // política de retenção. `paths.clone()` porque `paths` é movido logo abaixo.
         let backups = BackupEngine::new(db.clone(), paths.clone(), clock.clone());
+        let exports = ExportEngine::new(db.clone(), paths.clone(), clock.clone());
 
         Ok(Self {
             areas: AreaService {
@@ -285,6 +289,7 @@ impl AppState {
             ledger,
             search,
             backups,
+            exports,
             db,
             paths,
         })

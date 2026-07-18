@@ -41,6 +41,7 @@ import {
 import {
   backupStatus,
   createBackup,
+  exportData,
   listBackups,
   quickCheck,
   rebuildSearchIndex,
@@ -284,10 +285,60 @@ function DataSection() {
       <BackupSettings />
       <RestoreCard />
 
-      <SettingCard title="Exportação humana" hint="Seus dados em formato aberto (JSON + CSV + mídia), legíveis daqui a 30 anos sem o app.">
-        <FutureRow icon={Download} label="Exportação total" state="Chega no M5" />
-      </SettingCard>
+      <ExportCard />
     </div>
+  );
+}
+
+function ExportCard() {
+  const push = useToasts((s) => s.push);
+  const pushError = useToasts((s) => s.pushError);
+  const [result, setResult] = useState<{ dir: string; tables: number; rows: number; mediaFiles: number } | null>(
+    null,
+  );
+
+  const run = useMutation({
+    mutationFn: exportData,
+    onSuccess: (info) => {
+      setResult(info);
+      push("success", "Exportação concluída");
+    },
+    onError: pushError,
+  });
+
+  return (
+    <SettingCard
+      title="Exportação humana"
+      hint="Seus dados em formato aberto (um JSON por tabela + CSVs + mídia + README), legíveis daqui a 30 anos sem o app."
+    >
+      <div className="flex flex-col gap-3">
+        <ActionRow
+          icon={Download}
+          title="Exportar tudo agora"
+          hint="Escreve uma pasta em exports/ com o dump completo e um README que explica cada arquivo."
+          button="Exportar"
+          pending={run.isPending}
+          onClick={() => run.mutate()}
+        />
+        {result && (
+          <div className="rounded-[var(--radius-md)] border border-[var(--success)] bg-[color-mix(in_srgb,var(--success)_8%,transparent)] px-4 py-3">
+            <p className="text-[12.5px] text-[var(--text-primary)]">
+              <span className="tabular font-semibold">{result.tables}</span> tabelas ·{" "}
+              <span className="tabular font-semibold">{result.rows.toLocaleString("pt-BR")}</span> linhas
+              {result.mediaFiles > 0 && (
+                <>
+                  {" "}·{" "}
+                  <span className="tabular font-semibold">{result.mediaFiles}</span> anexo(s)
+                </>
+              )}
+            </p>
+            <p data-selectable className="mt-1 truncate font-mono text-[11.5px] text-[var(--text-tertiary)]">
+              {result.dir}
+            </p>
+          </div>
+        )}
+      </div>
+    </SettingCard>
   );
 }
 
@@ -880,24 +931,6 @@ function ActionRow({
         {pending ? "…" : button}
       </Button>
     </Card>
-  );
-}
-
-/** Uma linha de recurso que ainda não existe — estado honesto, não botão morto. */
-function FutureRow({ icon: Icon, label, state }: { icon: LucideIcon; label: string; state: string }) {
-  return (
-    <div
-      className="flex items-center justify-between gap-4 border-b border-[var(--border-subtle)] last:border-0"
-      style={{ minHeight: "var(--row-data)" }}
-    >
-      <span className="flex items-center gap-2.5 text-[13px] text-[var(--text-secondary)]">
-        <Icon size={15} className="text-[var(--text-tertiary)]" />
-        {label}
-      </span>
-      <span className="rounded-full border border-[var(--border-subtle)] px-2 py-0.5 text-[10.5px] font-medium tracking-[0.06em] text-[var(--text-tertiary)] uppercase">
-        {state}
-      </span>
-    </div>
   );
 }
 

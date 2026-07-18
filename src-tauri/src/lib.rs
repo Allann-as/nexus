@@ -207,6 +207,7 @@ pub fn run() {
             commands::backup::backup_status,
             commands::backup::set_backup_config,
             commands::backup::restore_backup,
+            commands::backup::export_data,
         ])
         .build(tauri::generate_context!())
         .expect("não foi possível construir a janela do NEXUS")

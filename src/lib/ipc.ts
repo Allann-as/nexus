@@ -1733,3 +1733,14 @@ export const setBackupConfig = (
  */
 export const restoreBackup = (name: string, password: string | null) =>
   call<void>("restore_backup", { name, password });
+
+export interface ExportInfo {
+  /** A pasta criada (caminho absoluto). */
+  dir: string;
+  tables: number;
+  rows: number;
+  mediaFiles: number;
+}
+
+/** Exportação humana: JSON por tabela + CSVs + mídia + README numa pasta. */
+export const exportData = () => call<ExportInfo>("export_data");

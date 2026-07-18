@@ -9,6 +9,7 @@ use tauri::State;
 
 use crate::domain::errors::Result;
 use crate::infrastructure::backup::{stage_restore, BackupInfo, BackupStatus};
+use crate::infrastructure::export::ExportInfo;
 use crate::state::AppState;
 
 /// Cria um backup agora, com a configuração corrente (cifra e copia p/ sync se
@@ -74,4 +75,11 @@ pub fn restore_backup(
     password: Option<String>,
 ) -> Result<()> {
     stage_restore(&state.paths, &name, password)
+}
+
+/// Exportação humana: escreve a pasta `exports/nexus-export-AAAA-MM-DD/` com um
+/// JSON por tabela, os CSVs, a mídia e o README. Devolve o caminho e as contagens.
+#[tauri::command]
+pub fn export_data(state: State<'_, AppState>) -> Result<ExportInfo> {
+    state.exports.export()
 }
