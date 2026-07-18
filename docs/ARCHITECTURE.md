@@ -1,10 +1,11 @@
 # NEXUS — Arquitetura
 
 > Documento vivo. Atualize-o no mesmo commit que muda a estrutura.
-> Estado atual: **M4.6 concluído** (Aurora 2.0: casca sem sidebar, marca
-> astrolábio, navegação por Esfera, Carreira e Estudos aprofundados,
-> Configurações-hub, fundo em camadas e o Hub como painel da vida).
-> Próximo: M5 — Confiança (backup/restore, export, Revisão Semanal, Modo Foco).
+> Estado atual: **M5 concluído** (Confiança: auto-backup + restauro, exportação
+> humana, Revisão Semanal, Modo Foco, e os orçamentos de performance provados a
+> 5 anos). O código agora vive num repositório privado no GitHub (ADR-0051).
+> Próximo: M5.5 — PRIME (refundação visual, o menu O NEXO, a tela de bloqueio
+> por PIN) e então M6 — a entrega da v1.0.0.
 
 ## 1. O que o NEXUS é
 
@@ -112,8 +113,9 @@ logs/      rotação diária
 | **M4** | Esferas II: Objetivos Financeiros, Estudos + Biblioteca, Carreira; Notas; Timeline | ✅ **concluído** |
 | **M4.5** | `bi_engine`, XP/níveis, Conquistas, Temporadas, Metas Anuais, Score congelado | ✅ **concluído** |
 | **M4.6** | Aurora 2.0: hambúrguer, marca astrolábio, nav por Esfera, Carreira/Estudos, Configurações-hub, fundo em camadas, Hub-painel, isolamento de dev | ✅ **concluído** |
-| M5 | Backup/restore, export, Revisão Semanal, Modo Foco, seed de 5 anos | ⬜ |
-| M6 | Ícone, instalador, manual, entrega | ⬜ |
+| **M5** | Auto-backup + restauro, exportação humana, Revisão Semanal, Modo Foco, orçamentos provados a 5 anos, GitHub | ✅ **concluído** |
+| M5.5 | PRIME: sistema de layout, fundos geométricos, o menu O NEXO, empty states, bloqueio por PIN | ⬜ |
+| M6 | Ícone, instalador, manual, entrega da v1.0.0 | ⬜ |
 
 ### O que o M0 entrega de verdade
 
