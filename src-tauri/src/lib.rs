@@ -139,6 +139,7 @@ pub fn run() {
             commands::studies::log_study_session,
             commands::studies::recent_study_sessions,
             commands::studies::study_stats,
+            commands::studies::delete_study_session,
             commands::career::record_career_milestone,
             commands::career::career_milestones,
             commands::career::create_skill,

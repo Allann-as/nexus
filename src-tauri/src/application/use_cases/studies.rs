@@ -264,6 +264,12 @@ impl StudyService {
         self.sessions.recent(area_id.as_deref(), RECENT_LIMIT)
     }
 
+    /// Apaga uma sessão registrada por engano — corrige o ESTADO (progresso, XP,
+    /// estatísticas), sem tocar no ledger (a história fica). Ver `delete` no repo.
+    pub fn delete_session(&self, id: &str) -> Result<()> {
+        self.sessions.delete(id)
+    }
+
     /* ===== Estatísticas ===== */
 
     /// As estatísticas de estudo — horas na semana, tendência, constância e horários.

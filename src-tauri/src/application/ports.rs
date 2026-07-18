@@ -1521,6 +1521,13 @@ pub trait StudySessionRepository: Send + Sync {
 
     /// (total de minutos, total de sessões) de sempre, opcionalmente numa Esfera.
     fn totals(&self, area_id: Option<&str>) -> Result<(i64, i64)>;
+
+    /// Apaga a linha de uma sessão — uma correção de ESTADO (registrei errado),
+    /// não da história. O evento `study_session_logged` no ledger **permanece**
+    /// (append-only, imutável): o fato de que a sessão foi lançada — e corrigida —
+    /// é real. É o mesmo princípio de desticar um hábito: some do estado, fica na
+    /// história. Recomputa progresso da matéria, XP e estatísticas naturalmente.
+    fn delete(&self, id: &str) -> Result<()>;
 }
 
 /* ===== Links entre nodes (M4.6) ===== */

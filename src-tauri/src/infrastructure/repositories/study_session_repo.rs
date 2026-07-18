@@ -217,6 +217,19 @@ impl StudySessionRepository for SqliteStudySessionRepository {
             })?)
         })
     }
+
+    fn delete(&self, id: &str) -> Result<()> {
+        self.db.with_write(|c| {
+            // Só a linha de estado — o ledger não é tocado (a história fica).
+            let changed = c.execute("DELETE FROM study_sessions WHERE id = ?1", params![id])?;
+            if changed == 0 {
+                return Err(crate::domain::errors::NexusError::NotFound(format!(
+                    "sessão {id}"
+                )));
+            }
+            Ok(())
+        })
+    }
 }
 
 #[cfg(test)]
@@ -399,6 +412,34 @@ mod tests {
         assert_eq!(repo.active_days_since(None, "2026-07-01").unwrap(), 2);
         // O corte é inclusivo e recorta o passado.
         assert_eq!(repo.active_days_since(None, "2026-07-19").unwrap(), 1);
+    }
+
+    #[test]
+    fn deleting_a_session_removes_state_but_keeps_the_ledger() {
+        // Corrigir um erro: a linha some do estado, o evento fica na história.
+        let (_d, repo, db) = fixture();
+        seed_subject(&db, "su1", None);
+        log(&repo, "ss1", Some("su1"), None, 45, "2026-07-18", 1_000);
+
+        repo.delete("ss1").unwrap();
+        assert_eq!(repo.subject_summary("su1").unwrap().total_minutes, 0);
+        assert_eq!(repo.totals(None).unwrap(), (0, 0));
+
+        // O evento do ledger sobrevive — a história é imutável (append-only).
+        let events: i64 = db
+            .with_read(|c| {
+                Ok(c.query_row(
+                    "SELECT COUNT(*) FROM ledger WHERE entity_id = 'ss1' \
+                       AND event_type = 'study_session_logged'",
+                    [],
+                    |r| r.get(0),
+                )?)
+            })
+            .unwrap();
+        assert_eq!(events, 1, "o fato de que a sessão foi lançada permanece");
+
+        // Apagar de novo é um erro honesto (não silencioso).
+        assert!(repo.delete("ss1").is_err());
     }
 
     #[test]

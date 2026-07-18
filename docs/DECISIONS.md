@@ -1472,3 +1472,47 @@ vida" também no estudo, sem uma linha de estado derivado gravada. O XP tem uma
 fonte nova, coerente com a escala (tick=10 … livro=60), documentada em
 `domain::xp` e no DATA_MODEL. O `xp_by_area` ganhou um ramo; nada mais mudou na
 arquitetura de gamificação.
+
+## ADR-0048 — Dirigir a UI NUNCA toca o banco real: `NEXUS_DATA_DIR` isola o dev
+
+**Data:** 2026-07-18 · **Status:** aceito · **M4.6** · **regra do arquiteto** · **complementa o ADR-0012**
+
+**Contexto.** A verificação do item 7 dirigiu o app de verdade (ADR-0012, o método
+que acha bugs que a suíte não vê) — e o app dev abre o MESMO diretório de dados que
+o app instalado (`%APPDATA%/Nexus`, `Paths::resolve`). Resultado: a dirigida criou
+uma matéria de teste ("Cálculo I2") e uma sessão de 245 min **dentro da vida real
+do usuário**. A migração automática `11 → 14` do banco dele foi aceitável
+(idempotente e testada); dado SINTÉTICO entrando na vida real, não.
+
+**Decisão (do arquiteto, regra permanente).**
+
+1. **Dirigidas de UI rodam num diretório de dados ISOLADO, nunca no
+   `%APPDATA%/Nexus` real.** `Paths::resolve` passa a honrar a variável de ambiente
+   **`NEXUS_DATA_DIR`**: se setada, o app (e o `seed_demo`, que também usa
+   `resolve`) ancora ali. O `Paths::at` já aceitava uma raiz arbitrária desde o M0 —
+   o `--data-dir` que o comentário dele previa chegou como env var, mais simples de
+   passar para o `tauri dev` e o `cargo run --example`.
+
+2. **O fluxo do dev:** `NEXUS_DATA_DIR=<pasta de teste>` → `seed_demo` popula essa
+   pasta com dados sintéticos → `tauri dev` abre nela. O `.devdata/` do repositório
+   é o padrão (gitignorado). O `%APPDATA%/Nexus` real só é tocado quando o próprio
+   usuário abre o app — nunca por automação.
+
+3. **A tela "Seus dados" (item 8) mostra o `data_root` ativo.** Além de informar,
+   isso deixa VISÍVEL quando o app está rodando em modo dev com dados de teste (o
+   caminho aponta para `.devdata`, não para `%APPDATA%`) — uma salvaguarda a mais
+   contra confundir os dois mundos.
+
+4. **Corrigir estado é direito do usuário; a história é imutável.** O mesmo episódio
+   pediu uma forma de REMOVER uma sessão lançada por engano. `delete_study_session`
+   apaga a linha de `study_sessions` (estado — recomputa progresso, XP e
+   estatísticas), mas **não toca o ledger**: o evento `study_session_logged`
+   permanece (append-only, ADR-0047). É o mesmo princípio de desmarcar um hábito —
+   some do estado, fica na história. Vale para o usuário legítimo (todo mundo
+   registra errado um dia), não só para a limpeza do artefato de teste.
+
+**Consequência.** O banco real do usuário fica intocado por qualquer verificação
+futura. A limpeza do artefato desta vez foi feita pelos MESMOS caminhos de código
+(`archive` da matéria + `delete` da sessão), com o ledger preservado — um registro
+honesto de que o teste aconteceu e foi corrigido. A regra é permanente: nenhuma
+sessão futura repete o erro.

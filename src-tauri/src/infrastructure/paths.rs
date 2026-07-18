@@ -19,8 +19,20 @@ pub struct Paths {
 }
 
 impl Paths {
-    /// Resolve `%APPDATA%/Nexus` e cria a árvore de diretórios se não existir.
+    /// Resolve o diretório de dados e cria a árvore se não existir.
+    ///
+    /// Padrão: `%APPDATA%/Nexus` — a vida real do usuário. **Exceção (ADR-0048):**
+    /// se `NEXUS_DATA_DIR` estiver setado, ancora ali. É o que mantém uma dirigida
+    /// de UI (ou um `seed_demo`) fora do banco real: o dev aponta o app para uma
+    /// pasta de teste sintética, e o `%APPDATA%/Nexus` só é tocado quando o próprio
+    /// usuário abre o app instalado. Dado sintético nunca entra na vida real.
     pub fn resolve() -> Result<Self> {
+        if let Some(dir) = std::env::var_os("NEXUS_DATA_DIR") {
+            let dir = PathBuf::from(dir);
+            if !dir.as_os_str().is_empty() {
+                return Self::at(dir);
+            }
+        }
         let base = directories::BaseDirs::new().ok_or_else(|| {
             NexusError::Path("não foi possível resolver o diretório de dados".into())
         })?;

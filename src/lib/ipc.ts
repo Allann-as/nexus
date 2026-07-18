@@ -1221,6 +1221,10 @@ export const recentStudySessions = (areaId?: string | null) =>
 export const studyStats = (areaId?: string | null) =>
   call<StudyStats>("study_stats", { areaId: areaId ?? null });
 
+/** Apaga uma sessão registrada por engano — corrige o estado; o ledger fica. */
+export const deleteStudySession = (id: string) =>
+  call<void>("delete_study_session", { id });
+
 /* ===== Carreira: os marcos profissionais ===== */
 
 /** O tipo de um marco. Espelha `domain::entities::CareerMilestoneKind`. */

@@ -82,6 +82,13 @@ temp_store   = MEMORY
 
 `%APPDATA%/Nexus/` — nunca ao lado do executável.
 
+> **Isolamento do dev (ADR-0048):** `Paths::resolve` honra a variável
+> `NEXUS_DATA_DIR` — se setada, o app (e o `seed_demo`) ancora ali em vez do
+> `%APPDATA%`. É o que mantém uma **dirigida de UI fora do banco real**: use
+> `.\dev.ps1`, que aponta o app para `.\.devdata` (gitignorado), semeia dados
+> sintéticos e sobe o `tauri dev`. O `%APPDATA%/Nexus` real só é tocado quando o
+> próprio usuário abre o app.
+
 ```
 nexus.db  nexus.db-wal  nexus.db-shm
 media/     arquivos anexados (path relativo no banco, hash SHA-256)
@@ -356,7 +363,8 @@ Por isso a Command Palette lista Esferas: é o caminho de teclado até elas, e
 
 ```powershell
 npm install
-npm run tauri dev      # desenvolvimento
+npm run tauri dev      # desenvolvimento (abre o %APPDATA% real — evite dirigir aqui)
+.\dev.ps1              # dev com dados de teste ISOLADOS (.devdata) — para dirigir a UI (ADR-0048)
 .\check.ps1            # gate completo (fmt, clippy, testes, tsc, build, release)
 .\check.ps1 -Quick     # sem o build release
 npx tauri build        # instaladores NSIS + MSI

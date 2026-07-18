@@ -97,3 +97,9 @@ pub fn recent_study_sessions(
 pub fn study_stats(state: State<'_, AppState>, area_id: Option<String>) -> Result<StudyStats> {
     state.studies.study_stats(area_id)
 }
+
+/// Apaga uma sessão registrada por engano. Corrige o estado; o ledger fica.
+#[tauri::command]
+pub fn delete_study_session(state: State<'_, AppState>, id: String) -> Result<()> {
+    state.studies.delete_session(&id)
+}

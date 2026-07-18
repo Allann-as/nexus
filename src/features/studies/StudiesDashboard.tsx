@@ -8,13 +8,15 @@
  */
 
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, CheckCircle2, Clock, Library } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { BookOpen, CheckCircle2, Clock, Library, Trash2 } from "lucide-react";
 
 import { CountUp, HeroCard, StatCard, SummaryCard, Val } from "../../design-system/cards";
 import { ProgressBar, ProgressRing } from "../../design-system/charts";
 import { Button, EmptyState } from "../../design-system/primitives";
+import { useToasts } from "../../stores/toasts";
 import {
+  deleteStudySession,
   recentStudySessions,
   studiesOverview,
   studyStats,
@@ -112,7 +114,7 @@ export function StudiesDashboard({ areaId }: { areaId: string }) {
         />
       )}
 
-      {sessions.length > 0 && <RecentSessions sessions={sessions} />}
+      {sessions.length > 0 && <RecentSessions sessions={sessions} onChanged={refreshAfterLog} />}
 
       {/* ===== A leitura ===== */}
       <HeroCard
@@ -206,16 +208,43 @@ export function StudiesDashboard({ areaId }: { areaId: string }) {
 }
 
 /** As últimas sessões registradas — a memória curta do estudo. */
-function RecentSessions({ sessions }: { sessions: StudySession[] }) {
+function RecentSessions({
+  sessions,
+  onChanged,
+}: {
+  sessions: StudySession[];
+  onChanged: () => void;
+}) {
+  const pushError = useToasts((s) => s.pushError);
+  const push = useToasts((s) => s.push);
+  // Confirmação leve por linha: o primeiro clique arma, o segundo apaga.
+  const [armed, setArmed] = useState<string | null>(null);
+
+  const del = useMutation({
+    mutationFn: (id: string) => deleteStudySession(id),
+    onSuccess: () => {
+      push("success", "Sessão removida");
+      setArmed(null);
+      onChanged();
+    },
+    onError: (e) => {
+      setArmed(null);
+      pushError(e);
+    },
+  });
+
   return (
     <section className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
       <h3 className="mb-3 text-[10px] font-semibold tracking-[0.14em] text-[var(--text-tertiary)] uppercase">
         Sessões recentes
       </h3>
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col">
         {sessions.map((s) => (
-          <div key={s.id} className="flex items-baseline justify-between gap-3 text-[12.5px]">
-            <div className="min-w-0 flex items-baseline gap-2">
+          <div
+            key={s.id}
+            className="group flex items-baseline justify-between gap-3 rounded-[var(--radius-sm)] py-1 text-[12.5px]"
+          >
+            <div className="flex min-w-0 items-baseline gap-2">
               <span className="truncate font-medium text-[var(--text-primary)]">
                 {s.subjectTitle ?? s.topic ?? "Estudo"}
               </span>
@@ -223,10 +252,28 @@ function RecentSessions({ sessions }: { sessions: StudySession[] }) {
                 <span className="truncate text-[11px] text-[var(--text-tertiary)]">{s.topic}</span>
               )}
             </div>
-            <span className="tabular shrink-0 text-[var(--text-tertiary)]">
-              <span className="font-semibold text-[var(--sphere)]">{formatMinutes(s.minutes)}</span>{" "}
-              · {shortDay(s.day)}
-            </span>
+            <div className="flex shrink-0 items-baseline gap-2">
+              <span className="tabular text-[var(--text-tertiary)]">
+                <span className="font-semibold text-[var(--sphere)]">
+                  {formatMinutes(s.minutes)}
+                </span>{" "}
+                · {shortDay(s.day)}
+              </span>
+              {/* Corrigir um erro: apaga o estado; o ledger fica (ADR-0047). */}
+              <button
+                onClick={() => (armed === s.id ? del.mutate(s.id) : setArmed(s.id))}
+                onBlur={() => armed === s.id && setArmed(null)}
+                disabled={del.isPending}
+                title={armed === s.id ? "Clique de novo para remover" : "Remover sessão"}
+                className={
+                  armed === s.id
+                    ? "text-[11px] font-medium text-[var(--danger)]"
+                    : "text-[var(--text-tertiary)] opacity-0 transition-opacity hover:text-[var(--danger)] group-hover:opacity-100"
+                }
+              >
+                {armed === s.id ? "remover?" : <Trash2 size={13} />}
+              </button>
+            </div>
           </div>
         ))}
       </div>
