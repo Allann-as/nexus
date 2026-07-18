@@ -2,7 +2,7 @@
  * A grade de caixinhas dos Objetivos Financeiros (§2.1).
  *
  * Cada card é uma meta de dinheiro guardado; depositar é um clique. Fechar uma
- * caixinha dispara a celebração dourada e grava a conquista 🏆 no ledger — que a
+ * caixinha dispara a celebração dourada e grava a conquista no ledger — que a
  * Timeline (§2.6) desenha para sempre.
  */
 

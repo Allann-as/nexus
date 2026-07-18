@@ -109,9 +109,7 @@ export function TodayStrip({
         />
         <div className="relative flex items-center justify-center gap-2.5">
           <CheckCircle2 size={18} className="text-[var(--success)]" />
-          <p className="text-[14px] font-medium text-[var(--text-primary)]">
-            Dia fechado <span className="text-[var(--success)]">✦</span>
-          </p>
+          <p className="text-[14px] font-medium text-[var(--text-primary)]">Dia fechado</p>
         </div>
         <p className="relative mt-1 text-center text-[12px] text-[var(--text-tertiary)]">
           {habits.length} {habits.length === 1 ? "hábito" : "hábitos"}

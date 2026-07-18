@@ -1,5 +1,5 @@
 /**
- * Criar uma caixinha: emoji, nome, alvo, banco e (opcional) prazo.
+ * Criar uma caixinha: ícone, nome, alvo, banco e (opcional) prazo.
  *
  * O nome e o valor são o essencial; o resto tem padrão. Uma caixinha nasce em
  * segundos, como um aporte.
@@ -12,8 +12,8 @@ import { GlassPanel } from "../../design-system/cards";
 import { Button, cx } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
 import { createFinGoal, type Account } from "../../lib/ipc";
+import { GOAL_ICONS } from "./GoalIcon";
 
-const EMOJIS = ["🎯", "🎮", "🗾", "🏠", "🚗", "💻", "📷", "💍", "🏖️", "🎓", "🚨", "🎸"];
 
 function parseToCents(raw: string): number | null {
   const cleaned = raw.replace(/\s|R\$/g, "").replace(/\./g, "").replace(",", ".");
@@ -36,7 +36,7 @@ export function NewCaixinhaModal({
   const pushError = useToasts((s) => s.pushError);
   const push = useToasts((s) => s.push);
 
-  const [emoji, setEmoji] = useState("🎯");
+  const [emoji, setEmoji] = useState("target");
   const [title, setTitle] = useState("");
   const [target, setTarget] = useState("");
   const [accountId, setAccountId] = useState<string | null>(accounts[0]?.id ?? null);
@@ -93,20 +93,21 @@ export function NewCaixinhaModal({
           </header>
 
           <div className="flex flex-col gap-4">
-            <Field label="Emoji">
+            <Field label="Ícone">
               <div className="flex flex-wrap gap-1">
-                {EMOJIS.map((e) => (
+                {GOAL_ICONS.map(({ name, Icon }) => (
                   <button
-                    key={e}
-                    onClick={() => setEmoji(e)}
+                    key={name}
+                    onClick={() => setEmoji(name)}
+                    aria-label={name}
                     className={cx(
-                      "grid size-9 place-items-center rounded-[var(--radius-md)] text-[18px] transition-colors",
-                      emoji === e
-                        ? "bg-[color-mix(in_srgb,var(--sphere)_22%,transparent)] ring-1 ring-[var(--sphere)]"
-                        : "bg-[var(--bg-base)] hover:bg-[var(--bg-raised)]",
+                      "grid size-9 place-items-center rounded-[var(--radius-md)] transition-colors",
+                      emoji === name
+                        ? "bg-[color-mix(in_srgb,var(--sphere)_22%,transparent)] text-[var(--sphere)] ring-1 ring-[var(--sphere)]"
+                        : "bg-[var(--bg-base)] text-[var(--text-secondary)] hover:bg-[var(--bg-raised)]",
                     )}
                   >
-                    {e}
+                    <Icon size={18} aria-hidden />
                   </button>
                 ))}
               </div>

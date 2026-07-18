@@ -176,7 +176,7 @@ impl FinGoalRepository for SqliteFinGoalRepository {
             append_in_tx(&tx, deposit_event)?;
 
             // A conquista (§2.1): quando o depósito fecha a caixinha, o node vira
-            // 'done' e o 🏆 entra no ledger — na mesma transação que o depósito.
+            // 'done' e a conquista entra no ledger — na mesma transação que o depósito.
             // Sem a atomicidade, uma falha entre os dois deixaria a caixinha
             // cheia sem conquista, ou a conquista sem o dinheiro.
             if let Some(done) = completion {
@@ -303,7 +303,7 @@ mod tests {
                 target_cents: target,
                 account_id: Some("acct-btg-invest".into()),
                 deadline: None,
-                emoji: "🎮".into(),
+                emoji: "gamepad2".into(),
             },
             &created_event(id),
         )
@@ -317,7 +317,7 @@ mod tests {
         let g = repo.get("g1").unwrap();
         assert_eq!(g.saved_cents, 0);
         assert_eq!(g.account_name.as_deref(), Some("BTG Investimentos"));
-        assert_eq!(g.emoji, "🎮");
+        assert_eq!(g.emoji, "gamepad2");
     }
 
     #[test]

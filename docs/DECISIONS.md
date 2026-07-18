@@ -1203,3 +1203,41 @@ pré-agregar seria complexidade sem ganho. O `score_history` lê direto do ledge
 **A escrita mora na abertura.** `freeze_daily_scores` congela os dias FECHADOS ainda
 sem linha (teto de 60 dias por passada), idempotente pelo `entity_id = dia`. Mesmo
 padrão "a navegação paga a escrita" do ADR-0026/0034 — o pool de leitura é `query_only`.
+
+---
+
+## ADR-0042 — Aurora 2.0: emoji fora da UI, e a coluna `emoji` da caixinha vira nome de ícone
+
+**Data:** 2026-07-17 · **Status:** aceito · **M4.6** · §3.2 do redesign
+
+**Contexto.** O redesign Aurora 2.0 baniu emoji da interface: eles quebram a
+consistência tipográfica premium. A varredura achou emoji em telas (conquistas,
+carreira, caixinhas, estrelas de nota), em `title_snapshot`s gerados pelo backend
+(o 🏆/📖/★ que a Timeline desenha) e na personalização das caixinhas — o usuário
+escolhia um EMOJI para cada caixinha, guardado em `fin_goal_details.emoji` (0011).
+
+**Decisão.**
+
+1. **Toda a UI passa a Lucide/SVG.** Ícones por componente (carreira, troféus) ou
+   por NOME resolvido em runtime (`DynamicIcon` para conquistas, `GoalIcon` para
+   caixinhas). Um teste vitest (`no-emoji.test.ts`) varre `src/` via
+   `import.meta.glob` e falha se um emoji reaparecer — a rede de segurança que o
+   arquiteto pediu, no espírito do teste do catálogo de conquistas.
+
+2. **A coluna `fin_goal_details.emoji` passa a guardar o NOME de um ícone Lucide**
+   (`"target"`, `"gamepad2"`…), não um emoji. O nome da coluna é **legado** — como
+   "Aurora" nomeia só a camada de gradiente (ADR-0015), "emoji" agora nomeia "o
+   ícone". Não há migration: a coluna é TEXT, e `GoalIcon` cai num ícone padrão
+   (`Target`) para qualquer valor que não seja um nome conhecido — as caixinhas
+   antigas, que guardam um emoji de verdade, continuam abrindo, só com o ícone
+   padrão. Reescrever os dados do usuário por um palpite seria pior que o fallback.
+
+3. **Os `title_snapshot`s NOVOS nascem sem emoji** ("Objetivo alcançado — X",
+   "Terminou \"Y\" (5/5)"). Os ANTIGOS, já no ledger, mantêm o emoji: o ledger é
+   append-only e imutável (a história é o que você viu na época). A Timeline
+   renderiza o que está gravado; o passado não é reescrito para agradar o presente.
+
+**Consequência.** A UI é tipograficamente consistente daqui para frente, sem tocar
+no dado histórico. O único emoji que sobrevive é o de linhas de ledger antigas — e
+esse é intocável por princípio. O `favicon` de um Artifact de preview não conta: é
+a aba do navegador, não a UI do NEXUS.

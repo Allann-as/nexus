@@ -162,7 +162,7 @@ impl BookService {
         let now = self.clock.now_ms();
         let today = self.clock.today_local();
 
-        let stars = rating.map(|r| "★".repeat(r as usize)).unwrap_or_default();
+        let stars = rating.map(|r| format!(" ({r}/5)")).unwrap_or_default();
         let completion = NewLedgerEvent {
             ts: now,
             day: today.clone(),
@@ -173,7 +173,7 @@ impl BookService {
                 "achievement": "book_finished",
                 "rating": rating,
             }),
-            title_snapshot: format!("📖 Terminou \"{}\" {stars}", book.title),
+            title_snapshot: format!("Terminou \"{}\"{stars}", book.title),
         };
 
         let review_note = review

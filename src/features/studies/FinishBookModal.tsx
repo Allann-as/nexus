@@ -1,7 +1,7 @@
 /**
  * Terminar um livro: a nota em estrelas + uma frase de resenha.
  *
- * `finishBook` faz o resto no backend — marca 'lido', grava a conquista 📖 no
+ * `finishBook` faz o resto no backend — marca 'lido', grava a conquista no
  * ledger e transforma a resenha numa nota linkada. Aqui é só o gesto: as
  * estrelas, a frase, e o botão que conclui.
  */
@@ -51,7 +51,7 @@ export function FinishBookModal({
         rating > 0 ? rating : null,
         review.trim() || null,
       );
-      push("success", "Leitura concluída 📖");
+      push("success", "Leitura concluída");
       onDone();
     } catch (e) {
       pushError(e);

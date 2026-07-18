@@ -56,7 +56,7 @@ export function RecordMilestoneModal({
         happenedOn: happenedOn || null,
         note: note.trim() || null,
       });
-      push("success", "Marco registrado 🎉");
+      push("success", "Marco registrado");
       onSaved();
     } catch (e) {
       pushError(e);
@@ -93,7 +93,10 @@ export function RecordMilestoneModal({
                         : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-glow)]",
                     )}
                   >
-                    <span>{CAREER_KIND_META[k].emoji}</span>
+                    {(() => {
+                      const Icon = CAREER_KIND_META[k].icon;
+                      return <Icon size={13} aria-hidden />;
+                    })()}
                     {CAREER_KIND_META[k].label}
                   </button>
                 ))}

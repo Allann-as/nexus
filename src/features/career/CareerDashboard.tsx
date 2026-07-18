@@ -88,7 +88,7 @@ export function CareerDashboard({ areaId }: { areaId: string }) {
 
       {latest ? (
         <HeroCard
-          label={`${CAREER_KIND_META[latest.kind].emoji} ${CAREER_KIND_META[latest.kind].label} · marco mais recente`}
+          label={`${CAREER_KIND_META[latest.kind].label} · marco mais recente`}
           value={latest.entry.titleSnapshot}
           hint={formatDay(latest.entry.day)}
         />
@@ -122,10 +122,13 @@ export function CareerDashboard({ areaId }: { areaId: string }) {
             {milestones.map((m) => (
               <li key={m.entry.seq} className="relative py-3 pl-6">
                 <span
-                  className="absolute -left-[13px] top-3.5 grid size-6 place-items-center rounded-full bg-[var(--bg-surface)] text-[12px] ring-1 ring-[color-mix(in_srgb,var(--sphere)_45%,transparent)]"
+                  className="absolute -left-[13px] top-3.5 grid size-6 place-items-center rounded-full bg-[var(--bg-surface)] text-[var(--sphere)] ring-1 ring-[color-mix(in_srgb,var(--sphere)_45%,transparent)]"
                   aria-hidden
                 >
-                  {CAREER_KIND_META[m.kind].emoji}
+                  {(() => {
+                    const Icon = CAREER_KIND_META[m.kind].icon;
+                    return <Icon size={12} />;
+                  })()}
                 </span>
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                   <span className="text-[14px] font-medium text-[var(--text-primary)]">

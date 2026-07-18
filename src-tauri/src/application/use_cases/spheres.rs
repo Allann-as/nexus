@@ -44,7 +44,7 @@ pub struct SphereCard {
     pub habits_today_total: u32,
     /// O melhor streak VIVO da Esfera — o número que o usuário não quer perder.
     pub best_streak: u32,
-    /// O hábito dono do `best_streak`. O card diz "Treino · 12🔥", não "12🔥".
+    /// O hábito dono do `best_streak`. O card diz "Treino · 12 dias", não só "12".
     pub best_streak_title: Option<String>,
     pub open_tasks: i64,
     pub open_projects: i64,

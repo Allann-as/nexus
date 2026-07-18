@@ -172,7 +172,7 @@ export function describe(entry: LedgerEntry): string {
   }
 
   // Uma conquista (`completed` com `achievement`) já tem `titleSnapshot` humano
-  // — "📖 Terminou 'X' ★★★★★", "🏆 Y — objetivo alcançado!". A chave crua do
+  // — "Terminou 'X' (5/5)", "Objetivo alcançado — Y". A chave crua do
   // payload ('book_finished') é vocabulário interno, não texto de tela.
   return title || KIND_LABEL[entry.entityKind] || prettify(entry.eventType);
 }

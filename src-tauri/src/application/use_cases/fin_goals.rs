@@ -67,11 +67,12 @@ impl FinGoalService {
         let deadline = deadline
             .map(|d| parse_day(&d).map(format_day))
             .transpose()?;
-        // '🎯' é o padrão do schema; um emoji em branco cairia num badge vazio.
+        // 'target' é o ícone Lucide padrão (M4.6: ícone, não emoji — ADR-0042).
+        // A coluna se chama `emoji` por legado; hoje guarda um NOME de ícone.
         let emoji = emoji
             .map(|e| e.trim().to_string())
             .filter(|e| !e.is_empty())
-            .unwrap_or_else(|| "🎯".into());
+            .unwrap_or_else(|| "target".into());
 
         let id = self.ids.new_id();
         let now = self.clock.now_ms();
@@ -124,7 +125,7 @@ impl FinGoalService {
     /// Deposita (ou saca, com valor negativo) numa caixinha.
     ///
     /// Um depósito É um fato da vida do usuário (ADR-0023) — grava no ledger. Se
-    /// ele fechar a caixinha, a conquista 🏆 entra junto, na mesma transação.
+    /// ele fechar a caixinha, a conquista entra junto, na mesma transação.
     pub fn deposit(
         &self,
         goal_id: &str,
@@ -184,7 +185,7 @@ impl FinGoalService {
                 "achievement": "fin_goal_complete",
                 "targetCents": goal.target_cents,
             }),
-            title_snapshot: format!("🏆 {} — objetivo alcançado!", goal.title),
+            title_snapshot: format!("Objetivo alcançado — {}", goal.title),
         });
 
         let deposit = self.fin_goals.deposit_with_event(

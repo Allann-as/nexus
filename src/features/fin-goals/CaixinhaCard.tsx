@@ -1,5 +1,5 @@
 /**
- * Um card-caixinha: emoji, nome, barra grossa com glow, R$ guardado / R$ alvo,
+ * Um card-caixinha: ícone, nome, barra grossa com glow, R$ guardado / R$ alvo,
  * badge do banco e a projeção determinística (§2.1).
  *
  * A barra é a herói visual — grossa, na cor da Esfera (o dourado dos Objetivos),
@@ -7,7 +7,9 @@
  * montagem, como todo número do Midnight.
  */
 
-import { PiggyBank, Plus } from "lucide-react";
+import { PiggyBank, Plus, Trophy } from "lucide-react";
+
+import { GoalIcon } from "./GoalIcon";
 
 import { ProgressBar } from "../../design-system/charts";
 import { useCountUp } from "../../design-system/useCountUp";
@@ -63,8 +65,8 @@ export function CaixinhaCard({
 
       <header className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-md)] bg-[color-mix(in_srgb,var(--sphere)_14%,transparent)] text-[20px]">
-            {card.emoji}
+          <span className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-md)] bg-[color-mix(in_srgb,var(--sphere)_14%,transparent)] text-[var(--sphere)]">
+            <GoalIcon name={card.emoji} size={20} />
           </span>
           <div>
             <h3 className="text-[15px] font-semibold leading-tight text-[var(--text-primary)]">
@@ -79,8 +81,9 @@ export function CaixinhaCard({
           </div>
         </div>
         {done && (
-          <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--sphere)_22%,transparent)] px-2 py-0.5 text-[11px] font-semibold text-[var(--sphere)]">
-            🏆 Concluído
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--sphere)_22%,transparent)] px-2 py-0.5 text-[11px] font-semibold text-[var(--sphere)]">
+            <Trophy size={11} aria-hidden />
+            Concluído
           </span>
         )}
       </header>

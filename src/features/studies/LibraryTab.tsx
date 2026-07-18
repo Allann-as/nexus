@@ -8,7 +8,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookMarked, Library, Plus } from "lucide-react";
+import { BookMarked, Library, Plus, Star } from "lucide-react";
 
 import { CountUp } from "../../design-system/cards";
 import { ProgressRing } from "../../design-system/charts";
@@ -132,7 +132,14 @@ export function LibraryTab({ areaId }: { areaId: string }) {
           <FilterRow>
             {[0, 3, 4, 5].map((n) => (
               <Chip key={n} active={minStars === n} onClick={() => setMinStars(n)}>
-                {n === 0 ? "Qualquer nota" : `${n}★+`}
+                {n === 0 ? (
+                  "Qualquer nota"
+                ) : (
+                  <span className="inline-flex items-center gap-0.5">
+                    {n}
+                    <Star size={11} className="fill-current" aria-hidden />+
+                  </span>
+                )}
               </Chip>
             ))}
           </FilterRow>

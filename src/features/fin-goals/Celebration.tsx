@@ -8,6 +8,7 @@
  */
 
 import { useEffect } from "react";
+import { Trophy } from "lucide-react";
 
 export function Celebration({ title, onDone }: { title: string; onDone: () => void }) {
   useEffect(() => {
@@ -35,7 +36,8 @@ export function Celebration({ title, onDone }: { title: string; onDone: () => vo
           className="relative flex flex-col items-center gap-3"
           style={{ animation: "nexus-celebrate 700ms var(--ease) forwards" }}
         >
-          <span className="text-[72px] leading-none">🏆</span>
+          <Trophy size={72} strokeWidth={1.5} className="text-[var(--sphere)]" aria-hidden />
+
           <div className="text-center">
             <p className="text-[18px] font-bold tracking-[-0.02em] text-[var(--text-primary)]">
               Objetivo alcançado!
