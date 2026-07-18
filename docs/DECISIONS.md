@@ -1325,3 +1325,49 @@ o "voltar" não voltava). O redesign pediu navegação **contextual da Esfera** 
 diferentes (checkpoints da Saúde, aportes das Finanças, biblioteca dos Estudos) sem
 um design por Esfera. Os indicadores começam onde o dado já existe; Carreira (item 6)
 e Estudos (item 7) aprofundam os seus quando trouxerem os dados novos.
+
+## ADR-0045 — Uma recriação de `nodes` para 'skill' E 'subject': olhar o item 7 antes de escrever a migration do 6
+
+**Data:** 2026-07-18 · **Status:** aceito · **M4.6** · §2.6/2.7 do redesign
+
+**Contexto.** O item 6 (Carreira) pede competências com nível; o item 7 (Estudos),
+logo depois, pede matérias e sessões de estudo. Um `kind` novo custa a recriação de
+`nodes` (o SQLite não sabe alterar um CHECK — ADR-0020), a operação mais cara e
+perigosa do schema. A regra do projeto é pagá-la o mínimo de vezes (ADR-0029/0036).
+Escrever a migration do 6 sem olhar o 7 arriscaria uma QUINTA recriação semanas
+depois.
+
+**Decisão.** Levantar os kinds dos DOIS itens agora e pagar UMA recriação (a quarta,
+migration `0013`) para ambos:
+
+1. **`skill`** (Carreira) — uma competência tem um NÍVEL que sobe; não é um `project`
+   (entregável com tarefas). Satélite `skill_details` (level, category, max_level).
+2. **`subject`** (Estudos) — uma matéria é a espinha do rastreio de estudo, com
+   progresso próprio agregando sessões/livros/notas; não é um `project` (que
+   Idiomas/Faculdade/Cursos seguem reusando). Satélite `subject_details`.
+
+**O que NÃO virou kind, de propósito:**
+
+- **Sessão de estudo** é um LOG de alta frequência (`study_sessions`), como
+  `contributions` (ADR-0027) e `habit_ticks` — não um node: sem tela própria, sem
+  busca. Liga-se a matéria/livro/competência por `ON DELETE SET NULL` (a hora
+  estudada sobrevive ao apagamento do vínculo).
+- **Cargo/promoção** continua sendo fato do ledger sem node (`career_milestone`,
+  ADR-0032). O item 6 dá forma de TRAJETÓRIA ao que já existe — não duplica.
+- **Subir de nível de competência** é um evento de ledger (`skill_level_up`),
+  agregado como XP; o nível atual é estado em `skill_details.level`, gravado na mesma
+  transação (ADR-0037 — a exceção documentada: um fato do usuário, não derivação).
+
+3. **A recriação e as três tabelas-satélite entram todas na `0013`, mesmo o Estudos
+   só ganhando repo/comandos no sub-commit seguinte.** Criar `subject_details` e
+   `study_sessions` agora (DDL barato, sem recriação) evita uma segunda migration; se
+   o item 7 precisar de mais colunas, um `ALTER TABLE ADD COLUMN` as adiciona sem
+   recriar nada.
+
+4. **Revisão espaçada (SM-2) fica ADIADA** — só entra se couber sem inchar o item 7.
+   Nada dela toca a `0013`; quando chegar, é tabela nova sem recriação. (Nota de
+   escopo, formalizada por ADR próprio se e quando for construída.)
+
+**Consequência.** Quatro recriações no total (0007, 0011, 0012, 0013), cada uma
+paga por mais de um kind quando possível. O item 6 constrói sobre `skill` agora; o
+item 7 constrói sobre `subject`/`study_sessions` sem tocar em migration de recriação.

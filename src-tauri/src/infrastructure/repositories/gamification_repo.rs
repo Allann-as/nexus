@@ -49,16 +49,20 @@ impl GamificationRepository for SqliteGamificationRepository {
                      WHERE n.kind = 'milestone' AND n.status = 'done'
                      GROUP BY COALESCE(n.area_id, pa.area_id)
                     UNION ALL
-                    SELECT n.area_id, COUNT(*) * ?5 FROM nodes n
-                     WHERE n.kind = 'book' AND n.status = 'done' GROUP BY n.area_id
+                    SELECT n.area_id, COUNT(*) * ?5
+                      FROM ledger l JOIN nodes n ON n.id = l.entity_id
+                     WHERE l.event_type = 'skill_level_up' GROUP BY n.area_id
                     UNION ALL
                     SELECT n.area_id, COUNT(*) * ?6 FROM nodes n
-                     WHERE n.kind = 'fin_goal' AND n.status = 'done' GROUP BY n.area_id
+                     WHERE n.kind = 'book' AND n.status = 'done' GROUP BY n.area_id
                     UNION ALL
                     SELECT n.area_id, COUNT(*) * ?7 FROM nodes n
-                     WHERE n.kind = 'challenge' AND n.status = 'done' GROUP BY n.area_id
+                     WHERE n.kind = 'fin_goal' AND n.status = 'done' GROUP BY n.area_id
                     UNION ALL
                     SELECT n.area_id, COUNT(*) * ?8 FROM nodes n
+                     WHERE n.kind = 'challenge' AND n.status = 'done' GROUP BY n.area_id
+                    UNION ALL
+                    SELECT n.area_id, COUNT(*) * ?9 FROM nodes n
                      WHERE n.kind = 'annual_goal' AND n.status = 'done' GROUP BY n.area_id
                  ) GROUP BY area_id",
             )?;
@@ -68,6 +72,7 @@ impl GamificationRepository for SqliteGamificationRepository {
                     p.task_done,
                     p.goal_checkpoint,
                     p.milestone_done,
+                    p.skill_level_up,
                     p.book_finished,
                     p.fin_goal_done,
                     p.challenge_done,

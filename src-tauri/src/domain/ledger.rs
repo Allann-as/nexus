@@ -35,6 +35,10 @@ pub enum EventType {
     ChallengeStarted,
     /// Uma temporada/desafio foi concluído (o placar bateu o alvo).
     ChallengeCompleted,
+    /// Subir de nível numa competência da Carreira (M4.6). `entity_id` é o node
+    /// 'skill'; a série destes eventos É a trilha de evolução (o nível é 1 + a
+    /// contagem deles, ordenados por `ts`). Vale XP. Ver ADR-0045.
+    SkillLevelUp,
 }
 
 impl EventType {
@@ -57,6 +61,7 @@ impl EventType {
             EventType::AchievementUnlocked => "achievement_unlocked",
             EventType::ChallengeStarted => "challenge_started",
             EventType::ChallengeCompleted => "challenge_completed",
+            EventType::SkillLevelUp => "skill_level_up",
         }
     }
 }
@@ -157,5 +162,6 @@ mod tests {
             EventType::WeeklyReviewCompleted.as_str(),
             "weekly_review_completed"
         );
+        assert_eq!(EventType::SkillLevelUp.as_str(), "skill_level_up");
     }
 }

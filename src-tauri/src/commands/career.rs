@@ -37,3 +37,51 @@ pub fn record_career_milestone(
 pub fn career_milestones(state: State<'_, AppState>) -> Result<Vec<LedgerEntry>> {
     state.career.milestones()
 }
+
+/* ===== Competências (M4.6) ===== */
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewSkillDto {
+    pub title: String,
+    #[serde(default)]
+    pub area_id: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub max_level: Option<i64>,
+}
+
+#[tauri::command]
+pub fn create_skill(
+    state: State<'_, AppState>,
+    skill: NewSkillDto,
+) -> Result<crate::application::ports::Skill> {
+    state
+        .career
+        .create_skill(&skill.title, skill.area_id, skill.category, skill.max_level)
+}
+
+#[tauri::command]
+pub fn level_up_skill(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<crate::application::ports::Skill> {
+    state.career.level_up_skill(&id)
+}
+
+#[tauri::command]
+pub fn list_skills(
+    state: State<'_, AppState>,
+    area_id: Option<String>,
+) -> Result<Vec<crate::application::ports::Skill>> {
+    state.career.skills(area_id)
+}
+
+#[tauri::command]
+pub fn skill_track(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<Vec<crate::application::use_cases::career::SkillPoint>> {
+    state.career.skill_track(&id)
+}

@@ -421,6 +421,33 @@ As guardas da §5 saíram do papel para código puro e testado:
 - **Anti-burnout** (`burnout`): carga da semana ÷ média móvel de até 8 semanas
   (mínimo 4 para falar), alerta acima de `1,25×`. Base zero → `None`.
 
+## 5.10 Carreira e Estudos (0013)
+
+**Dois kinds novos numa recriação só** (a QUARTA do projeto, ADR-0045): `skill`
+(Carreira) e `subject` (Estudos). Olhar o item 7 antes de escrever a migration do 6
+pagou a recriação uma vez para os dois — a regra dos ADR-0029/0036. As três
+armadilhas do 12-step (CASCADE, rowid, rename) ganharam mais um teste.
+
+- **`skill_details`** — a competência: `level` (INTEGER, começa em 1, `CHECK level>=1`),
+  `category` (texto livre, agrupa a trilha) e `max_level` (teto opcional; o `CHECK
+  (max_level IS NULL OR max_level >= level)` recusa subir além do teto no próprio
+  banco). Subir de nível **não é derivação**: é um evento no ledger (`skill_level_up`,
+  `entity_kind='skill'`, `entity_id`=node) gravado na MESMA transação que incrementa
+  `level` (ADR-0037/0045). A trilha de evolução é a série desses eventos.
+- **`subject_details`** — a matéria: `category` e `target_minutes` (meta opcional em
+  minutos). O progresso é COMPUTADO (agrega sessões/livros/notas), nunca gravado.
+  Tabela criada na 0013; repo/comandos chegam no item 7.
+- **`study_sessions`** — o LOG das sessões (não um node, como `contributions`):
+  `subject_id`/`book_id`/`skill_id` (todos opcionais, `ON DELETE SET NULL` — a hora
+  estudada sobrevive ao apagamento do vínculo), `topic`, `minutes` (`CHECK >0`), `day`
+  e `ts`. Índices por `day` e por `subject_id` parcial. Tabela criada na 0013;
+  repo/comandos chegam no item 7.
+
+**XP ganha uma fonte nova** (a tabela de pontos, §5.9, e `domain::xp`): subir de nível
+numa competência vale **40 XP** (`XP_SKILL_LEVEL_UP`) — entre o sub-desafio (25) e o
+livro (60): um feito repetível e significativo, atribuído à Esfera da competência.
+Como todo XP, é DERIVADO (soma dos eventos `skill_level_up`), nunca uma coluna.
+
 ## 6. Integridade e migrations
 
 - `user_version` gerenciado pelo `rusqlite_migration`.

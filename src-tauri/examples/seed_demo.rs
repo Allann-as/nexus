@@ -40,7 +40,7 @@ use nexus_lib::infrastructure::repositories::{
     fin_goal_repo::SqliteFinGoalRepository, goal_repo::SqliteGoalRepository,
     habit_repo::SqliteHabitRepository, ledger_repo::SqliteLedgerRepository,
     node_repo::SqliteNodeRepository, note_repo::SqliteNoteRepository,
-    task_repo::SqliteTaskRepository,
+    skill_repo::SqliteSkillRepository, task_repo::SqliteTaskRepository,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -117,6 +117,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let ledger_repo: Arc<dyn LedgerRepository> = Arc::new(SqliteLedgerRepository::new(db.clone()));
     let career = CareerService {
+        skills: Arc::new(SqliteSkillRepository::new(db.clone())),
+        areas: area_repo.clone(),
         ledger: ledger_repo,
         ids: ids.clone(),
         clock: clock.clone(),

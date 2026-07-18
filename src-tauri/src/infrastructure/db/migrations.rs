@@ -30,6 +30,7 @@ fn migrations() -> Migrations<'static> {
             "../../../migrations/0011_studies_fin_goals.sql"
         )),
         M::up(include_str!("../../../migrations/0012_life.sql")),
+        M::up(include_str!("../../../migrations/0013_career_studies.sql")),
     ])
 }
 
@@ -581,6 +582,114 @@ mod tests {
                 .unwrap();
             assert_eq!(ag, 0, "o satélite da meta anual some com o node");
             assert_eq!(ch, 0, "o satélite da temporada some com o node");
+        }
+
+        #[test]
+        fn skill_and_subject_join_the_vocabulary_in_the_fourth_recreation() {
+            // O M4.6 recria `nodes` PELA QUARTA VEZ (0013), agora para 'skill'
+            // (Carreira) e 'subject' (Estudos) — paga uma recriação para os dois
+            // kinds, olhando o item 7 antes de escrever a migration do 6. Ambos
+            // entram, e o CHECK continua recusando lixo. Ver ADR-0045.
+            let mut conn = seeded_at_v6();
+            migrations().to_latest(&mut conn).unwrap();
+
+            conn.execute(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('sk1', 'skill', 'System Design', 0, 0)",
+                [],
+            )
+            .expect("'skill' entrou no vocabulário");
+            conn.execute(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('su1', 'subject', 'Cálculo II', 0, 0)",
+                [],
+            )
+            .expect("'subject' entrou no vocabulário");
+
+            let junk = conn.execute(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('z3', 'panqueca', 'nao', 0, 0)",
+                [],
+            );
+            assert!(junk.is_err(), "o CHECK não pode ter sumido na 4ª recriação");
+        }
+
+        #[test]
+        fn the_skill_level_floor_and_cap_are_live() {
+            let mut conn = seeded_at_v6();
+            migrations().to_latest(&mut conn).unwrap();
+
+            conn.execute(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('sk1', 'skill', 'Inglês', 0, 0)",
+                [],
+            )
+            .unwrap();
+
+            // Nível abaixo de 1 é recusado.
+            let below = conn.execute(
+                "INSERT INTO skill_details (node_id, level) VALUES ('sk1', 0)",
+                [],
+            );
+            assert!(below.is_err(), "nível < 1 é recusado pelo CHECK");
+
+            // Nível acima do teto é recusado (a guarda coluna-a-coluna).
+            let over = conn.execute(
+                "INSERT INTO skill_details (node_id, level, max_level) VALUES ('sk1', 6, 5)",
+                [],
+            );
+            assert!(over.is_err(), "level acima de max_level é recusado");
+
+            conn.execute(
+                "INSERT INTO skill_details (node_id, level, max_level) VALUES ('sk1', 2, 5)",
+                [],
+            )
+            .expect("nível dentro do teto entra");
+        }
+
+        #[test]
+        fn the_career_studies_satellites_cascade_and_sessions_survive_a_null() {
+            // skill_details e subject_details apagam junto com o node dono; uma
+            // sessão de estudo SOBREVIVE ao apagamento da matéria (ON DELETE SET
+            // NULL) — a hora estudada aconteceu.
+            let mut conn = seeded_at_v6();
+            migrations().to_latest(&mut conn).unwrap();
+            conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+
+            conn.execute_batch(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('sk1', 'skill', 'Skill', 0, 0);
+                 INSERT INTO skill_details (node_id, level) VALUES ('sk1', 3);
+                 INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('su1', 'subject', 'Matéria', 0, 0);
+                 INSERT INTO subject_details (node_id) VALUES ('su1');
+                 INSERT INTO study_sessions (id, subject_id, minutes, day, ts)
+                      VALUES ('ss1', 'su1', 40, '2026-07-01', 0);",
+            )
+            .unwrap();
+
+            conn.execute("DELETE FROM nodes WHERE id = 'sk1'", [])
+                .unwrap();
+            conn.execute("DELETE FROM nodes WHERE id = 'su1'", [])
+                .unwrap();
+
+            let (sk, su, sess, orphan): (i64, i64, i64, i64) = conn
+                .query_row(
+                    "SELECT (SELECT COUNT(*) FROM skill_details),
+                            (SELECT COUNT(*) FROM subject_details),
+                            (SELECT COUNT(*) FROM study_sessions),
+                            (SELECT COUNT(*) FROM study_sessions WHERE subject_id IS NULL)",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                )
+                .unwrap();
+            assert_eq!(sk, 0, "skill_details some com o node");
+            assert_eq!(su, 0, "subject_details some com o node");
+            assert_eq!(sess, 1, "a sessão de estudo sobrevive à matéria apagada");
+            assert_eq!(
+                orphan, 1,
+                "o vínculo com a matéria virou NULL, não apagou a sessão"
+            );
         }
 
         #[test]

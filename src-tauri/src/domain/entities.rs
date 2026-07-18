@@ -55,6 +55,18 @@ pub enum Kind {
     /// Kind próprio: tem janela de datas, fonte de progresso (um hábito ou um
     /// contador manual) e um alvo. Não é nenhum dos kinds existentes.
     Challenge,
+    /// Uma competência da Carreira ("System Design", "Inglês") — M4.6.
+    ///
+    /// Kind próprio, e não um `Project` (ADR-0045): um projeto é um entregável com
+    /// tarefas; uma competência é uma capacidade com um NÍVEL que sobe. Subir de
+    /// nível é um fato do usuário no ledger (ADR-0037), não a conclusão de tarefas.
+    Skill,
+    /// Uma matéria/disciplina de Estudos ("Cálculo II") — M4.6.
+    ///
+    /// Kind próprio, e não um `Project` (ADR-0045): a matéria é a espinha do rastreio
+    /// de estudo — as sessões registram contra ela e ela agrega sessões/livros/notas
+    /// num progresso próprio. Idiomas/Faculdade/Cursos seguem reusando `project`.
+    Subject,
 }
 
 impl Kind {
@@ -74,6 +86,8 @@ impl Kind {
             Kind::Book => "book",
             Kind::AnnualGoal => "annual_goal",
             Kind::Challenge => "challenge",
+            Kind::Skill => "skill",
+            Kind::Subject => "subject",
         }
     }
 
@@ -93,6 +107,8 @@ impl Kind {
             "book" => Kind::Book,
             "annual_goal" => Kind::AnnualGoal,
             "challenge" => Kind::Challenge,
+            "skill" => Kind::Skill,
+            "subject" => Kind::Subject,
             other => {
                 return Err(NexusError::Validation(format!(
                     "kind desconhecido: {other}"
@@ -589,6 +605,10 @@ mod tests {
             Kind::Milestone,
             Kind::FinGoal,
             Kind::Book,
+            Kind::AnnualGoal,
+            Kind::Challenge,
+            Kind::Skill,
+            Kind::Subject,
         ] {
             assert_eq!(Kind::parse(k.as_str()).unwrap(), k);
         }
@@ -603,6 +623,8 @@ mod tests {
         assert_eq!(Kind::InboxItem.as_str(), "inbox_item");
         assert_eq!(Kind::FinGoal.as_str(), "fin_goal");
         assert_eq!(Kind::Book.as_str(), "book");
+        assert_eq!(Kind::Skill.as_str(), "skill");
+        assert_eq!(Kind::Subject.as_str(), "subject");
     }
 
     #[test]

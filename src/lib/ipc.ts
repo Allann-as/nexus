@@ -66,7 +66,11 @@ export type Kind =
   | "inbox_item"
   | "milestone"
   | "fin_goal"
-  | "book";
+  | "book"
+  | "annual_goal"
+  | "challenge"
+  | "skill"
+  | "subject";
 
 export type Status = "active" | "done" | "archived" | "dropped";
 
@@ -1123,6 +1127,48 @@ export const recordCareerMilestone = (m: {
 
 /** Os marcos de carreira, do mais recente ao mais antigo. */
 export const careerMilestones = () => call<LedgerEntry[]>("career_milestones");
+
+/** Uma competência da Carreira (§2.6). `level` é o estado atual; a trilha vem de `skillTrack`. */
+export interface Skill {
+  id: string;
+  title: string;
+  areaId: string | null;
+  status: Status;
+  level: number;
+  category: string | null;
+  maxLevel: number | null;
+  createdAt: number;
+}
+
+/** Um ponto da trilha de evolução de uma competência. */
+export interface SkillPoint {
+  day: string;
+  level: number;
+}
+
+export const createSkill = (skill: {
+  title: string;
+  areaId?: string | null;
+  category?: string | null;
+  maxLevel?: number | null;
+}) =>
+  call<Skill>("create_skill", {
+    skill: {
+      title: skill.title,
+      areaId: skill.areaId ?? null,
+      category: skill.category ?? null,
+      maxLevel: skill.maxLevel ?? null,
+    },
+  });
+
+/** Sobe uma competência de nível — um fato no ledger que vale XP (ADR-0045). */
+export const levelUpSkill = (id: string) => call<Skill>("level_up_skill", { id });
+
+export const listSkills = (areaId: string | null) =>
+  call<Skill[]>("list_skills", { areaId });
+
+/** A trilha de evolução: (dia, nível). Um ponto só = competência nova. */
+export const skillTrack = (id: string) => call<SkillPoint[]>("skill_track", { id });
 
 /* ===== Timeline: a Máquina do Tempo ===== */
 

@@ -4,6 +4,7 @@
 
 import { CareerDashboard } from "./CareerDashboard";
 import { CareerProjects } from "./CareerProjects";
+import { SkillsTrack } from "./SkillsTrack";
 
 export function CareerContent({ areaId, tab }: { areaId: string; tab: string }) {
   if (tab === "projects") {
@@ -16,13 +17,7 @@ export function CareerContent({ areaId, tab }: { areaId: string; tab: string }) 
     );
   }
   if (tab === "skills") {
-    return (
-      <CareerProjects
-        areaId={areaId}
-        label="Habilidades"
-        hint="Uma habilidade em desenvolvimento é um projeto com checklist: system design, inglês, liderança."
-      />
-    );
+    return <SkillsTrack areaId={areaId} />;
   }
   return <CareerDashboard areaId={areaId} />;
 }

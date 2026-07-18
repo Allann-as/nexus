@@ -41,8 +41,8 @@ use crate::infrastructure::repositories::{
     goal_repo::SqliteGoalRepository, habit_repo::SqliteHabitRepository,
     insight_repo::SqliteInsightRepository, ledger_repo::SqliteLedgerRepository,
     node_repo::SqliteNodeRepository, note_repo::SqliteNoteRepository,
-    sphere_repo::SqliteSphereRepository, task_repo::SqliteTaskRepository,
-    timeline_repo::SqliteTimelineRepository,
+    skill_repo::SqliteSkillRepository, sphere_repo::SqliteSphereRepository,
+    task_repo::SqliteTaskRepository, timeline_repo::SqliteTimelineRepository,
 };
 
 pub struct AppState {
@@ -145,6 +145,8 @@ impl AppState {
         };
 
         let career = CareerService {
+            skills: Arc::new(SqliteSkillRepository::new(db.clone())),
+            areas: area_repo.clone(),
             ledger: ledger.clone(),
             ids: ids.clone(),
             clock: clock.clone(),

@@ -23,6 +23,10 @@ import {
   Search as SearchIcon,
   PiggyBank,
   BookOpen,
+  CalendarRange,
+  Trophy,
+  Award,
+  GraduationCap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -60,6 +64,10 @@ const KIND_ICON: Record<Kind, LucideIcon> = {
   milestone: Flag,
   fin_goal: PiggyBank,
   book: BookOpen,
+  annual_goal: CalendarRange,
+  challenge: Trophy,
+  skill: Award,
+  subject: GraduationCap,
 };
 
 const KIND_LABEL: Record<Kind, string> = {
@@ -75,6 +83,10 @@ const KIND_LABEL: Record<Kind, string> = {
   milestone: "Sub-desafio",
   fin_goal: "Caixinha",
   book: "Livro",
+  annual_goal: "Meta anual",
+  challenge: "Temporada",
+  skill: "Competência",
+  subject: "Matéria",
 };
 
 export function CommandPalette({

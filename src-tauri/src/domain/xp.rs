@@ -29,6 +29,12 @@ pub const XP_TASK_DONE: u32 = 15;
 pub const XP_GOAL_CHECKPOINT: u32 = 20;
 /// Um sub-desafio de meta concluído.
 pub const XP_MILESTONE_DONE: u32 = 25;
+/// Subir de nível numa competência da Carreira (M4.6).
+///
+/// Entre o sub-desafio (25) e o livro (60): um feito repetível e significativo. É
+/// um fato do usuário no ledger (`skill_level_up`), não derivação (ADR-0037/0045);
+/// o XP é a soma desses eventos, atribuída à Esfera da competência.
+pub const XP_SKILL_LEVEL_UP: u32 = 40;
 /// Um livro terminado.
 pub const XP_BOOK_FINISHED: u32 = 60;
 /// Uma caixinha (objetivo financeiro) fechada.

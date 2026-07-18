@@ -246,6 +246,10 @@ const KIND_LABEL: Record<Kind, string> = {
   milestone: "Sub-desafio",
   fin_goal: "Caixinha",
   book: "Livro",
+  annual_goal: "Meta anual",
+  challenge: "Temporada",
+  skill: "Competência",
+  subject: "Matéria",
 };
 
 function isAgeing(item: Node): boolean {

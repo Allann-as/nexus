@@ -1328,6 +1328,63 @@ pub trait ChallengeRepository: Send + Sync {
     fn active_reached(&self) -> Result<Vec<Challenge>>;
 }
 
+/* ===== Carreira: competências (M4.6) ===== */
+
+/// Uma competência a criar. O nível começa em 1; `max_level` é um teto opcional.
+#[derive(Debug, Clone)]
+pub struct NewSkill {
+    pub title: String,
+    pub area_id: Option<String>,
+    pub category: Option<String>,
+    pub max_level: Option<i64>,
+}
+
+/// Uma competência: o node 'skill' + o satélite. `level` é o estado ATUAL; a
+/// trilha de evolução é a série de eventos `skill_level_up` no ledger.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Skill {
+    pub id: String,
+    pub title: String,
+    pub area_id: Option<String>,
+    pub status: String,
+    pub level: i64,
+    pub category: Option<String>,
+    pub max_level: Option<i64>,
+    pub created_at: i64,
+}
+
+pub trait SkillRepository: Send + Sync {
+    /// Node 'skill' + satélite + evento `created`, na mesma transação.
+    fn create_with_event(
+        &self,
+        id: &str,
+        node: &NewNode,
+        new: &NewSkill,
+        event: &NewLedgerEvent,
+    ) -> Result<Skill>;
+
+    fn get(&self, id: &str) -> Result<Skill>;
+
+    /// As competências de uma Esfera (ou todas). As arquivadas somem.
+    fn list(&self, area_id: Option<&str>) -> Result<Vec<Skill>>;
+
+    /// Sobe UM nível E grava o evento `skill_level_up`, na mesma transação. O
+    /// incremento é atômico (`level = level + 1`); recusa se já está no teto
+    /// (`max_level`). Devolve a competência já com o novo nível.
+    fn level_up_with_event(
+        &self,
+        id: &str,
+        updated_at: i64,
+        event: &NewLedgerEvent,
+    ) -> Result<Skill>;
+
+    /// A série da trilha: (dia, nível) do 'created' (nível 1) e de cada
+    /// 'skill_level_up' (o nível é a posição na ordem), do mais antigo ao recente.
+    /// A UI omite o sparkline quando há um ponto só (competência nova).
+    fn level_history(&self, id: &str) -> Result<Vec<(String, i64)>>;
+}
+
 /* ===== Gamificação (M4.5) ===== */
 
 /// Os pontos por feito, injetados do domínio (`domain::xp`) para o SQL não
@@ -1338,6 +1395,7 @@ pub struct XpPoints {
     pub task_done: i64,
     pub goal_checkpoint: i64,
     pub milestone_done: i64,
+    pub skill_level_up: i64,
     pub book_finished: i64,
     pub fin_goal_done: i64,
     pub challenge_done: i64,
