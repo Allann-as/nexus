@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="Núcleo radiante">
+  <!-- Cinco ramos em ângulos precisos de pentágono, partindo do núcleo -->
+  <g fill="none" stroke="#4d8dff" stroke-width="4" stroke-linecap="round">
+    <path d="M60 60 L60 24"/>
+    <path d="M60 60 L94.2 47.9"/>
+    <path d="M60 60 L82 89.5"/>
+    <path d="M60 60 L38 89.5"/>
+    <path d="M60 60 L25.8 47.9"/>
+  </g>
+  <!-- As esferas nas pontas -->
+  <circle cx="60" cy="24" r="6.5" fill="#34d399"/>
+  <circle cx="94.2" cy="47.9" r="6.5" fill="#38bdf8"/>
+  <circle cx="82" cy="89.5" r="6.5" fill="#fbbf24"/>
+  <circle cx="38" cy="89.5" r="6.5" fill="#ec4899"/>
+  <circle cx="25.8" cy="47.9" r="6.5" fill="#a78bfa"/>
+  <!-- O núcleo: o centro de onde tudo irradia -->
+  <circle cx="60" cy="60" r="12" fill="#1e4fd8"/>
+  <circle cx="60" cy="60" r="5.5" fill="#bcd6ff"/>
+  <circle cx="60" cy="60" r="12" fill="none" stroke="#7eb2ff" stroke-width="1.5" stroke-opacity="0.7"/>
+</svg>

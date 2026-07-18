@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Convergência — ícone">
+  <defs>
+    <linearGradient id="ind3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3f7bf0"/>
+      <stop offset="1" stop-color="#1a336f"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="58" fill="url(#ind3)"/>
+  <rect x="8" y="8" width="240" height="240" rx="58" fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="1.5"/>
+  <g transform="translate(38 38) scale(1.5)">
+    <g fill="none" stroke-width="3" stroke-linecap="round">
+      <path d="M92 28 L60 60" stroke="#ff7ec2"/>
+      <path d="M28 92 L60 60" stroke="#7dd3fc"/>
+      <path d="M60 22 L60 60" stroke="#6ee7b7"/>
+      <path d="M98 60 L60 60" stroke="#fcd34d"/>
+      <path d="M22 60 L60 60" stroke="#c4b5fd"/>
+    </g>
+    <path d="M26 26 L94 94" fill="none" stroke="#e3edff" stroke-width="5.5" stroke-linecap="round"/>
+    <circle cx="92" cy="28" r="4.5" fill="#ff7ec2"/>
+    <circle cx="28" cy="92" r="4.5" fill="#7dd3fc"/>
+    <circle cx="60" cy="22" r="4.5" fill="#6ee7b7"/>
+    <circle cx="98" cy="60" r="4.5" fill="#fcd34d"/>
+    <circle cx="22" cy="60" r="4.5" fill="#c4b5fd"/>
+    <circle cx="60" cy="60" r="12" fill="#ffffff"/>
+    <circle cx="60" cy="60" r="5.5" fill="#2b5fe0"/>
+  </g>
+</svg>
