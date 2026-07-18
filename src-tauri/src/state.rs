@@ -15,6 +15,7 @@ use crate::application::use_cases::{
     events::EventService,
     fin_goals::FinGoalService,
     finance::FinanceService,
+    gamification::GamificationService,
     goals::GoalService,
     habits::HabitService,
     insights::{InsightService, InsightWorker},
@@ -32,11 +33,12 @@ use crate::infrastructure::paths::Paths;
 use crate::infrastructure::repositories::{
     area_repo::SqliteAreaRepository, book_repo::SqliteBookRepository,
     contribution_repo::SqliteContributionRepository, event_repo::SqliteEventRepository,
-    fin_goal_repo::SqliteFinGoalRepository, goal_repo::SqliteGoalRepository,
-    habit_repo::SqliteHabitRepository, insight_repo::SqliteInsightRepository,
-    ledger_repo::SqliteLedgerRepository, node_repo::SqliteNodeRepository,
-    note_repo::SqliteNoteRepository, sphere_repo::SqliteSphereRepository,
-    task_repo::SqliteTaskRepository, timeline_repo::SqliteTimelineRepository,
+    fin_goal_repo::SqliteFinGoalRepository, gamification_repo::SqliteGamificationRepository,
+    goal_repo::SqliteGoalRepository, habit_repo::SqliteHabitRepository,
+    insight_repo::SqliteInsightRepository, ledger_repo::SqliteLedgerRepository,
+    node_repo::SqliteNodeRepository, note_repo::SqliteNoteRepository,
+    sphere_repo::SqliteSphereRepository, task_repo::SqliteTaskRepository,
+    timeline_repo::SqliteTimelineRepository,
 };
 
 pub struct AppState {
@@ -58,6 +60,7 @@ pub struct AppState {
     pub spheres: SphereService,
     pub insights: Arc<InsightService>,
     pub insights_worker: InsightWorker,
+    pub gamification: GamificationService,
     pub ledger: Arc<dyn LedgerRepository>,
     pub search: Arc<dyn SearchRepository>,
 }
@@ -163,7 +166,7 @@ impl AppState {
 
         let spheres = SphereService {
             areas: area_repo.clone(),
-            habits: habit_repo,
+            habits: habit_repo.clone(),
             spheres: sphere_repo,
             clock: clock.clone(),
         };
@@ -175,6 +178,15 @@ impl AppState {
             clock: clock.clone(),
         });
         let insights_worker = InsightWorker::spawn(insights.clone());
+
+        // A gamificação: XP derivado do estado (ADR-0037) e a galeria de
+        // conquistas, cujo desbloqueio é gravado no ledger (ADR-0038).
+        let gamification = GamificationService {
+            gami: Arc::new(SqliteGamificationRepository::new(db.clone())),
+            habits: habit_repo,
+            ledger: ledger.clone(),
+            clock: clock.clone(),
+        };
 
         Ok(Self {
             areas: AreaService {
@@ -202,6 +214,7 @@ impl AppState {
             spheres,
             insights,
             insights_worker,
+            gamification,
             ledger,
             search,
             db,

@@ -1165,3 +1165,48 @@ pub trait InsightRepository: Send + Sync {
     /// `input_hash` do DATA_MODEL §5.
     fn input_signature(&self) -> Result<String>;
 }
+
+/* ===== Gamificação (M4.5) ===== */
+
+/// Os pontos por feito, injetados do domínio (`domain::xp`) para o SQL não
+/// duplicar a tabela de pontos — a fonte da verdade continua sendo uma só.
+#[derive(Debug, Clone, Copy)]
+pub struct XpPoints {
+    pub habit_done: i64,
+    pub task_done: i64,
+    pub goal_checkpoint: i64,
+    pub milestone_done: i64,
+    pub book_finished: i64,
+    pub fin_goal_done: i64,
+    pub challenge_done: i64,
+    pub annual_goal_done: i64,
+}
+
+/// Os contadores simples que alimentam o crivo de conquistas (os que são um
+/// `COUNT` direto; streak de hábito e de aporte são computados à parte).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AchievementCounts {
+    pub goals_completed: i64,
+    pub fin_goals_completed: i64,
+    pub books_finished: i64,
+    pub weekly_reviews: i64,
+    pub challenges_completed: i64,
+    pub annual_goals_completed: i64,
+}
+
+/// As leituras da gamificação — XP derivado do estado (ADR-0037), agrupado por
+/// Esfera, e os contadores das conquistas. Tudo do pool `query_only`.
+pub trait GamificationRepository: Send + Sync {
+    /// XP por Esfera (`area_id`): a soma dos pontos de tudo que o usuário fez,
+    /// atribuído pela `area_id` do node. `None` = feitos sem Esfera (contam no
+    /// total, não num card). Uma query só (UNION das fontes), pontos vindos do
+    /// domínio como parâmetros.
+    fn xp_by_area(&self, points: XpPoints) -> Result<Vec<(Option<String>, i64)>>;
+
+    /// Os contadores diretos das conquistas.
+    fn achievement_counts(&self) -> Result<AchievementCounts>;
+
+    /// Os meses ('YYYY-MM') com ao menos um aporte, ordenados — para o streak de
+    /// "meses seguidos investindo".
+    fn contribution_months(&self) -> Result<Vec<String>>;
+}
