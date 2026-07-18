@@ -2,94 +2,17 @@
  * A paleta de comandos — o centro do app.
  *
  * Duas fontes numa lista só: ações (fuzzy match local, instantâneo) e busca
- * FTS5 no banco (debounced). Ações primeiro: quem digita 'cal' quer ir para o
- * Calendário, não achar uma nota que menciona "calendário".
+ * FTS5 no banco (debounced). A montagem das linhas mora em `useCommandRows` —
+ * o mesmo motor que o menu "O NEXO" (§3.3) consome, para as duas superfícies
+ * nunca divergirem. Aqui fica só o overlay: o campo, a seleção por teclado e o
+ * desenho da lista.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import {
-  CornerDownLeft,
-  FileText,
-  CheckSquare,
-  FolderKanban,
-  Target,
-  Repeat,
-  Calendar as CalendarIcon,
-  Flag,
-  Paperclip,
-  Inbox as InboxIcon,
-  Search as SearchIcon,
-  PiggyBank,
-  BookOpen,
-  CalendarRange,
-  Trophy,
-  Award,
-  GraduationCap,
-  Timer,
-  type LucideIcon,
-} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CornerDownLeft, Search as SearchIcon } from "lucide-react";
 
-import { NAV_ITEMS, SECONDARY_ROUTES } from "../../app/navigation";
-import { listAccounts, listAreas, search, type Kind } from "../../lib/ipc";
-import { SPHERE_SECTIONS } from "../spheres/sections";
-import { sphereIcon } from "../hub/SphereIcon";
-import { parseAporte } from "../finance/parseAporte";
-import { useAporte } from "../../stores/aporte";
-import { useFocus } from "../../stores/focus";
-import { fuzzyScore } from "./fuzzy";
+import { useCommandRows, type CommandRow } from "./useCommandRows";
 import { cx, Kbd } from "../../design-system/primitives";
-
-/** Espera o suficiente para não consultar a cada tecla, curto o bastante para
- *  a busca ainda parecer instantânea. */
-const DEBOUNCE_MS = 120;
-
-interface Row {
-  id: string;
-  label: string;
-  hint: string;
-  icon: LucideIcon;
-  run: () => void;
-}
-
-const KIND_ICON: Record<Kind, LucideIcon> = {
-  note: FileText,
-  task: CheckSquare,
-  project: FolderKanban,
-  goal: Target,
-  habit: Repeat,
-  routine: Repeat,
-  event: CalendarIcon,
-  file: Paperclip,
-  inbox_item: InboxIcon,
-  milestone: Flag,
-  fin_goal: PiggyBank,
-  book: BookOpen,
-  annual_goal: CalendarRange,
-  challenge: Trophy,
-  skill: Award,
-  subject: GraduationCap,
-};
-
-const KIND_LABEL: Record<Kind, string> = {
-  note: "Nota",
-  task: "Tarefa",
-  project: "Projeto",
-  goal: "Meta",
-  habit: "Hábito",
-  routine: "Rotina",
-  event: "Evento",
-  file: "Arquivo",
-  inbox_item: "Inbox",
-  milestone: "Sub-desafio",
-  fin_goal: "Caixinha",
-  book: "Livro",
-  annual_goal: "Meta anual",
-  challenge: "Temporada",
-  skill: "Competência",
-  subject: "Matéria",
-};
 
 export function CommandPalette({
   open,
@@ -98,143 +21,16 @@ export function CommandPalette({
   open: boolean;
   onClose: () => void;
 }) {
-  const navigate = useNavigate();
   const [query, setQuery] = useState("");
-  const [debounced, setDebounced] = useState("");
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const t = window.setTimeout(() => setDebounced(query), DEBOUNCE_MS);
-    return () => window.clearTimeout(t);
-  }, [query]);
-
-  const { data: hits = [] } = useQuery({
-    queryKey: ["search", debounced],
-    queryFn: () => search(debounced, 8),
-    // Só consulta com algo digitado; o backend também devolve [] para vazio,
-    // mas não vale a viagem de IPC.
-    enabled: open && debounced.trim().length > 0,
-    staleTime: 5_000,
-  });
-
-  // As Esferas saíram da sidebar e agora moram no Hub. Isso deixaria o teclado
-  // sem caminho até elas: `G+<tecla>` só alcança rota fixa, e as Esferas vêm do
-  // banco (o usuário cria as dele). A paleta é o caminho — e "teclado-primeiro"
-  // é regra da constituição, não preferência.
-  const { data: areas = [] } = useQuery({
-    queryKey: ["areas"],
-    queryFn: () => listAreas(false),
-    enabled: open,
-  });
-
-  // As contas alimentam o "aportar 500 no btg": o parser casa o nome do banco
-  // contra esta lista. Cache compartilhado com o resto do app.
-  const { data: accounts = [] } = useQuery({
-    queryKey: ["accounts"],
-    queryFn: listAccounts,
-    enabled: open,
-    staleTime: 5 * 60_000,
-  });
-
-  const actions = useMemo<Row[]>(
-    () => [
-      {
-        id: "focus:start",
-        label: "Iniciar foco",
-        hint: "Modo Foco",
-        icon: Timer,
-        run: () => useFocus.getState().start(),
-      },
-      ...NAV_ITEMS.map((item) => ({
-        id: `nav:${item.path}`,
-        label: `Ir para ${item.label}`,
-        hint: `G ${item.jumpKey.toUpperCase()}`,
-        icon: item.icon,
-        run: () => navigate(item.path),
-      })),
-      ...SECONDARY_ROUTES.map((item) => ({
-        id: `nav:${item.path}`,
-        label: `Ir para ${item.label}`,
-        hint: `G ${item.jumpKey.toUpperCase()}`,
-        icon: item.icon,
-        run: () => navigate(item.path),
-      })),
-      ...areas.map((area) => ({
-        id: `sphere:${area.id}`,
-        label: `Ir para ${area.name}`,
-        hint: "Esfera",
-        icon: sphereIcon(area.icon),
-        run: () => navigate(`/sphere/${area.id}`),
-      })),
-      // Cada SEÇÃO de cada Esfera é um destino direto — o teclado alcança
-      // "Saúde · Treino" sem passar pela tela da Esfera. O fuzzy filtra o volume.
-      ...areas.flatMap((area) =>
-        SPHERE_SECTIONS[area.template].map((section) => ({
-          id: `section:${area.id}:${section.key}`,
-          label: `${area.name} · ${section.label}`,
-          hint: "Seção",
-          icon: section.icon,
-          run: () => navigate(`/sphere/${area.id}?s=${section.key}`),
-        })),
-      ),
-    ],
-    [areas, navigate],
-  );
-
-  const matchedActions = useMemo(() => {
-    return actions
-      .map((a) => ({ a, score: fuzzyScore(query, a.label) }))
-      .filter((r): r is { a: Row; score: number } => r.score !== null)
-      .sort((x, y) => x.score - y.score)
-      .slice(0, 6)
-      .map((r) => r.a);
-  }, [actions, query]);
-
-  // "aportar 500 no btg" — o comando em linguagem natural (§3.2). Uma linha só,
-  // no topo, quando a query casa: valor + banco viram os defaults do modal, e o
-  // Enter abre com tudo pré-preenchido. Reconhecido aqui e não no fuzzy porque
-  // é um comando PARAMÉTRICO, não um item de lista — o número faz parte dele.
-  const aporteRow = useMemo<Row | null>(() => {
-    const parsed = parseAporte(query, accounts);
-    if (!parsed) return null;
-    return {
-      id: "aporte:quick",
-      label: parsed.label,
-      hint: "Aporte",
-      icon: PiggyBank,
-      run: () =>
-        useAporte
-          .getState()
-          .openAporte({ amountCents: parsed.amountCents, accountId: parsed.accountId }),
-    };
-  }, [query, accounts]);
-
-  const resultRows = useMemo<Row[]>(
-    () =>
-      hits.map((h) => ({
-        id: `node:${h.nodeId}`,
-        label: h.title,
-        hint: KIND_LABEL[h.kind] ?? h.kind,
-        icon: KIND_ICON[h.kind] ?? FileText,
-        // M1 não tem tela de detalhe do node ainda. Navegar para um lugar que
-        // não existe seria pior que não navegar, então por ora a paleta leva ao
-        // módulo do tipo. A tela de detalhe chega com o M2/M4.
-        run: () => navigate(pathForKind(h.kind)),
-      })),
-    [hits, navigate],
-  );
-
-  const rows = useMemo(
-    () => [...(aporteRow ? [aporteRow] : []), ...matchedActions, ...resultRows],
-    [aporteRow, matchedActions, resultRows],
-  );
+  const { rows, actionCount, resultCount } = useCommandRows(query, open);
 
   useEffect(() => {
     if (open) {
       setQuery("");
-      setDebounced("");
       setSelected(0);
       inputRef.current?.focus();
     }
@@ -252,7 +48,7 @@ export function CommandPalette({
 
   if (!open) return null;
 
-  const commit = (row: Row | undefined) => {
+  const commit = (row: CommandRow | undefined) => {
     if (!row) return;
     row.run();
     onClose();
@@ -273,8 +69,6 @@ export function CommandPalette({
       onClose();
     }
   };
-
-  const actionCount = matchedActions.length;
 
   return (
     <div
@@ -311,7 +105,7 @@ export function CommandPalette({
           ) : (
             rows.map((row, i) => (
               <div key={row.id}>
-                {i === actionCount && actionCount > 0 && resultRows.length > 0 && (
+                {i === actionCount && actionCount > 0 && resultCount > 0 && (
                   <div className="px-2.5 pt-2 pb-1 text-[10px] font-medium tracking-[0.08em] text-[var(--text-tertiary)] uppercase">
                     Resultados
                   </div>
@@ -365,22 +159,4 @@ export function CommandPalette({
       </div>
     </div>
   );
-}
-
-function pathForKind(kind: Kind): string {
-  switch (kind) {
-    case "inbox_item":
-      return "/inbox";
-    case "task":
-    case "project":
-    case "goal":
-      return "/goals";
-    case "habit":
-    case "routine":
-      return "/habits";
-    case "event":
-      return "/calendar";
-    default:
-      return "/notes";
-  }
 }

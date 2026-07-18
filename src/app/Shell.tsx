@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Outlet } from "react-router-dom";
 
-import { NavDrawer } from "./NavDrawer";
+import { TheNexo } from "./TheNexo";
 import { Topbar } from "./Topbar";
 import { useKeyboard } from "./useKeyboard";
 import { useBootTasks } from "./useBootTasks";
@@ -55,7 +55,7 @@ export function Shell() {
         </main>
       </div>
 
-      <NavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
+      <TheNexo open={navOpen} onClose={() => setNavOpen(false)} />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <QuickCapture open={captureOpen} onClose={() => setCaptureOpen(false)} />
       <AporteHost />

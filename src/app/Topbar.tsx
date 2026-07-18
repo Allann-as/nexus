@@ -42,8 +42,8 @@ export function Topbar({
     >
       <button
         onClick={onOpenNav}
-        title="Menu"
-        aria-label="Abrir menu de navegação"
+        title="O Nexo"
+        aria-label="Abrir O Nexo"
         className="-ml-1 flex size-8 items-center justify-center rounded-[var(--radius-md)] text-[var(--text-secondary)] transition-colors duration-[var(--dur-fast)] hover:bg-[var(--bg-raised)] hover:text-[var(--text-primary)]"
       >
         <Menu size={18} strokeWidth={2} />
