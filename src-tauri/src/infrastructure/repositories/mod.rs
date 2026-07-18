@@ -2,6 +2,7 @@
 
 pub mod area_repo;
 pub mod book_repo;
+pub mod challenge_repo;
 pub mod contribution_repo;
 pub mod event_repo;
 pub mod fin_goal_repo;

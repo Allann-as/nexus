@@ -7,6 +7,7 @@
 pub mod areas;
 pub mod books;
 pub mod career;
+pub mod challenges;
 pub mod events;
 pub mod fin_goals;
 pub mod finance;

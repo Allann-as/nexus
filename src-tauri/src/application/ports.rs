@@ -5,8 +5,8 @@
 //! estes traits de novo, sem tocar em uma linha de regra de negócio.
 
 use crate::domain::entities::{
-    Area, AssetClass, BookStatus, Direction, Kind, MilestoneKind, Node, ProgressSource, Status,
-    Template,
+    Area, AssetClass, BookStatus, ChallengeMetric, Direction, Kind, MilestoneKind, Node,
+    ProgressSource, Status, Template,
 };
 use crate::domain::errors::Result;
 use crate::domain::ledger::{LedgerEntry, NewLedgerEvent};
@@ -1164,6 +1164,85 @@ pub trait InsightRepository: Send + Sync {
     /// cálculo, recomputar seria trabalho jogado fora — o motor pula. É o
     /// `input_hash` do DATA_MODEL §5.
     fn input_signature(&self) -> Result<String>;
+}
+
+/* ===== Temporadas / Desafios (M4.5) ===== */
+
+/// Uma temporada a criar. `habit_id` só importa para `metric = HabitDays`.
+#[derive(Debug, Clone)]
+pub struct NewChallenge {
+    pub title: String,
+    pub area_id: Option<String>,
+    pub starts_on: String,
+    pub ends_on: String,
+    pub metric: ChallengeMetric,
+    pub habit_id: Option<String>,
+    pub target_count: i64,
+}
+
+/// Uma temporada lida, com o placar já computado.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Challenge {
+    pub id: String,
+    pub title: String,
+    pub area_id: Option<String>,
+    /// O `nodes.status`: active/done/dropped/archived. "Vencida" é DERIVADO na
+    /// camada de cima (ADR-0036), não uma coluna.
+    pub status: String,
+    pub starts_on: String,
+    pub ends_on: String,
+    pub metric: String,
+    pub habit_id: Option<String>,
+    pub habit_title: Option<String>,
+    pub target_count: i64,
+    pub manual_count: i64,
+    /// O placar: para `habit_days`, ticks 'done' na janela; para `manual`, o contador.
+    pub progress_count: i64,
+    pub created_at: i64,
+}
+
+pub trait ChallengeRepository: Send + Sync {
+    /// Cria o node 'challenge' + o satélite + o evento `challenge_started`, atômico.
+    fn create_with_event(
+        &self,
+        id: &str,
+        node: &NewNode,
+        new: &NewChallenge,
+        event: &NewLedgerEvent,
+    ) -> Result<Challenge>;
+
+    fn get(&self, id: &str) -> Result<Challenge>;
+
+    /// As temporadas de uma Esfera (ou todas). `include_finished=false` esconde
+    /// as arquivadas.
+    fn list(&self, area_id: Option<&str>) -> Result<Vec<Challenge>>;
+
+    /// Soma `delta` ao contador manual (nunca abaixo de zero), grava o evento.
+    fn bump_manual(
+        &self,
+        id: &str,
+        delta: i64,
+        updated_at: i64,
+        event: &NewLedgerEvent,
+    ) -> Result<Challenge>;
+
+    /// Marca a temporada 'done' e grava `challenge_completed`, atômico. No-op se
+    /// já estiver 'done' (idempotente — o sync pode chamar duas vezes).
+    fn complete(&self, id: &str, updated_at: i64, event: &NewLedgerEvent) -> Result<()>;
+
+    /// Muda o status (ex.: abandonar → 'dropped') e grava o evento.
+    fn set_status(
+        &self,
+        id: &str,
+        status: &str,
+        updated_at: i64,
+        event: &NewLedgerEvent,
+    ) -> Result<Challenge>;
+
+    /// As temporadas ATIVAS cujo placar já bateu o alvo — candidatas a fechar.
+    /// Lidas de uma vez para o `sync` não fazer N+1.
+    fn active_reached(&self) -> Result<Vec<Challenge>>;
 }
 
 /* ===== Gamificação (M4.5) ===== */

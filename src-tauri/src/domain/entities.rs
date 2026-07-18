@@ -278,6 +278,40 @@ impl BookStatus {
     }
 }
 
+/// Como o placar de uma temporada conta (M4.5).
+///
+/// Espelha o CHECK de `challenge_details.metric` (0012). Fechado porque decide de
+/// onde o progresso vem: dos ticks de um hábito, ou de um contador manual.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChallengeMetric {
+    /// Conta os ticks 'done' de um hábito ligado dentro da janela.
+    HabitDays,
+    /// Um contador que o usuário incrementa à mão.
+    Manual,
+}
+
+impl ChallengeMetric {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ChallengeMetric::HabitDays => "habit_days",
+            ChallengeMetric::Manual => "manual",
+        }
+    }
+
+    pub fn parse(s: &str) -> Result<Self> {
+        Ok(match s {
+            "habit_days" => ChallengeMetric::HabitDays,
+            "manual" => ChallengeMetric::Manual,
+            other => {
+                return Err(NexusError::Validation(format!(
+                    "métrica de temporada desconhecida: {other}"
+                )))
+            }
+        })
+    }
+}
+
 /// O tipo de um marco de carreira (§2.3).
 ///
 /// Não espelha um CHECK de banco: o marco é um fato do ledger (append-only, sem
