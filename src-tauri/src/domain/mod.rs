@@ -6,6 +6,7 @@
 //! convertê-lo na fronteira (ADR-0003).
 
 pub mod achievements;
+pub mod backup;
 pub mod burnout;
 pub mod correlation;
 pub mod entities;

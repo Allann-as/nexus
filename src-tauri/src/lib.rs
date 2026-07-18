@@ -191,6 +191,8 @@ pub fn run() {
             commands::annual_goals::delete_annual_goal,
             commands::score::freeze_daily_scores,
             commands::score::score_history,
+            commands::backup::create_backup,
+            commands::backup::list_backups,
         ])
         .build(tauri::generate_context!())
         .expect("não foi possível construir a janela do NEXUS")

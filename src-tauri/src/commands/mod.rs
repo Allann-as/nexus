@@ -6,6 +6,7 @@
 
 pub mod annual_goals;
 pub mod areas;
+pub mod backup;
 pub mod books;
 pub mod career;
 pub mod challenges;

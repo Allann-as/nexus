@@ -31,6 +31,7 @@ use crate::application::use_cases::{
     timeline::TimelineService,
 };
 use crate::domain::errors::Result;
+use crate::infrastructure::backup::BackupEngine;
 use crate::infrastructure::clock::{SystemClock, Uuid7Gen};
 use crate::infrastructure::db::Db;
 use crate::infrastructure::fts::SqliteSearchRepository;
@@ -76,6 +77,8 @@ pub struct AppState {
     pub score_history: ScoreHistoryService,
     pub ledger: Arc<dyn LedgerRepository>,
     pub search: Arc<dyn SearchRepository>,
+    /// O motor de backup (M5): snapshot consistente, poda por retenção e restauro.
+    pub backups: BackupEngine,
 }
 
 impl AppState {
@@ -243,6 +246,10 @@ impl AppState {
             clock: clock.clone(),
         };
 
+        // O motor de backup (M5): adjacente ao storage, usa o domínio para a
+        // política de retenção. `paths.clone()` porque `paths` é movido logo abaixo.
+        let backups = BackupEngine::new(db.clone(), paths.clone(), clock.clone());
+
         Ok(Self {
             areas: AreaService {
                 repo: area_repo.clone(),
@@ -277,6 +284,7 @@ impl AppState {
             score_history,
             ledger,
             search,
+            backups,
             db,
             paths,
         })

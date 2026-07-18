@@ -39,8 +39,16 @@ directories = "6"
 # Puro Rust, sem rede — o SHA-256 é calculado localmente sobre os bytes.
 sha2 = "0.10"
 
+# Backup (M5): empacota o snapshot do banco num zip, com AES-256 opcional. Puro
+# Rust (deflate + aes/hmac/pbkdf2), sem rede — o mesmo princípio de longevidade
+# do resto. `default-features = false` evita puxar bzip2/zstd/time que não usamos.
+zip = { version = "2", default-features = false, features = ["deflate", "aes-crypto"] }
+
 [dev-dependencies]
 tempfile = "3"
+# O teste de ciclo de backup constrói um zip "corrompido" à mão para provar que o
+# quick_check o recusa. Mesma versão da dependência normal — sem custo extra.
+zip = { version = "2", default-features = false, features = ["deflate", "aes-crypto"] }
 
 [profile.release]
 codegen-units = 1
