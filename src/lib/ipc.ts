@@ -1222,3 +1222,229 @@ export const attachToNote = (noteId: string, filename: string, bytes: Uint8Array
     filename,
     bytes: Array.from(bytes),
   });
+
+/* ===== M4.5 — bi_engine (insights) ===== */
+
+export interface HabitRef {
+  id: string;
+  title: string;
+}
+
+export interface CorrelationCard {
+  habitA: HabitRef;
+  habitB: HabitRef;
+  direction: "helps" | "hurts";
+  lift: number;
+  phi: number;
+  sampleSize: number;
+  sentence: string;
+  formula: string;
+}
+
+export interface Workload {
+  current: number;
+  baseline: number;
+  ratio: number;
+  alert: boolean;
+  baselineWeeks: number;
+  formula: string;
+}
+
+export interface Insights {
+  correlations: CorrelationCard[];
+  burnout: Workload | null;
+  computedAt: number;
+}
+
+/** Lê o pacote de insights do cache (instantâneo). `null` no primeiro boot. */
+export const getInsights = () => call<Insights | null>("get_insights");
+
+/** Recomputa se as fontes mudaram e devolve o pacote fresco. */
+export const recomputeInsights = () => call<Insights>("recompute_insights");
+
+/* ===== M4.5 — gamificação ===== */
+
+export interface Level {
+  level: number;
+  xp: number;
+  floor: number;
+  nextAt: number;
+  intoLevel: number;
+  span: number;
+}
+
+export type AchievementTier = "bronze" | "silver" | "gold" | "platinum";
+
+export interface SphereXp {
+  areaId: string;
+  level: Level;
+}
+
+export interface GalleryEntry {
+  key: string;
+  title: string;
+  description: string;
+  icon: string;
+  tier: AchievementTier;
+  unlocked: boolean;
+  unlockedAt: number | null;
+}
+
+export interface GamificationOverview {
+  spheres: SphereXp[];
+  overall: Level;
+  achievements: GalleryEntry[];
+}
+
+export interface Unlocked {
+  key: string;
+  title: string;
+  icon: string;
+  tier: AchievementTier;
+}
+
+export const gamificationOverview = () =>
+  call<GamificationOverview>("gamification_overview");
+
+/** Desbloqueia o que os contadores satisfazem; devolve o que caiu agora. */
+export const syncAchievements = () => call<Unlocked[]>("sync_achievements");
+
+/* ===== M4.5 — temporadas / desafios ===== */
+
+export type ChallengeMetric = "habit_days" | "manual";
+export type ChallengeState = "active" | "done" | "dropped" | "expired";
+
+export interface Challenge {
+  id: string;
+  title: string;
+  areaId: string | null;
+  status: string;
+  startsOn: string;
+  endsOn: string;
+  metric: string;
+  habitId: string | null;
+  habitTitle: string | null;
+  targetCount: number;
+  manualCount: number;
+  progressCount: number;
+  createdAt: number;
+  state: ChallengeState;
+  progressRatio: number;
+  daysLeft: number;
+}
+
+export interface CompletedChallenge {
+  id: string;
+  title: string;
+}
+
+export const createChallenge = (c: {
+  title: string;
+  areaId?: string | null;
+  startsOn: string;
+  endsOn: string;
+  metric: ChallengeMetric;
+  habitId?: string | null;
+  targetCount: number;
+}) =>
+  call<Challenge>("create_challenge", {
+    title: c.title,
+    areaId: c.areaId ?? null,
+    startsOn: c.startsOn,
+    endsOn: c.endsOn,
+    metric: c.metric,
+    habitId: c.habitId ?? null,
+    targetCount: c.targetCount,
+  });
+
+export const listChallenges = (areaId?: string | null) =>
+  call<Challenge[]>("list_challenges", { areaId: areaId ?? null });
+
+export const incrementChallenge = (id: string, delta: number) =>
+  call<Challenge>("increment_challenge", { id, delta });
+
+export const abandonChallenge = (id: string) =>
+  call<Challenge>("abandon_challenge", { id });
+
+export const syncChallenges = () =>
+  call<CompletedChallenge[]>("sync_challenges");
+
+/* ===== M4.5 — metas anuais ===== */
+
+export type AnnualGoalKind = "binary" | "quantitative";
+
+export interface AnnualGoal {
+  id: string;
+  title: string;
+  areaId: string | null;
+  status: string;
+  year: number;
+  goalKind: string;
+  metricName: string | null;
+  targetValue: number | null;
+  currentValue: number;
+  unit: string | null;
+  createdAt: number;
+  progressRatio: number;
+}
+
+export interface YearOverview {
+  year: number;
+  goals: AnnualGoal[];
+  yearElapsedRatio: number;
+  aggregateProgress: number;
+  activeCount: number;
+  doneCount: number;
+}
+
+export const createAnnualGoal = (g: {
+  title: string;
+  areaId?: string | null;
+  year: number;
+  goalKind: AnnualGoalKind;
+  metricName?: string | null;
+  targetValue?: number | null;
+  unit?: string | null;
+}) =>
+  call<AnnualGoal>("create_annual_goal", {
+    title: g.title,
+    areaId: g.areaId ?? null,
+    year: g.year,
+    goalKind: g.goalKind,
+    metricName: g.metricName ?? null,
+    targetValue: g.targetValue ?? null,
+    unit: g.unit ?? null,
+  });
+
+export const annualGoalYear = (year: number) =>
+  call<YearOverview>("annual_goal_year", { year });
+
+export const annualGoalYears = () => call<number[]>("annual_goal_years");
+
+export const updateAnnualGoalProgress = (id: string, currentValue: number) =>
+  call<AnnualGoal>("update_annual_goal_progress", { id, currentValue });
+
+export const completeAnnualGoal = (id: string) =>
+  call<AnnualGoal>("complete_annual_goal", { id });
+
+export const abandonAnnualGoal = (id: string) =>
+  call<AnnualGoal>("abandon_annual_goal", { id });
+
+export const archiveAnnualGoal = (id: string) =>
+  call<AnnualGoal>("archive_annual_goal", { id });
+
+export const deleteAnnualGoal = (id: string) =>
+  call<void>("delete_annual_goal", { id });
+
+/* ===== M4.5 — Nexus Score congelado ===== */
+
+export interface ScorePoint {
+  day: string;
+  value: number;
+}
+
+/** Congela os dias fechados ainda sem linha. Chamar na abertura do app. */
+export const freezeDailyScores = () => call<number>("freeze_daily_scores");
+
+export const scoreHistory = (days: number) =>
+  call<ScorePoint[]>("score_history", { days });

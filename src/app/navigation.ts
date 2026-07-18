@@ -17,6 +17,7 @@
  */
 
 import {
+  CalendarRange,
   Calendar,
   FileText,
   FolderKanban,
@@ -26,6 +27,7 @@ import {
   Repeat,
   Sparkles,
   Target,
+  Trophy,
   type LucideIcon,
 } from "lucide-react";
 
@@ -46,6 +48,10 @@ export const NAV_ITEMS: NavItem[] = [
   { path: "/notes", label: "Notas", icon: FileText, jumpKey: "n" },
   { path: "/timeline", label: "Timeline", icon: History, jumpKey: "t" },
   { path: "/insights", label: "Insights", icon: Sparkles, jumpKey: "s" },
+  // Metas Anuais e Conquistas atravessam todas as Esferas (o ano inteiro, o XP de
+  // tudo), então moram na rail como o Insights — não numa Esfera.
+  { path: "/annual-goals", label: "Metas Anuais", icon: CalendarRange, jumpKey: "a" },
+  { path: "/game", label: "Conquistas", icon: Trophy, jumpKey: "q" },
 ];
 
 /**

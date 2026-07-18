@@ -12,7 +12,9 @@ import { HabitsScreen } from "../features/habits/HabitsScreen";
 import { ProjectsScreen } from "../features/projects/ProjectsScreen";
 import { GoalsScreen } from "../features/goals/GoalsScreen";
 import { CalendarScreen } from "../features/calendar/CalendarScreen";
-import { InsightsScreen } from "../features/screens";
+import { InsightsScreen } from "../features/insights/InsightsScreen";
+import { GamificationScreen } from "../features/gamification/GamificationScreen";
+import { AnnualGoalsScreen } from "../features/annual-goals/AnnualGoalsScreen";
 import { NotesScreen } from "../features/notes/NotesScreen";
 import { TimelineScreen } from "../features/timeline/TimelineScreen";
 import { useUi, applyTheme } from "../stores/ui";
@@ -59,6 +61,8 @@ const router = createHashRouter([
       { path: "notes", element: <NotesScreen /> },
       { path: "timeline", element: <TimelineScreen /> },
       { path: "insights", element: <InsightsScreen /> },
+      { path: "game", element: <GamificationScreen /> },
+      { path: "annual-goals", element: <AnnualGoalsScreen /> },
       { path: "settings", element: <SettingsScreen /> },
     ],
   },
