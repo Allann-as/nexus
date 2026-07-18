@@ -448,6 +448,20 @@ numa competência vale **40 XP** (`XP_SKILL_LEVEL_UP`) — entre o sub-desafio (
 livro (60): um feito repetível e significativo, atribuído à Esfera da competência.
 Como todo XP, é DERIVADO (soma dos eventos `skill_level_up`), nunca uma coluna.
 
+## 5.11 Metas de carreira linkáveis (0014)
+
+**`links.link_type` ganha `contributes_to`** (ADR-0046) — uma meta de carreira
+"conta para" uma Meta Anual ou um item de Estudos. Direcional: `source` contribui
+para `target`. O CHECK fechado do `link_type` exigiu recriar a tabela `links`, mas
+sem as três armadilhas de `nodes` (sem gatilhos de FTS, sem rowid, nada a
+referencia) — copiar, dropar, renomear, reindexar `idx_links_target`.
+
+O acesso é genérico (`LinkRepository`): criar (INSERT OR IGNORE, idempotente),
+remover e ler resolvido nos dois sentidos. O backlink aparece dos dois lados lendo
+a mesma linha — `outgoing` de um é `incoming` do outro. O comando de usuário só
+admite `related` e `contributes_to`; `references`/`attached_to` continuam exclusivos
+das notas/anexos (`NoteService`).
+
 ## 6. Integridade e migrations
 
 - `user_version` gerenciado pelo `rusqlite_migration`.

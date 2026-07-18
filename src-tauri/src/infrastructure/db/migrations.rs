@@ -31,6 +31,9 @@ fn migrations() -> Migrations<'static> {
         )),
         M::up(include_str!("../../../migrations/0012_life.sql")),
         M::up(include_str!("../../../migrations/0013_career_studies.sql")),
+        M::up(include_str!(
+            "../../../migrations/0014_contributes_to_link.sql"
+        )),
     ])
 }
 
@@ -241,6 +244,60 @@ mod tests {
         let first = user_version(&conn).unwrap();
         run(&mut conn).unwrap();
         assert_eq!(first, user_version(&conn).unwrap());
+    }
+
+    #[test]
+    fn contributes_to_joins_the_links_vocabulary_and_junk_is_rejected() {
+        // A 0014 recria `links` para o 'contributes_to' (ADR-0046). O tipo novo
+        // entra, e o CHECK continua recusando lixo.
+        let mut conn = Connection::open_in_memory().unwrap();
+        run(&mut conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                  VALUES ('g1', 'goal', 'Meta de carreira', 0, 0),
+                         ('ag1', 'annual_goal', 'Meta 2026', 0, 0);",
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO links (source_id, target_id, link_type, created_at)
+                  VALUES ('g1', 'ag1', 'contributes_to', 0)",
+            [],
+        )
+        .expect("'contributes_to' entrou no vocabulário de links");
+
+        let junk = conn.execute(
+            "INSERT INTO links (source_id, target_id, link_type, created_at)
+                  VALUES ('g1', 'ag1', 'telepatia', 0)",
+            [],
+        );
+        assert!(junk.is_err(), "um link_type fora do vocabulário é recusado");
+    }
+
+    #[test]
+    fn the_old_links_survive_the_recreation() {
+        // Um 'related' criado ANTES da 0014 tem que sobreviver à recriação da tabela.
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = OFF;").unwrap();
+        migrations().to_version(&mut conn, 13).unwrap();
+        conn.execute_batch(
+            "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                  VALUES ('n1', 'note', 'A', 0, 0), ('n2', 'note', 'B', 0, 0);
+             INSERT INTO links (source_id, target_id, link_type, created_at)
+                  VALUES ('n1', 'n2', 'related', 0);",
+        )
+        .unwrap();
+
+        migrations().to_latest(&mut conn).unwrap();
+
+        let survived: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM links WHERE source_id='n1' AND target_id='n2' AND link_type='related'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(survived, 1, "o link antigo sobrevive à recriação da tabela");
     }
 
     /// A recriação de `nodes` (0007) é a operação mais perigosa deste schema:

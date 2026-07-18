@@ -23,6 +23,7 @@ import { ProgressBar } from "../../design-system/charts";
 import { Button, cx } from "../../design-system/primitives";
 import { metricDecimals } from "../../lib/format";
 import type { GoalWithProgress, MilestoneView, ProgressSource } from "../../lib/ipc";
+import { NodeLinkSection } from "../links/NodeLinkSection";
 
 export function GoalCard({
   goal,
@@ -166,6 +167,10 @@ export function GoalCard({
           </span>
           <CheckpointButton unit={goal.unit} onSubmit={onCheckpoint} />
         </footer>
+
+        {/* Os vínculos: esta meta "conta para" uma Meta Anual ou um item de
+            Estudos (ADR-0046). O backlink aparece do outro lado. */}
+        <NodeLinkSection nodeId={goal.id} canAdd />
       </div>
     </article>
   );

@@ -1389,6 +1389,41 @@ pub trait SkillRepository: Send + Sync {
     fn evolving_since(&self, area_id: &str, since_day: &str) -> Result<Vec<Skill>>;
 }
 
+/* ===== Links entre nodes (M4.6) ===== */
+
+/// Uma ponta de um link, já resolvida para exibir: o node do OUTRO lado + o tipo.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkEnd {
+    pub node_id: String,
+    pub kind: Kind,
+    pub title: String,
+    pub area_id: Option<String>,
+    /// 'related' | 'blocks' | 'references' | 'attached_to' | 'contributes_to'.
+    pub link_type: String,
+}
+
+/// Os links de um node, nos dois sentidos — o backlink aparece dos dois lados.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeLinks {
+    /// Links onde este node é o SOURCE (ele aponta para o outro).
+    pub outgoing: Vec<LinkEnd>,
+    /// Links onde este node é o TARGET (o outro aponta para ele) — os backlinks.
+    pub incoming: Vec<LinkEnd>,
+}
+
+pub trait LinkRepository: Send + Sync {
+    /// Cria um link (idempotente — INSERT OR IGNORE na PK composta).
+    fn create(&self, source: &str, target: &str, link_type: &str, created_at: i64) -> Result<()>;
+
+    /// Remove um link (no-op se não existe).
+    fn remove(&self, source: &str, target: &str, link_type: &str) -> Result<()>;
+
+    /// Os links de um node, resolvidos (título/kind do outro lado), nos dois sentidos.
+    fn links_of(&self, node_id: &str) -> Result<NodeLinks>;
+}
+
 /* ===== Gamificação (M4.5) ===== */
 
 /// Os pontos por feito, injetados do domínio (`domain::xp`) para o SQL não

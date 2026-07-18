@@ -16,6 +16,7 @@ pub mod gamification;
 pub mod goals;
 pub mod habits;
 pub mod insights;
+pub mod links;
 pub mod nodes;
 pub mod notes;
 pub mod score;

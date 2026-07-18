@@ -1174,6 +1174,38 @@ export const skillTrack = (id: string) => call<SkillPoint[]>("skill_track", { id
 export const skillsEvolving = (areaId: string) =>
   call<Skill[]>("skills_evolving", { areaId });
 
+/* ===== Links entre nodes (M4.6) ===== */
+
+export type LinkType =
+  | "related"
+  | "blocks"
+  | "references"
+  | "attached_to"
+  | "contributes_to";
+
+/** Uma ponta de link resolvida — o node do OUTRO lado + o tipo. */
+export interface LinkEnd {
+  nodeId: string;
+  kind: Kind;
+  title: string;
+  areaId: string | null;
+  linkType: LinkType;
+}
+
+/** Os links de um node nos dois sentidos — o backlink aparece dos dois lados. */
+export interface NodeLinks {
+  outgoing: LinkEnd[];
+  incoming: LinkEnd[];
+}
+
+export const linkNodes = (sourceId: string, targetId: string, linkType: LinkType) =>
+  call<NodeLinks>("link_nodes", { sourceId, targetId, linkType });
+
+export const unlinkNodes = (sourceId: string, targetId: string, linkType: LinkType) =>
+  call<NodeLinks>("unlink_nodes", { sourceId, targetId, linkType });
+
+export const nodeLinks = (nodeId: string) => call<NodeLinks>("node_links", { nodeId });
+
 /* ===== Timeline: a Máquina do Tempo ===== */
 
 /** Um mês congelado da visão ANO — mirrors `ports::MonthRollup`. */

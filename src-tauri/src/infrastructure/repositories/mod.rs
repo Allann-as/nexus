@@ -12,6 +12,7 @@ pub mod goal_repo;
 pub mod habit_repo;
 pub mod insight_repo;
 pub mod ledger_repo;
+pub mod link_repo;
 pub mod node_repo;
 pub mod note_repo;
 pub mod skill_repo;

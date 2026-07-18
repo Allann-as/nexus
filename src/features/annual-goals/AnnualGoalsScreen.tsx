@@ -26,6 +26,7 @@ import {
 import { Button, Card, EmptyState, PageHeader, cx } from "../../design-system/primitives";
 import { ProgressBar } from "../../design-system/charts";
 import { useToasts } from "../../stores/toasts";
+import { NodeLinkSection } from "../links/NodeLinkSection";
 import { NewAnnualGoalModal } from "./NewAnnualGoalModal";
 
 const pct = (r: number) => Math.round(r * 100);
@@ -239,6 +240,10 @@ function GoalCard({
           Excluir
         </MiniLink>
       </div>
+
+      {/* O backlink: as metas de carreira que contam para esta meta anual
+          (ADR-0046). Só leitura — o vínculo se cria do lado da meta de carreira. */}
+      <NodeLinkSection nodeId={goal.id} />
     </Card>
   );
 }

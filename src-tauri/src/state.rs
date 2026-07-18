@@ -21,6 +21,7 @@ use crate::application::use_cases::{
     goals::GoalService,
     habits::HabitService,
     insights::{InsightService, InsightWorker},
+    links::LinkService,
     nodes::NodeService,
     notes::NoteService,
     score_history::ScoreHistoryService,
@@ -40,9 +41,10 @@ use crate::infrastructure::repositories::{
     fin_goal_repo::SqliteFinGoalRepository, gamification_repo::SqliteGamificationRepository,
     goal_repo::SqliteGoalRepository, habit_repo::SqliteHabitRepository,
     insight_repo::SqliteInsightRepository, ledger_repo::SqliteLedgerRepository,
-    node_repo::SqliteNodeRepository, note_repo::SqliteNoteRepository,
-    skill_repo::SqliteSkillRepository, sphere_repo::SqliteSphereRepository,
-    task_repo::SqliteTaskRepository, timeline_repo::SqliteTimelineRepository,
+    link_repo::SqliteLinkRepository, node_repo::SqliteNodeRepository,
+    note_repo::SqliteNoteRepository, skill_repo::SqliteSkillRepository,
+    sphere_repo::SqliteSphereRepository, task_repo::SqliteTaskRepository,
+    timeline_repo::SqliteTimelineRepository,
 };
 
 pub struct AppState {
@@ -60,6 +62,7 @@ pub struct AppState {
     pub career: CareerService,
     pub timeline: TimelineService,
     pub notes: NoteService,
+    pub links: LinkService,
     pub dashboard: DashboardService,
     pub spheres: SphereService,
     pub insights: Arc<InsightService>,
@@ -166,6 +169,12 @@ impl AppState {
             paths: paths.clone(),
         };
 
+        let links = LinkService {
+            links: Arc::new(SqliteLinkRepository::new(db.clone())),
+            nodes: node_repo.clone(),
+            clock: clock.clone(),
+        };
+
         let dashboard = DashboardService {
             habits: habits.clone(),
             tasks: tasks.clone(),
@@ -243,6 +252,7 @@ impl AppState {
             career,
             timeline,
             notes,
+            links,
             dashboard,
             spheres,
             insights,

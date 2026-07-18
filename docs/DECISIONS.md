@@ -1371,3 +1371,41 @@ migration `0013`) para ambos:
 **Consequência.** Quatro recriações no total (0007, 0011, 0012, 0013), cada uma
 paga por mais de um kind quando possível. O item 6 constrói sobre `skill` agora; o
 item 7 constrói sobre `subject`/`study_sessions` sem tocar em migration de recriação.
+
+## ADR-0046 — Metas de carreira linkáveis: um `link_type` direcional 'contributes_to'
+
+**Data:** 2026-07-18 · **Status:** aceito · **M4.6** · §2.6 (item 6c) do redesign
+
+**Contexto.** Uma meta de carreira precisa "contar para" uma Meta Anual (e, por
+tabela, um item de Estudos): o arquiteto pediu o vínculo com backlink visível dos
+DOIS lados ("na meta de carreira: conta para 2026: Y; na meta anual: ligada a meta
+de carreira X"). A tabela `links` (§2 do DATA_MODEL) já é a relação N:N universal,
+mas seu `link_type` era um CHECK fechado (`related/blocks/references/attached_to`).
+
+**Decisão.**
+
+1. **Um `link_type` novo: `contributes_to`** (`migration 0014`, recriando `links`).
+   Direcional — `source` (a meta de carreira) contribui para `target` (a meta anual
+   ou o item de Estudos). A recriação de `links` é barata: sem gatilhos de FTS, sem
+   dependência de rowid, e nada a referencia (é a ponta filha das FKs para `nodes`),
+   então não há as três armadilhas do 12-step de `nodes`.
+
+2. **Um só tipo, não vários.** Escolha do arquiteto entre `contributes_to`,
+   `contributes_to`+`studies_for`, ou reusar `related`. A DIREÇÃO (source/target) +
+   os KINDS das duas pontas já geram os rótulos dos dois lados — não é preciso um
+   tipo por relação. Um livro/matéria como alvo reusa o mesmo `contributes_to`.
+
+3. **O linking é genérico** (`LinkRepository`/`LinkService`/`NodeLinkSection`),
+   separado dos wiki-links das notas (que têm caminho próprio no `NoteService`). O
+   comando de usuário só admite `related` e `contributes_to` (os outros são de
+   nota/anexo). O alvo se acha pela busca FTS filtrada a `annual_goal`/`book`/
+   `subject` — então quando o `subject` do item 7 ganhar UI, já é linkável de graça.
+
+4. **O backlink aparece dos dois lados** lendo a MESMA linha: na meta de carreira,
+   o `outgoing` ("conta para {X}"); na meta anual, o `incoming` ("meta de carreira:
+   {Y}"). O lado da meta anual é leitura — o vínculo se cria e se desfaz do lado da
+   meta de carreira.
+
+**Consequência.** As esferas deixam de ser ilhas: uma meta de carreira agora se
+amarra ao ano e aos estudos, com a relação visível e reversível dos dois lados. O
+mecanismo é genérico — qualquer par de nodes é linkável no futuro sem schema novo.
