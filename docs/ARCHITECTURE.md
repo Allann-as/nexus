@@ -57,7 +57,8 @@ Um escritor, muitos leitores — exatamente o que o WAL existe para servir:
   `SQLITE_BUSY` surpresa.
 - **`Db::read`** — pool r2d2 (4 conexões) abertas `READ_ONLY` + `query_only=ON`.
   Sob WAL, leem concorrentemente a uma escrita em andamento, sem bloquear a UI.
-  O `bi_engine` (M4) vai beber daqui.
+  O `bi_engine` (M4.5) bebe daqui: o `InsightWorker` roda numa thread própria,
+  lê por `with_read` e grava só o `insight_cache` (ADR-0040).
 
 Há **um único ponto** que abre conexão e aplica PRAGMAs:
 `infrastructure/db/mod.rs::configure`.

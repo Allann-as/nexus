@@ -15,7 +15,12 @@
 //!     hábitos tem um lift ligeiramente ≠ 1 por acaso, e mostrá-los afogaria os
 //!     poucos que importam.
 
+use std::collections::HashSet;
+
+use chrono::NaiveDate;
 use serde::Serialize;
+
+use crate::domain::schedule::Schedule;
 
 /// O tamanho mínimo de amostra para uma correlação ser exibível.
 pub const MIN_SAMPLE: u32 = 30;
@@ -116,6 +121,43 @@ pub fn analyze(t: Contingency) -> Option<Correlation> {
             lift
         ),
     })
+}
+
+/// Constrói a tabela 2×2 de A × B sobre uma janela de dias.
+///
+/// **Só entram dias em que AMBOS estavam agendados** — a regra do DATA_MODEL §5.
+/// Um dia em que B nem era para acontecer não diz nada sobre "A ajuda B?"; contá-lo
+/// mediria a agenda, não o hábito. `done_a`/`done_b` são os dias com tick 'done'
+/// (o chamador os traz do repositório); a ausência num dia agendado é "não fez".
+///
+/// Puro e testável: recebe agendas, conjuntos de dias-feitos e a janela — nada de
+/// banco. É aqui que a intersecção "ambos agendados" acontece, então o
+/// `is_scheduled_on` de cada agenda é a única verdade sobre o que era esperado.
+pub fn build_contingency(
+    schedule_a: &Schedule,
+    done_a: &HashSet<NaiveDate>,
+    schedule_b: &Schedule,
+    done_b: &HashSet<NaiveDate>,
+    from: NaiveDate,
+    to: NaiveDate,
+) -> Contingency {
+    let mut t = Contingency::default();
+    let mut day = from;
+    while day <= to {
+        if schedule_a.is_scheduled_on(day) && schedule_b.is_scheduled_on(day) {
+            match (done_a.contains(&day), done_b.contains(&day)) {
+                (true, true) => t.a += 1,
+                (true, false) => t.b += 1,
+                (false, true) => t.c += 1,
+                (false, false) => t.d += 1,
+            }
+        }
+        match day.succ_opt() {
+            Some(next) => day = next,
+            None => break, // fim do calendário representável — inalcançável na vida real.
+        }
+    }
+    t
 }
 
 /// φ = (ad − bc) / √((a+b)(c+d)(a+c)(b+d)). O denominador zero (uma margem
@@ -219,6 +261,33 @@ mod tests {
             d: 0,
         };
         assert!(analyze(t).is_none());
+    }
+
+    #[test]
+    fn the_contingency_only_counts_days_both_were_scheduled() {
+        use chrono::NaiveDate;
+        // A é diário; B só nas segundas (weekday 1). Só as segundas contam.
+        let a = Schedule::Daily;
+        let b = Schedule::Weekdays { days: vec![1] };
+        let d = |s: &str| NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap();
+
+        // Janela: 2026-01-05 (segunda) a 2026-01-19 (segunda) — 3 segundas.
+        let mut done_a = HashSet::new();
+        let mut done_b = HashSet::new();
+        done_a.insert(d("2026-01-05")); // seg: A feito
+        done_b.insert(d("2026-01-05")); // seg: B feito  -> a
+        done_a.insert(d("2026-01-12")); // seg: A feito, B não -> b
+        done_b.insert(d("2026-01-19")); // seg: B feito, A não -> c
+                                        // Um monte de dias no meio (terças etc.) com A feito não deve contar.
+        done_a.insert(d("2026-01-06"));
+        done_a.insert(d("2026-01-07"));
+
+        let t = build_contingency(&a, &done_a, &b, &done_b, d("2026-01-05"), d("2026-01-19"));
+        assert_eq!(t.a, 1, "05: ambos feitos");
+        assert_eq!(t.b, 1, "12: A sim, B não");
+        assert_eq!(t.c, 1, "19: A não, B sim");
+        assert_eq!(t.d, 0);
+        assert_eq!(t.total(), 3, "só as três segundas entram");
     }
 
     #[test]

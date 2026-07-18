@@ -8,10 +8,21 @@ use std::sync::Arc;
 
 use crate::application::ports::{LedgerRepository, SearchRepository};
 use crate::application::use_cases::{
-    areas::AreaService, books::BookService, career::CareerService, dashboard::DashboardService,
-    events::EventService, fin_goals::FinGoalService, finance::FinanceService, goals::GoalService,
-    habits::HabitService, nodes::NodeService, notes::NoteService, spheres::SphereService,
-    tasks::TaskService, timeline::TimelineService,
+    areas::AreaService,
+    books::BookService,
+    career::CareerService,
+    dashboard::DashboardService,
+    events::EventService,
+    fin_goals::FinGoalService,
+    finance::FinanceService,
+    goals::GoalService,
+    habits::HabitService,
+    insights::{InsightService, InsightWorker},
+    nodes::NodeService,
+    notes::NoteService,
+    spheres::SphereService,
+    tasks::TaskService,
+    timeline::TimelineService,
 };
 use crate::domain::errors::Result;
 use crate::infrastructure::clock::{SystemClock, Uuid7Gen};
@@ -22,10 +33,10 @@ use crate::infrastructure::repositories::{
     area_repo::SqliteAreaRepository, book_repo::SqliteBookRepository,
     contribution_repo::SqliteContributionRepository, event_repo::SqliteEventRepository,
     fin_goal_repo::SqliteFinGoalRepository, goal_repo::SqliteGoalRepository,
-    habit_repo::SqliteHabitRepository, ledger_repo::SqliteLedgerRepository,
-    node_repo::SqliteNodeRepository, note_repo::SqliteNoteRepository,
-    sphere_repo::SqliteSphereRepository, task_repo::SqliteTaskRepository,
-    timeline_repo::SqliteTimelineRepository,
+    habit_repo::SqliteHabitRepository, insight_repo::SqliteInsightRepository,
+    ledger_repo::SqliteLedgerRepository, node_repo::SqliteNodeRepository,
+    note_repo::SqliteNoteRepository, sphere_repo::SqliteSphereRepository,
+    task_repo::SqliteTaskRepository, timeline_repo::SqliteTimelineRepository,
 };
 
 pub struct AppState {
@@ -45,6 +56,8 @@ pub struct AppState {
     pub notes: NoteService,
     pub dashboard: DashboardService,
     pub spheres: SphereService,
+    pub insights: Arc<InsightService>,
+    pub insights_worker: InsightWorker,
     pub ledger: Arc<dyn LedgerRepository>,
     pub search: Arc<dyn SearchRepository>,
 }
@@ -155,6 +168,14 @@ impl AppState {
             clock: clock.clone(),
         };
 
+        // O bi_engine: um serviço de leitura + um worker que aquece o cache no
+        // boot e recomputa debounced. Ver ADR-0040.
+        let insights = Arc::new(InsightService {
+            insights: Arc::new(SqliteInsightRepository::new(db.clone())),
+            clock: clock.clone(),
+        });
+        let insights_worker = InsightWorker::spawn(insights.clone());
+
         Ok(Self {
             areas: AreaService {
                 repo: area_repo.clone(),
@@ -179,6 +200,8 @@ impl AppState {
             notes,
             dashboard,
             spheres,
+            insights,
+            insights_worker,
             ledger,
             search,
             db,

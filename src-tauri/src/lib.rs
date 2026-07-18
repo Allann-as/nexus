@@ -151,6 +151,8 @@ pub fn run() {
             commands::goals::set_milestone_done,
             commands::goals::set_goal_progress_source,
             commands::goals::move_milestone,
+            commands::insights::get_insights,
+            commands::insights::recompute_insights,
         ])
         .build(tauri::generate_context!())
         .expect("não foi possível construir a janela do NEXUS")

@@ -1115,3 +1115,50 @@ versão nasceu.
 já tem linha é no-op. O congelamento roda no fechamento do dia (na abertura do app,
 para o dia anterior ainda não gravado) — o mesmo padrão "a navegação paga a escrita"
 do ADR-0026/0034, e pela mesma razão (o pool de leitura é `query_only`).
+
+---
+
+## ADR-0040 — O bi_engine: worker com debounce, cache lido pelo front, dois comandos
+
+**Data:** 2026-07-17 · **Status:** aceito · **M4.5** · realiza a §5 do prompt mestre
+
+**Contexto.** A §5 pede um motor de BI "fora da thread de UI": conexões read-only,
+resultados no `insight_cache` com `input_hash`, recomputação na abertura do app e
+marcação debounced de 30 s. Faltava decidir a forma concreta no NEXUS.
+
+**Decisão.**
+
+- **`InsightService` (application)** lê do pool `query_only` (`with_read`) e grava
+  só o cache. Três métodos: `get` (lê o cache, instantâneo), `recompute` (faz a
+  conta e grava) e `refresh_if_stale` (recomputa **só se** a `input_signature` mudou
+  — uma comparação de string barata; a segunda trava, além do worker).
+- **`input_signature`** é uma string com os contadores e marcas d'água das fontes
+  (`COUNT`/`MAX(ts)` de `habit_ticks`, `COUNT` de `event_occurrences`/`nodes`,
+  `MAX(seq)` do `ledger`, `COUNT` de `goal_checkpoints`). É o `input_hash` do
+  DATA_MODEL §5 — gravada crua, sem hash: legível e determinística.
+- **`InsightWorker` (thread + mpsc)** aquece o cache no boot e, depois, recomputa
+  **debounced**: `mark_dirty` sinaliza, e o worker espera 30 s de silêncio (via
+  `recv_timeout`) antes de refazer — uma rajada de marcações custa UMA recomputação.
+- **Dois comandos.** `get_insights` (o front lê o cache, instantâneo) e
+  `recompute_insights` (cutuca o worker **e** faz um `refresh_if_stale` síncrono,
+  devolvendo o pacote fresco). O comando síncrono garante que a tela veja dado
+  atual sem corrida; ele roda na thread-pool de comandos do Tauri, nunca na de UI.
+
+**O que o motor calcula no M4.5.** Correlações entre pares de hábitos (2×2 sobre os
+dias em que ambos estavam agendados, `domain::correlation`) e a guarda anti-burnout
+(`domain::burnout`). Ofensores por dia da semana e heatmaps **já existiam** como
+comandos próprios desde o M3.5 (`habit_weekday_stats`, `habit_heatmap`); tendências
+de meta são a `domain::projection` do M3. O motor é o lar dos insights que cruzam
+entidades (correlação) ou exigem janela móvel (burnout) — não uma segunda casa para
+o que já tem tela.
+
+**Divergência honesta da spec.** A carga da semana da guarda anti-burnout é
+`ticks 'done' + ocorrências de evento`, não "`duration_min` + eventos": hábitos não
+têm duração no schema (só `target_value`/`unit`), então a contagem de cumprimentos é
+o proxy de carga disponível hoje. Fica registrado para não parecer esquecimento; se
+um dia hábitos ganharem duração, a fórmula soma minutos sem mudar a arquitetura.
+
+**Job noturno e fechamento de mês.** O `refresh_if_stale` no boot cobre a
+recomputação diária; um agendador noturno dedicado entra com o M5 (backup/manutenção),
+onde já haverá um lugar para tarefas periódicas. O congelamento de rollups do Score
+é o ADR-0039/0034.

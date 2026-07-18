@@ -1116,3 +1116,52 @@ pub trait BookRepository: Send + Sync {
     /// Grava/atualiza a meta anual (INSERT OR REPLACE).
     fn set_reading_goal(&self, year: &str, target: i64, noted_at: i64) -> Result<()>;
 }
+
+/* ===== BI engine (M4.5) ===== */
+
+/// A série de um hábito ativo, com os dias em que foi cumprido — a matéria-prima
+/// das correlações. `done_days` são os dias com tick 'done' ('YYYY-MM-DD'); o
+/// resto (dias agendados sem 'done') é "não fez", deduzido pela agenda.
+#[derive(Debug, Clone)]
+pub struct HabitSeries {
+    pub id: String,
+    pub title: String,
+    pub area_id: Option<String>,
+    pub schedule: Schedule,
+    pub done_days: Vec<String>,
+}
+
+/// Uma linha do `insight_cache`.
+#[derive(Debug, Clone)]
+pub struct CachedInsight {
+    pub payload_json: String,
+    pub input_hash: String,
+    pub computed_at: i64,
+}
+
+/// As leituras que o `bi_engine` faz — todas do pool `query_only`, nunca da UI.
+///
+/// O cache é o contrato com o frontend: ele SEMPRE lê `cache_get` (instantâneo),
+/// e o motor recomputa em background quando `input_signature` muda (DATA_MODEL §5).
+pub trait InsightRepository: Send + Sync {
+    /// Todos os hábitos ativos com seus dias cumpridos — para as correlações.
+    fn active_habit_series(&self) -> Result<Vec<HabitSeries>>;
+
+    /// Contagem de ticks 'done' por dia local, no intervalo — carga de hábitos.
+    fn done_ticks_by_day(&self, from_day: &str, to_day: &str) -> Result<Vec<(String, i64)>>;
+
+    /// Contagem de ocorrências de evento por dia local, no intervalo — a outra
+    /// metade da carga da semana (converte `starts_at` ms → dia local).
+    fn event_count_by_day(&self, from_day: &str, to_day: &str) -> Result<Vec<(String, i64)>>;
+
+    /// Lê uma entrada do cache de insights.
+    fn cache_get(&self, key: &str) -> Result<Option<CachedInsight>>;
+
+    /// Grava (upsert) uma entrada do cache.
+    fn cache_put(&self, key: &str, payload_json: &str, input_hash: &str, now: i64) -> Result<()>;
+
+    /// Uma assinatura barata das tabelas-fonte. Se ela não mudou desde o último
+    /// cálculo, recomputar seria trabalho jogado fora — o motor pula. É o
+    /// `input_hash` do DATA_MODEL §5.
+    fn input_signature(&self) -> Result<String>;
+}

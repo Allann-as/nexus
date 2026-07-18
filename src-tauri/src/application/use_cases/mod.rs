@@ -9,6 +9,7 @@ pub mod fin_goals;
 pub mod finance;
 pub mod goals;
 pub mod habits;
+pub mod insights;
 pub mod nodes;
 pub mod notes;
 pub mod spheres;
