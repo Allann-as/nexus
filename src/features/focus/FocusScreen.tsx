@@ -12,7 +12,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Play, Timer, Trash2 } from "lucide-react";
 
-import { Button, EmptyState, PageHeader } from "../../design-system/primitives";
+import { Button, EmptyState, PageHeader, PAGE_CONTAINER } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
 import { useFocus } from "../../stores/focus";
 import {
@@ -46,7 +46,7 @@ export function FocusScreen() {
         }
       />
 
-      <div className="min-h-0 flex-1 space-y-6 px-8 pb-16">
+      <div className={`${PAGE_CONTAINER} min-h-0 flex-1 space-y-6 pb-16`}>
         {hasBlocks && st ? (
           <>
             <FocusStatsPanel stats={st} />

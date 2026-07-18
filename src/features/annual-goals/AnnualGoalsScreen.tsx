@@ -8,7 +8,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Target } from "lucide-react";
+import { Plus, Target, Trash2 } from "lucide-react";
 
 import {
   abandonAnnualGoal,
@@ -23,7 +23,7 @@ import {
   type Area,
   type YearOverview,
 } from "../../lib/ipc";
-import { Button, Card, EmptyState, PageHeader, cx } from "../../design-system/primitives";
+import { Button, Card, EmptyState, PageHeader, PAGE_CONTAINER, cx } from "../../design-system/primitives";
 import { ProgressBar } from "../../design-system/charts";
 import { useToasts } from "../../stores/toasts";
 import { NodeLinkSection } from "../links/NodeLinkSection";
@@ -65,7 +65,7 @@ export function AnnualGoalsScreen() {
         }
       />
 
-      <div className="min-h-0 flex-1 space-y-6 px-8 pb-16">
+      <div className={`${PAGE_CONTAINER} min-h-0 flex-1 space-y-6 pb-16`}>
         <div className="flex flex-wrap gap-2">
           {yearTabs.map((y) => (
             <button
@@ -157,6 +157,8 @@ function GoalCard({
   const qc = useQueryClient();
   const pushError = useToasts((s) => s.pushError);
   const [value, setValue] = useState(goal.currentValue);
+  // Excluir arma antes de agir — uma confirmação leve, sem modal (§3.1).
+  const [confirmDel, setConfirmDel] = useState(false);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["annual-goal-year", year] });
@@ -232,13 +234,39 @@ function GoalCard({
             Concluir
           </Button>
         )}
-        {active && (
-          <MiniLink onClick={() => abandon.mutate()}>Abandonar</MiniLink>
-        )}
-        {!done && <MiniLink onClick={() => archive.mutate()}>Arquivar</MiniLink>}
-        <MiniLink onClick={() => remove.mutate()} danger>
-          Excluir
-        </MiniLink>
+
+        {/* As ações de gestão vivem à direita, separadas das primárias por um
+            empurrão — hierarquia visível, não uma fileira de links iguais (§3.1). */}
+        <div className="ml-auto flex items-center gap-1.5">
+          {active && (
+            <Button size="sm" variant="ghost" onClick={() => abandon.mutate()} disabled={abandon.isPending}>
+              Abandonar
+            </Button>
+          )}
+          {!done && (
+            <Button size="sm" variant="ghost" onClick={() => archive.mutate()} disabled={archive.isPending}>
+              Arquivar
+            </Button>
+          )}
+          {confirmDel ? (
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="danger" onClick={() => remove.mutate()} disabled={remove.isPending}>
+                Confirmar
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirmDel(false)}>
+                Cancelar
+              </Button>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={Trash2}
+              onClick={() => setConfirmDel(true)}
+              aria-label="Excluir meta"
+            />
+          )}
+        </div>
       </div>
 
       {/* O backlink: as metas de carreira que contam para esta meta anual
@@ -266,26 +294,3 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function MiniLink({
-  onClick,
-  danger,
-  children,
-}: {
-  onClick: () => void;
-  danger?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cx(
-        "text-[11px] transition-colors",
-        danger
-          ? "text-[var(--text-tertiary)] hover:text-[var(--danger)]"
-          : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]",
-      )}
-    >
-      {children}
-    </button>
-  );
-}

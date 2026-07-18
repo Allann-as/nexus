@@ -138,8 +138,37 @@ export function EmptyState({
   );
 }
 
+/* ===== PageContainer ===== */
+
+/**
+ * O container central de TODA página (M5.5 §3.1). Uma largura máxima e um padding
+ * lateral únicos, para nenhuma tela inventar a própria margem — antes, Conquistas
+ * e Insights colavam na borda do monitor enquanto o Hub respirava num container.
+ * Agora a régua é uma só: `PageHeader` e o corpo de cada tela vestem esta classe,
+ * e o conteúdo alinha da esquerda à direita em qualquer largura de janela.
+ */
+export const PAGE_CONTAINER = "mx-auto w-full max-w-[1360px] px-6 sm:px-8";
+
+export function PageContainer({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <div className={cx(PAGE_CONTAINER, className)}>{children}</div>;
+}
+
 /* ===== PageHeader ===== */
 
+/**
+ * O cabeçalho de página é uma BARRA de largura total (título + ações), com o
+ * mesmo padding lateral do `PageContainer` (32px em sm+). O CONTEÚDO da página
+ * vive num `PageContainer` central logo abaixo — a barra atravessa, a coluna de
+ * dado é contida. É o par que resolve o "cada tela inventa sua margem" (M5.5
+ * §3.1): antes, telas como Conquistas e Insights colavam os cards na borda por
+ * não terem container nenhum.
+ */
 export function PageHeader({
   title,
   subtitle,
@@ -150,7 +179,7 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <header className="flex items-start justify-between gap-4 px-8 pt-9 pb-6">
+    <header className="flex items-start justify-between gap-4 px-6 pt-9 pb-6 sm:px-8">
       <div>
         <h1 className="text-[26px] leading-[32px] font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
           {title}

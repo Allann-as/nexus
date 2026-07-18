@@ -21,7 +21,7 @@ import {
   type GalleryEntry,
   type Level,
 } from "../../lib/ipc";
-import { Card, PageHeader } from "../../design-system/primitives";
+import { Card, PageHeader, PAGE_CONTAINER } from "../../design-system/primitives";
 import { ProgressBar } from "../../design-system/charts";
 import { DynamicIcon } from "../../design-system/DynamicIcon";
 import { Formula } from "../../design-system/Formula";
@@ -66,7 +66,7 @@ export function GamificationScreen() {
         subtitle="XP, níveis e temporadas — derivado do que você fez, nada de caixa-preta"
       />
 
-      <div className="min-h-0 flex-1 space-y-8 pb-16">
+      <div className={`${PAGE_CONTAINER} min-h-0 flex-1 space-y-8 pb-16`}>
         {data && (
           <>
             <OverallCard level={data.overall} />

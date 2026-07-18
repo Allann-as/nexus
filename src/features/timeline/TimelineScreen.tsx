@@ -15,7 +15,7 @@ import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Search, X } from "lucide-react";
 
-import { PageHeader, cx } from "../../design-system/primitives";
+import { PageHeader, PAGE_CONTAINER, cx } from "../../design-system/primitives";
 import { ensureTimelineRollups } from "../../lib/ipc";
 import { MonthView } from "./MonthView";
 import { YearView } from "./YearView";
@@ -71,8 +71,8 @@ export function TimelineScreen() {
         subtitle="A máquina do tempo — cada ação registrada vira um evento para sempre"
       />
 
-      <div className="min-h-0 flex-1 px-8 pb-16">
-        <div className="mx-auto flex max-w-[900px] flex-col gap-5">
+      <div className={`${PAGE_CONTAINER} min-h-0 flex-1 pb-16`}>
+        <div className="flex flex-col gap-5">
           <Scrubber
             mode={mode}
             year={year}

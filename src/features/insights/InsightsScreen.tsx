@@ -16,7 +16,7 @@ import {
   type CorrelationCard,
   type Workload,
 } from "../../lib/ipc";
-import { Card, EmptyState, PageHeader } from "../../design-system/primitives";
+import { Card, EmptyState, PageHeader, PAGE_CONTAINER } from "../../design-system/primitives";
 import { Sparkline } from "../../design-system/charts";
 import { Formula } from "../../design-system/Formula";
 
@@ -47,7 +47,7 @@ export function InsightsScreen() {
         subtitle="Estatística determinística — zero IA, tudo explicável"
       />
 
-      <div className="min-h-0 flex-1 space-y-6 pb-16">
+      <div className={`${PAGE_CONTAINER} min-h-0 flex-1 space-y-6 pb-16`}>
         {!hasAnything && !insights.isLoading ? (
           <EmptyState
             icon={Activity}
