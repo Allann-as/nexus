@@ -1,8 +1,10 @@
 # NEXUS — Arquitetura
 
 > Documento vivo. Atualize-o no mesmo commit que muda a estrutura.
-> Estado atual: **M4.5 concluído** (Vida: BI, gamificação, Metas Anuais).
-> Próximo: M4.6 — Aurora 2.0 (redesign).
+> Estado atual: **M4.6 concluído** (Aurora 2.0: casca sem sidebar, marca
+> astrolábio, navegação por Esfera, Carreira e Estudos aprofundados,
+> Configurações-hub, fundo em camadas e o Hub como painel da vida).
+> Próximo: M5 — Confiança (backup/restore, export, Revisão Semanal, Modo Foco).
 
 ## 1. O que o NEXUS é
 
@@ -109,6 +111,7 @@ logs/      rotação diária
 | **M3.5** | Esferas I: Saúde (checkpoints, treino, exames) + Finanças (aportes, Saúde Financeira) | ✅ **concluído** |
 | **M4** | Esferas II: Objetivos Financeiros, Estudos + Biblioteca, Carreira; Notas; Timeline | ✅ **concluído** |
 | **M4.5** | `bi_engine`, XP/níveis, Conquistas, Temporadas, Metas Anuais, Score congelado | ✅ **concluído** |
+| **M4.6** | Aurora 2.0: hambúrguer, marca astrolábio, nav por Esfera, Carreira/Estudos, Configurações-hub, fundo em camadas, Hub-painel, isolamento de dev | ✅ **concluído** |
 | M5 | Backup/restore, export, Revisão Semanal, Modo Foco, seed de 5 anos | ⬜ |
 | M6 | Ícone, instalador, manual, entrega | ⬜ |
 
@@ -293,10 +296,16 @@ reais. Base do seed de 5 anos do M5.
 Substituiu o Aurora do M0 — ver ADR-0015. Três ideias, e todo componente as
 obedece:
 
-1. **O fundo nunca é chapado.** `.nx-page` (em `styles.css`) empilha três
-   camadas de `background-image` estático: navy sólido + dot grid + aurora
-   radial. Sem canvas, sem partícula, sem frame de animação: o fundo não custa
-   nada porque não faz nada.
+1. **O fundo nunca é chapado.** Duas escalas de fundo, ambas estáticas e de custo
+   de render ~zero (sem canvas, sem partícula, sem frame de animação):
+   - **Da PÁGINA** (`.nx-page`, em `styles.css`): navy sólido + dot grid + aurora
+     radial na cor da Esfera, empilhados como `background-image`. Rola com o
+     conteúdo (`background-attachment: local`) — é a identidade da tela.
+   - **Da VIEWPORT** (`.nx-viewport-fx`, sobre o `<main>` do `Shell` — M4.6 item 9):
+     grão de filme (`feTurbulence` embarcado como data-URI, blend `overlay`) +
+     vinheta elíptica. Emoldura os olhos, não o texto: fica presa à viewport
+     enquanto a página rola por baixo, porque o `<main>` é `overflow-hidden` e do
+     tamanho da janela. Ver ADR-0049.
 2. **O dado é o herói.** Número grande, mono, `tabular-nums`, contando até o
    valor na montagem (`useCountUp`). O rótulo é pequeno e terciário.
 3. **Cor por Esfera.** A tela define `--sphere` no container; aurora, ícone,

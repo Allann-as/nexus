@@ -1516,3 +1516,39 @@ futura. A limpeza do artefato desta vez foi feita pelos MESMOS caminhos de códi
 (`archive` da matéria + `delete` da sessão), com o ledger preservado — um registro
 honesto de que o teste aconteceu e foi corrigido. A regra é permanente: nenhuma
 sessão futura repete o erro.
+
+## ADR-0049 — Grão e vinheta emolduram a viewport, não a página; e são estáticos
+
+**Contexto.** O item 9 do M4.6 pediu profundidade no fundo além do gradiente + dot
+grid + aurora que o Midnight já tinha: um grão de filme quase imperceptível e uma
+vinheta leve. Duas dúvidas de arquitetura: (a) ONDE essas camadas moram e (b) como
+não violar o orçamento de movimento (§6) nem a regra de zero animação em idle.
+
+**Decisão.**
+
+1. **Aurora e dot grid seguem no `.nx-page` e ROLAM com o conteúdo** — eles são a
+   identidade da TELA (tingidos por `--sphere`), e sempre foram
+   `background-attachment: local`. Grão e vinheta, ao contrário, emolduram os
+   OLHOS: uma vinheta que rola deixa de ser vinheta (o escurecimento sairia do
+   canto da janela e viajaria pelo meio do texto). Então elas moram numa camada
+   NOVA, `.nx-viewport-fx`, montada sobre o `<main>` do `Shell` — que é
+   `overflow-hidden` e do tamanho da janela. A página rola POR DENTRO dele; a
+   moldura fica parada. É o mesmo motivo pelo qual o `<main>` já era
+   `overflow-hidden` em vez de rolante (cada tela é dona da própria rolagem).
+
+2. **Zero elementos de conteúdo, zero JS.** A camada é um único `<div aria-hidden>`
+   `pointer-events: none`. A vinheta é um `radial-gradient` elíptico; o grão é um
+   `feTurbulence` embarcado como **data-URI** (nada de rede, ADR-0001) em `overlay`
+   sobre um tile de 140 px, num pseudo-elemento. No tema claro o `overlay` clareia
+   demais — vira `multiply` com alfa menor.
+
+3. **Estáticas por construção — nada a desligar em `prefers-reduced-motion`.** O
+   plano falava em "respeitar reduced-motion", mas a forma certa de respeitá-lo é
+   não introduzir movimento nenhum: não há partícula, não há `@keyframes`, não há
+   `backdrop-filter` (o efeito caro que a §6 raciona). O fundo continua custando
+   ~zero. Novos tokens `--grain-alpha` (dark/light) mantêm a intensidade fora do
+   componente, como o resto das opacidades de fundo.
+
+**Consequência.** O Hub e toda tela ganham casca de profundidade sem um único frame
+de animação e sem um elemento a mais no fluxo de conteúdo. A moldura é imune à
+rolagem porque o seu container, por definição, não rola.
