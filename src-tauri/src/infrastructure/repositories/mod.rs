@@ -7,6 +7,7 @@ pub mod challenge_repo;
 pub mod contribution_repo;
 pub mod event_repo;
 pub mod fin_goal_repo;
+pub mod focus_session_repo;
 pub mod gamification_repo;
 pub mod goal_repo;
 pub mod habit_repo;

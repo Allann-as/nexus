@@ -13,6 +13,7 @@ pub mod challenges;
 pub mod events;
 pub mod fin_goals;
 pub mod finance;
+pub mod focus;
 pub mod gamification;
 pub mod goals;
 pub mod habits;

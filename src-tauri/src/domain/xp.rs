@@ -32,6 +32,16 @@ pub const XP_HABIT_DONE: u32 = 10;
 /// DERIVADO (soma dos eventos `study_session_logged`), atribuído à Esfera da
 /// matéria estudada. Ver ADR-0047.
 pub const XP_STUDY_SESSION: u32 = 10;
+/// Um bloco de foco (pomodoro) concluído (M5).
+///
+/// No mesmo tier do hábito e da sessão de estudo (10): o bloco de foco é o gesto
+/// atômico da disciplina de atenção, como o tick é o do hábito. O valor é **plano
+/// por bloco concluído**, não por minuto — um bloco de 50 min não vale mais que um
+/// de 25, e ninguém "ganha" nível inflando a duração. E só um bloco COMPLETO conta:
+/// abandonar o timer no meio não loga nada (o guard contra o farm — o tempo tem de
+/// passar de verdade). É XP DERIVADO (soma dos eventos `focus_session_logged`),
+/// atribuído à Esfera da tarefa focada. Ver o ADR do Modo Foco.
+pub const XP_FOCUS_SESSION: u32 = 10;
 /// Uma tarefa planejada concluída.
 pub const XP_TASK_DONE: u32 = 15;
 /// Um checkpoint registrado numa meta.

@@ -391,6 +391,7 @@ existente prova, de novo, que CASCADE/rowid/rename estão sob controle.
   |---|---|
   | Hábito cumprido no dia | 10 |
   | Sessão de estudo registrada | 10 |
+  | Bloco de foco concluído | 10 |
   | Tarefa planejada concluída | 15 |
   | Checkpoint de meta | 20 |
   | Sub-desafio de meta concluído | 25 |
@@ -495,6 +496,40 @@ repositórios, o `StudyService`, comandos e a UI. Ver **ADR-0047**.
 
 - **Revisão espaçada (SM-2): adiada** (ADR-0045/0047). O item 7 fechou sem ela; se
   vier, é tabela nova sem recriação, com ADR próprio.
+
+## 5.13 Modo Foco — o pomodoro que vira histórico (0015, M5)
+
+O Modo Foco é um timer pomodoro configurável, disparável a partir de qualquer
+tarefa. Um bloco CONCLUÍDO vira uma linha de `focus_sessions` — um LOG, não um
+node, exatamente como a sessão de estudo (§5.12). Ver o **ADR do Modo Foco**.
+
+- **`focus_sessions`** (0015, `CREATE TABLE` simples — sem recriação): `task_id`
+  (opcional, `ON DELETE SET NULL` — os minutos focados sobrevivem ao apagamento da
+  tarefa), `label` (rótulo livre quando não há tarefa), `minutes` (`CHECK >0`),
+  `day` e `ts`. Índices por `day` e por `task_id` parcial.
+
+- **Só um bloco COMPLETO é registrado.** O timer do frontend só chama
+  `log_focus_session` ao zerar; abandonar no meio não grava nada nem rende XP. É o
+  guard que impede o farm e casa com a semântica do pomodoro — o tempo tem de
+  passar de verdade.
+
+- **Um bloco vale XP.** `focus_session_repo` grava a linha E o evento
+  `focus_session_logged` (`entity_kind='focus_session'`, um fato sem node —
+  `LedgerEntityKind::FocusSession`) na mesma transação. Vale **10 XP**
+  (`XP_FOCUS_SESSION`, o tier do gesto diário, §5.9), **plano por bloco** para não
+  se poder inflar por minutos, atribuído à Esfera da tarefa focada no `xp_by_area`
+  (foco livre, sem tarefa, cai em `area_id` NULL — conta só no XP geral).
+
+- **Estatísticas de foco** (`FocusService::focus_stats`): minutos na semana com
+  tendência vs. a anterior, constância (dias distintos com bloco nos últimos 30) e
+  as **melhores horas de foco** — a hora sai do `ts` convertido para o fuso LOCAL
+  (`strftime('%H', ts/1000, 'unixepoch', 'localtime')`), como no estudo, porque o
+  bloco guarda o `day` mas não o turno. Determinísticas, com a fórmula à mostra,
+  omitidas sem amostra (constituição §2).
+
+- **Apagar um bloco corrige o ESTADO, não a história.** `delete_focus_session`
+  remove a linha (recomputa XP e estatísticas); o evento no ledger permanece
+  (append-only), como desmarcar um hábito.
 
 ## 6. Integridade e migrations
 

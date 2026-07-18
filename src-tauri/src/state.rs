@@ -17,6 +17,7 @@ use crate::application::use_cases::{
     events::EventService,
     fin_goals::FinGoalService,
     finance::FinanceService,
+    focus::FocusService,
     gamification::GamificationService,
     goals::GoalService,
     habits::HabitService,
@@ -42,14 +43,14 @@ use crate::infrastructure::repositories::{
     annual_goal_repo::SqliteAnnualGoalRepository, area_repo::SqliteAreaRepository,
     book_repo::SqliteBookRepository, challenge_repo::SqliteChallengeRepository,
     contribution_repo::SqliteContributionRepository, event_repo::SqliteEventRepository,
-    fin_goal_repo::SqliteFinGoalRepository, gamification_repo::SqliteGamificationRepository,
-    goal_repo::SqliteGoalRepository, habit_repo::SqliteHabitRepository,
-    insight_repo::SqliteInsightRepository, ledger_repo::SqliteLedgerRepository,
-    link_repo::SqliteLinkRepository, node_repo::SqliteNodeRepository,
-    note_repo::SqliteNoteRepository, skill_repo::SqliteSkillRepository,
-    sphere_repo::SqliteSphereRepository, study_session_repo::SqliteStudySessionRepository,
-    subject_repo::SqliteSubjectRepository, task_repo::SqliteTaskRepository,
-    timeline_repo::SqliteTimelineRepository,
+    fin_goal_repo::SqliteFinGoalRepository, focus_session_repo::SqliteFocusSessionRepository,
+    gamification_repo::SqliteGamificationRepository, goal_repo::SqliteGoalRepository,
+    habit_repo::SqliteHabitRepository, insight_repo::SqliteInsightRepository,
+    ledger_repo::SqliteLedgerRepository, link_repo::SqliteLinkRepository,
+    node_repo::SqliteNodeRepository, note_repo::SqliteNoteRepository,
+    skill_repo::SqliteSkillRepository, sphere_repo::SqliteSphereRepository,
+    study_session_repo::SqliteStudySessionRepository, subject_repo::SqliteSubjectRepository,
+    task_repo::SqliteTaskRepository, timeline_repo::SqliteTimelineRepository,
 };
 
 pub struct AppState {
@@ -66,6 +67,7 @@ pub struct AppState {
     pub books: BookService,
     pub career: CareerService,
     pub studies: StudyService,
+    pub focus: FocusService,
     pub timeline: TimelineService,
     pub notes: NoteService,
     pub links: LinkService,
@@ -172,6 +174,15 @@ impl AppState {
             subjects: Arc::new(SqliteSubjectRepository::new(db.clone())),
             sessions: Arc::new(SqliteStudySessionRepository::new(db.clone())),
             areas: area_repo.clone(),
+            ids: ids.clone(),
+            clock: clock.clone(),
+        };
+
+        // O Modo Foco (M5): blocos de foco (um LOG), com estatísticas
+        // determinísticas. O bloco grava estado + ledger juntos, e vale XP.
+        let focus = FocusService {
+            sessions: Arc::new(SqliteFocusSessionRepository::new(db.clone())),
+            nodes: node_repo.clone(),
             ids: ids.clone(),
             clock: clock.clone(),
         };
@@ -286,6 +297,7 @@ impl AppState {
             books,
             career,
             studies,
+            focus,
             timeline,
             notes,
             links,

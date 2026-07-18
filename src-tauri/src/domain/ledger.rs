@@ -43,6 +43,10 @@ pub enum EventType {
     /// linha em `study_sessions` (um LOG, não um node — como o aporte). Vale XP.
     /// Ver ADR-0047.
     StudySessionLogged,
+    /// Um bloco de foco (pomodoro) concluído (M5). `entity_id` é o id da linha em
+    /// `focus_sessions` (um LOG, não um node — como a sessão de estudo). Só um
+    /// bloco COMPLETO vira este fato — abandonar o timer não loga nada. Vale XP.
+    FocusSessionLogged,
 }
 
 impl EventType {
@@ -67,6 +71,7 @@ impl EventType {
             EventType::ChallengeCompleted => "challenge_completed",
             EventType::SkillLevelUp => "skill_level_up",
             EventType::StudySessionLogged => "study_session_logged",
+            EventType::FocusSessionLogged => "focus_session_logged",
         }
     }
 }
@@ -104,6 +109,10 @@ pub enum LedgerEntityKind {
     /// em `study_sessions`, não em `nodes` (como o aporte, ADR-0027/0045). O
     /// `entity_id` é o id da sessão. Ver ADR-0047.
     StudySession,
+    /// Um bloco de foco concluído (M5) — um fato de alta frequência que vive em
+    /// `focus_sessions`, não em `nodes` (como a sessão de estudo). O `entity_id` é
+    /// o id da linha de foco. Ver o ADR do Modo Foco.
+    FocusSession,
     /// Uma Revisão Semanal concluída (M5) — um RITUAL, não um node. O `entity_id`
     /// é a segunda-feira daquela semana ('YYYY-MM-DD'): um review por semana, e é
     /// por ele que se sabe que a semana já foi revisada (idempotência). O evento só
@@ -120,6 +129,7 @@ impl LedgerEntityKind {
             LedgerEntityKind::Achievement => "achievement",
             LedgerEntityKind::DailyScore => "daily_score",
             LedgerEntityKind::StudySession => "study_session",
+            LedgerEntityKind::FocusSession => "focus_session",
             LedgerEntityKind::WeeklyReview => "weekly_review",
         }
     }
@@ -182,6 +192,10 @@ mod tests {
         assert_eq!(
             EventType::StudySessionLogged.as_str(),
             "study_session_logged"
+        );
+        assert_eq!(
+            EventType::FocusSessionLogged.as_str(),
+            "focus_session_logged"
         );
     }
 }

@@ -74,6 +74,13 @@ impl GamificationRepository for SqliteGamificationRepository {
                       LEFT JOIN nodes bk   ON bk.id   = ss.book_id
                       LEFT JOIN nodes sk   ON sk.id   = ss.skill_id
                      GROUP BY COALESCE(subj.area_id, bk.area_id, sk.area_id)
+                    UNION ALL
+                    -- Um bloco de foco atribui à Esfera da TAREFA focada; foco
+                    -- livre (sem tarefa) cai em area_id NULL — conta no geral.
+                    SELECT tk.area_id, COUNT(*) * ?11
+                      FROM focus_sessions fs
+                      LEFT JOIN nodes tk ON tk.id = fs.task_id
+                     GROUP BY tk.area_id
                  ) GROUP BY area_id",
             )?;
             let rows = stmt.query_map(
@@ -88,6 +95,7 @@ impl GamificationRepository for SqliteGamificationRepository {
                     p.challenge_done,
                     p.annual_goal_done,
                     p.study_session,
+                    p.focus_session,
                 ],
                 |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, i64>(1)?)),
             )?;

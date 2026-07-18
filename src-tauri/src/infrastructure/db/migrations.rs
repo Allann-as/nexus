@@ -34,6 +34,7 @@ fn migrations() -> Migrations<'static> {
         M::up(include_str!(
             "../../../migrations/0014_contributes_to_link.sql"
         )),
+        M::up(include_str!("../../../migrations/0015_focus_sessions.sql")),
     ])
 }
 

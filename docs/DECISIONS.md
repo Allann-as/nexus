@@ -1633,3 +1633,56 @@ clone` traz o código, restaurar o zip do M5 traz os dados. Nenhum artefato mist
 dois domínios, e cada um tem a proteção certa para a sua ameaça — o código contra a
 perda de hardware, os dados contra a perda de hardware E contra o vazamento da cópia
 na nuvem (a cifra do ADR-0050).
+
+## ADR-0052 — O Modo Foco: um LOG que só nasce do bloco CONCLUÍDO, no molde da sessão de estudo
+
+**Data:** 2026-07-18 · **Status:** aceito · **M5** · **aplica o ADR-0027/0047**
+
+**Contexto.** O M5 pede um Modo Foco: um timer pomodoro configurável, disparável a
+partir de qualquer tarefa, que registra o foco, vale XP e alimenta o insight das
+"melhores horas de foco". A pergunta de arquitetura não é COMO desenhar o timer
+(isso é frontend), mas O QUE vira fato: quando um bloco de foco entra na história,
+quanto vale, e onde mora.
+
+**Decisão.**
+
+1. **Um bloco de foco é um LOG, não um node** — vive em `focus_sessions` (0015, um
+   `CREATE TABLE` simples, sem recriação de `nodes`), exatamente como a sessão de
+   estudo (ADR-0047) e o aporte (ADR-0027). Registrá-lo grava estado E o evento
+   `focus_session_logged` (`entity_kind='focus_session'`,
+   `LedgerEntityKind::FocusSession`) na MESMA transação. A tarefa focada é uma
+   ligação opcional `ON DELETE SET NULL`: os minutos focados sobrevivem ao
+   apagamento da tarefa. Sem tarefa, o bloco guarda um `label` livre.
+
+2. **Só o bloco CONCLUÍDO vira fato.** O timer do frontend só chama
+   `log_focus_session` quando zera; abandonar no meio não grava nada, não rende XP,
+   não polui as estatísticas. Este é o guard central: diferente da sessão de estudo
+   (minutos auto-reportados), o foco é TEMPO-GATED — para logar, o tempo tem de
+   passar de verdade. É a semântica do pomodoro (um bloco interrompido não conta) e
+   a defesa contra o farm de XP.
+
+3. **Um bloco vale `XP_FOCUS_SESSION = 10`** — o tier do gesto diário (hábito,
+   sessão de estudo), **plano por bloco**, não por minuto: um bloco de 50 min não
+   vale mais que um de 25, então ninguém "sobe de nível" esticando a duração. O XP
+   atribui à Esfera da tarefa focada (`xp_by_area`, um JOIN a `nodes` pela tarefa);
+   foco livre sem tarefa cai em `area_id` NULL e conta só no XP geral. Documentado
+   em `domain::xp` e no DATA_MODEL §5.9/5.13, a fonte única de sempre.
+
+4. **Foco e estudo não se fundem, de propósito.** São dois LOGs distintos porque
+   são dois gestos distintos: estudar uma matéria (minutos de aprendizado) e focar
+   numa tarefa (atenção sustentada num entregável) medem coisas diferentes. Somá-los
+   num só contador esconderia a informação de cada um. Que o mesmo intervalo de tempo
+   possa render os dois é aceitável — o usuário só engana a si mesmo, e cada série
+   conta sua própria história (ADR-0047 §2).
+
+5. **As estatísticas são o padrão dos insights** (constituição §2): minutos na
+   semana com tendência, constância dos últimos 30 dias, e as melhores horas de foco
+   (a hora local de `ts`, como o estudo — o bloco guarda o `day`, não o turno).
+   Determinísticas, com a fórmula à mostra, **omitidas sem amostra** — nunca um zero
+   inventado. Apagar um bloco é correção de ESTADO (`delete_focus_session` recomputa
+   XP e stats); o evento no ledger permanece, como desmarcar um hábito (ADR-0048 §4).
+
+**Consequência.** O foco entra na constituição do NEXUS sem uma exceção: mesmo molde
+de LOG, mesma disciplina de XP derivado, mesma honestidade de estatística. O timer é
+livre para evoluir no frontend (durações, pausas, som) sem tocar na arquitetura — o
+backend só sabe de um fato, "focou N minutos, concluído", e o resto é derivação.

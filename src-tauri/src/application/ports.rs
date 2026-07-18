@@ -1530,6 +1530,69 @@ pub trait StudySessionRepository: Send + Sync {
     fn delete(&self, id: &str) -> Result<()>;
 }
 
+/* ===== Modo Foco (M5) ===== */
+
+/// Um bloco de foco a registrar. Só um pomodoro CONCLUÍDO chega aqui (abandonar
+/// não loga); a tarefa é opcional e `ON DELETE SET NULL`; `minutes > 0`.
+#[derive(Debug, Clone)]
+pub struct NewFocusSession {
+    pub task_id: Option<String>,
+    pub label: Option<String>,
+    pub minutes: i64,
+    pub day: String,
+}
+
+/// Um bloco de foco lido de volta.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FocusSession {
+    pub id: String,
+    pub task_id: Option<String>,
+    /// O título da tarefa na hora do foco — para a lista não fazer N JOINs.
+    pub task_title: Option<String>,
+    pub label: Option<String>,
+    pub minutes: i64,
+    pub day: String,
+    pub ts: i64,
+}
+
+pub trait FocusSessionRepository: Send + Sync {
+    /// Insere o bloco E grava o evento `focus_session_logged`, na MESMA transação
+    /// — estado e história juntos, como a sessão de estudo (ADR-0027/0047).
+    fn log_with_event(
+        &self,
+        id: &str,
+        new: &NewFocusSession,
+        ts: i64,
+        event: &NewLedgerEvent,
+    ) -> Result<FocusSession>;
+
+    /// Os blocos mais recentes (globais ou de uma Esfera, via a tarefa), do dia
+    /// mais recente ao mais antigo.
+    fn recent(&self, area_id: Option<&str>, limit: i64) -> Result<Vec<FocusSession>>;
+
+    /// A soma de minutos entre dois dias 'YYYY-MM-DD' (inclusive), opcionalmente
+    /// numa Esfera. Base de "minutos por semana" e da tendência.
+    fn minutes_between(&self, area_id: Option<&str>, from: &str, to: &str) -> Result<i64>;
+
+    /// Quantos dias DISTINTOS tiveram ao menos um bloco desde `from` (inclusive)
+    /// — a "constância".
+    fn active_days_since(&self, area_id: Option<&str>, from: &str) -> Result<i64>;
+
+    /// Minutos somados por hora do dia (0–23), lendo a hora LOCAL de `ts` — a
+    /// única fonte da hora (o bloco só guarda o `day` local, não o turno). Base
+    /// de "melhores horas de foco".
+    fn minutes_by_hour(&self, area_id: Option<&str>) -> Result<Vec<(i64, i64)>>;
+
+    /// (total de minutos, total de blocos) de sempre, opcionalmente numa Esfera.
+    fn totals(&self, area_id: Option<&str>) -> Result<(i64, i64)>;
+
+    /// Apaga a linha de um bloco — uma correção de ESTADO (registrei errado), não
+    /// da história. O evento `focus_session_logged` no ledger **permanece**
+    /// (append-only, imutável). Recomputa XP e estatísticas naturalmente.
+    fn delete(&self, id: &str) -> Result<()>;
+}
+
 /* ===== Links entre nodes (M4.6) ===== */
 
 /// Uma ponta de um link, já resolvida para exibir: o node do OUTRO lado + o tipo.
@@ -1577,6 +1640,7 @@ pub struct XpPoints {
     pub milestone_done: i64,
     pub skill_level_up: i64,
     pub study_session: i64,
+    pub focus_session: i64,
     pub book_finished: i64,
     pub fin_goal_done: i64,
     pub challenge_done: i64,
