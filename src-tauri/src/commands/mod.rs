@@ -4,6 +4,7 @@
 //! Nenhuma regra de negócio mora aqui. Todo command tem exatamente um wrapper
 //! tipado em `src/lib/ipc.ts` no frontend.
 
+pub mod annual_goals;
 pub mod areas;
 pub mod books;
 pub mod career;

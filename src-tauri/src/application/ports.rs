@@ -5,8 +5,8 @@
 //! estes traits de novo, sem tocar em uma linha de regra de negócio.
 
 use crate::domain::entities::{
-    Area, AssetClass, BookStatus, ChallengeMetric, Direction, Kind, MilestoneKind, Node,
-    ProgressSource, Status, Template,
+    AnnualGoalKind, Area, AssetClass, BookStatus, ChallengeMetric, Direction, Kind, MilestoneKind,
+    Node, ProgressSource, Status, Template,
 };
 use crate::domain::errors::Result;
 use crate::domain::ledger::{LedgerEntry, NewLedgerEvent};
@@ -1164,6 +1164,83 @@ pub trait InsightRepository: Send + Sync {
     /// cálculo, recomputar seria trabalho jogado fora — o motor pula. É o
     /// `input_hash` do DATA_MODEL §5.
     fn input_signature(&self) -> Result<String>;
+}
+
+/* ===== Metas Anuais (M4.5) ===== */
+
+/// Uma meta anual a criar.
+#[derive(Debug, Clone)]
+pub struct NewAnnualGoal {
+    pub title: String,
+    pub area_id: Option<String>,
+    pub year: i64,
+    pub goal_kind: AnnualGoalKind,
+    /// Só para `quantitative`.
+    pub metric_name: Option<String>,
+    pub target_value: Option<f64>,
+    pub unit: Option<String>,
+}
+
+/// Uma meta anual lida.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnnualGoal {
+    pub id: String,
+    pub title: String,
+    pub area_id: Option<String>,
+    /// active/done/dropped/archived — o status É o do node (ADR-0036).
+    pub status: String,
+    pub year: i64,
+    pub goal_kind: String,
+    pub metric_name: Option<String>,
+    pub target_value: Option<f64>,
+    pub current_value: f64,
+    pub unit: Option<String>,
+    pub created_at: i64,
+}
+
+pub trait AnnualGoalRepository: Send + Sync {
+    /// Cria o node 'annual_goal' + o satélite + o evento `created`, atômico.
+    fn create_with_event(
+        &self,
+        id: &str,
+        node: &NewNode,
+        new: &NewAnnualGoal,
+        event: &NewLedgerEvent,
+    ) -> Result<AnnualGoal>;
+
+    fn get(&self, id: &str) -> Result<AnnualGoal>;
+
+    /// As metas de um ano (as arquivadas somem).
+    fn list_by_year(&self, year: i64) -> Result<Vec<AnnualGoal>>;
+
+    /// Os anos que já têm ao menos uma meta (para o seletor de ano), do mais
+    /// recente ao mais antigo.
+    fn years(&self) -> Result<Vec<i64>>;
+
+    /// Atualiza `current_value` de uma quantitativa e grava o checkpoint no
+    /// ledger; se `completion` vier, marca 'done' e grava também — na mesma
+    /// transação.
+    fn set_progress(
+        &self,
+        id: &str,
+        current_value: f64,
+        updated_at: i64,
+        checkpoint: &NewLedgerEvent,
+        completion: Option<&NewLedgerEvent>,
+    ) -> Result<AnnualGoal>;
+
+    /// Muda o status (concluir binária, abandonar, arquivar) e grava o evento.
+    fn set_status(
+        &self,
+        id: &str,
+        status: &str,
+        updated_at: i64,
+        event: &NewLedgerEvent,
+    ) -> Result<AnnualGoal>;
+
+    /// Apaga a meta (o node; o satélite vai por CASCADE) e grava o `deleted`.
+    fn delete_with_event(&self, id: &str, event: &NewLedgerEvent) -> Result<()>;
 }
 
 /* ===== Temporadas / Desafios (M4.5) ===== */

@@ -1,5 +1,6 @@
 //! Casos de uso: orquestram o domínio através dos ports.
 
+pub mod annual_goals;
 pub mod areas;
 pub mod books;
 pub mod career;

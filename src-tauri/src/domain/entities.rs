@@ -312,6 +312,39 @@ impl ChallengeMetric {
     }
 }
 
+/// Como uma meta anual mede a si mesma (M4.5).
+///
+/// Espelha o CHECK de `annual_goal_details.goal_kind` (0012). `binary` é "fazer
+/// X" (concluída = `nodes.status = 'done'`); `quantitative` é "ler 12 livros"
+/// (progresso = `current_value / target_value`). Ver ADR-0036.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AnnualGoalKind {
+    Binary,
+    Quantitative,
+}
+
+impl AnnualGoalKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AnnualGoalKind::Binary => "binary",
+            AnnualGoalKind::Quantitative => "quantitative",
+        }
+    }
+
+    pub fn parse(s: &str) -> Result<Self> {
+        Ok(match s {
+            "binary" => AnnualGoalKind::Binary,
+            "quantitative" => AnnualGoalKind::Quantitative,
+            other => {
+                return Err(NexusError::Validation(format!(
+                    "tipo de meta anual desconhecido: {other}"
+                )))
+            }
+        })
+    }
+}
+
 /// O tipo de um marco de carreira (§2.3).
 ///
 /// Não espelha um CHECK de banco: o marco é um fato do ledger (append-only, sem

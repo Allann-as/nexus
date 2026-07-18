@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use crate::application::ports::{LedgerRepository, SearchRepository};
 use crate::application::use_cases::{
+    annual_goals::AnnualGoalService,
     areas::AreaService,
     books::BookService,
     career::CareerService,
@@ -32,14 +33,15 @@ use crate::infrastructure::db::Db;
 use crate::infrastructure::fts::SqliteSearchRepository;
 use crate::infrastructure::paths::Paths;
 use crate::infrastructure::repositories::{
-    area_repo::SqliteAreaRepository, book_repo::SqliteBookRepository,
-    challenge_repo::SqliteChallengeRepository, contribution_repo::SqliteContributionRepository,
-    event_repo::SqliteEventRepository, fin_goal_repo::SqliteFinGoalRepository,
-    gamification_repo::SqliteGamificationRepository, goal_repo::SqliteGoalRepository,
-    habit_repo::SqliteHabitRepository, insight_repo::SqliteInsightRepository,
-    ledger_repo::SqliteLedgerRepository, node_repo::SqliteNodeRepository,
-    note_repo::SqliteNoteRepository, sphere_repo::SqliteSphereRepository,
-    task_repo::SqliteTaskRepository, timeline_repo::SqliteTimelineRepository,
+    annual_goal_repo::SqliteAnnualGoalRepository, area_repo::SqliteAreaRepository,
+    book_repo::SqliteBookRepository, challenge_repo::SqliteChallengeRepository,
+    contribution_repo::SqliteContributionRepository, event_repo::SqliteEventRepository,
+    fin_goal_repo::SqliteFinGoalRepository, gamification_repo::SqliteGamificationRepository,
+    goal_repo::SqliteGoalRepository, habit_repo::SqliteHabitRepository,
+    insight_repo::SqliteInsightRepository, ledger_repo::SqliteLedgerRepository,
+    node_repo::SqliteNodeRepository, note_repo::SqliteNoteRepository,
+    sphere_repo::SqliteSphereRepository, task_repo::SqliteTaskRepository,
+    timeline_repo::SqliteTimelineRepository,
 };
 
 pub struct AppState {
@@ -63,6 +65,7 @@ pub struct AppState {
     pub insights_worker: InsightWorker,
     pub gamification: GamificationService,
     pub challenges: ChallengeService,
+    pub annual_goals: AnnualGoalService,
     pub ledger: Arc<dyn LedgerRepository>,
     pub search: Arc<dyn SearchRepository>,
 }
@@ -199,6 +202,14 @@ impl AppState {
             clock: clock.clone(),
         };
 
+        // As Metas Anuais (§2.3): nodes 'annual_goal' organizados por ano.
+        let annual_goals = AnnualGoalService {
+            annual_goals: Arc::new(SqliteAnnualGoalRepository::new(db.clone())),
+            areas: area_repo.clone(),
+            ids: ids.clone(),
+            clock: clock.clone(),
+        };
+
         Ok(Self {
             areas: AreaService {
                 repo: area_repo.clone(),
@@ -227,6 +238,7 @@ impl AppState {
             insights_worker,
             gamification,
             challenges,
+            annual_goals,
             ledger,
             search,
             db,
