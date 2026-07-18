@@ -1,12 +1,17 @@
 # NEXUS — Arquitetura
 
 > Documento vivo. Atualize-o no mesmo commit que muda a estrutura.
-> Estado atual: **M5.5 concluído** (PRIME: sistema de layout, a geometria do
-> astrolábio nos fundos, o menu O NEXO, empty states próprios, e a tela de
-> bloqueio por PIN). O M5 (Confiança) e o código no GitHub (ADR-0051) já estavam.
-> Próximo: M5.6 — ARSENAL (tracker plugável, semana perfeita, recordes, ano em
-> pixels, comparativos, horizonte, retrospectiva, bandeja) e então M6 — a
-> entrega da v1.0.0.
+> Estado atual: **M5.5 + REFINO PRIME+ concluídos**. O PRIME entregou o sistema
+> de layout, a geometria do astrolábio nos fundos, o menu O NEXO, empty states
+> próprios e a tela de bloqueio por PIN; o REFINO (veredito do usuário ao vivo)
+> subiu o degrau: accent índigo da marca + sistema de botões (ADR-0055), fundos
+> mais ricos, o NEXO como mapa radial completo, donut fluido com saldo no centro,
+> exclusão de aporte + extrato redesenhado (ADR-0056), a tela de bloqueio de "OK"
+> a "UAU", e o hub **Objetivos** de qualquer natureza com o ritmo de constância
+> (ADR-0057). O M5 (Confiança) e o código no GitHub (ADR-0051) já estavam.
+> Próximo: M5.6 — ARSENAL (tracker plugável com contagem automática, semana
+> perfeita, recordes, ano em pixels, comparativos, horizonte, retrospectiva,
+> bandeja) e então M6 — a entrega da v1.0.0.
 
 ## 1. O que o NEXUS é
 
