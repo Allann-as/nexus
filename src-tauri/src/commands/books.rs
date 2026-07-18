@@ -4,7 +4,7 @@ use serde::Deserialize;
 use tauri::State;
 
 use crate::application::ports::Book;
-use crate::application::use_cases::books::StudiesOverview;
+use crate::application::use_cases::books::{ReadingStats, StudiesOverview};
 use crate::domain::entities::BookStatus;
 use crate::domain::errors::Result;
 use crate::state::AppState;
@@ -92,4 +92,9 @@ pub fn studies_overview(
 #[tauri::command]
 pub fn set_reading_goal(state: State<'_, AppState>, target: i64) -> Result<()> {
     state.books.set_reading_goal(target)
+}
+
+#[tauri::command]
+pub fn reading_stats(state: State<'_, AppState>, area_id: Option<String>) -> Result<ReadingStats> {
+    state.books.reading_stats(area_id.as_deref())
 }

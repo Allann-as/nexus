@@ -1389,6 +1389,140 @@ pub trait SkillRepository: Send + Sync {
     fn evolving_since(&self, area_id: &str, since_day: &str) -> Result<Vec<Skill>>;
 }
 
+/* ===== Estudos: matérias e sessões (M4.6, item 7) ===== */
+
+/// Uma matéria a criar. O progresso é COMPUTADO das sessões; o satélite guarda só
+/// identidade e a meta opcional de minutos.
+#[derive(Debug, Clone)]
+pub struct NewSubject {
+    pub title: String,
+    pub area_id: Option<String>,
+    pub category: Option<String>,
+    pub target_minutes: Option<i64>,
+}
+
+/// Uma matéria: o node 'subject' + o satélite. O progresso não mora aqui — ele é
+/// somado das sessões (ver `SubjectProgress`).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Subject {
+    pub id: String,
+    pub title: String,
+    pub area_id: Option<String>,
+    pub status: String,
+    pub category: Option<String>,
+    pub target_minutes: Option<i64>,
+    pub created_at: i64,
+}
+
+pub trait SubjectRepository: Send + Sync {
+    /// Node 'subject' + satélite + evento `created`, na mesma transação.
+    fn create_with_event(
+        &self,
+        id: &str,
+        node: &NewNode,
+        new: &NewSubject,
+        event: &NewLedgerEvent,
+    ) -> Result<Subject>;
+
+    fn get(&self, id: &str) -> Result<Subject>;
+
+    /// As matérias de uma Esfera (ou todas). As arquivadas somem.
+    fn list(&self, area_id: Option<&str>) -> Result<Vec<Subject>>;
+
+    /// Ajusta a meta de minutos — CONFIGURAÇÃO, não fato: não grava no ledger
+    /// (ADR-0023). `None` remove a meta.
+    fn set_target(&self, id: &str, target_minutes: Option<i64>, updated_at: i64)
+        -> Result<Subject>;
+
+    /// Arquiva a matéria (status 'archived'). As sessões sobrevivem: a FK é
+    /// `ON DELETE SET NULL`, e arquivar nem apaga o node — a hora estudada fica.
+    fn archive(&self, id: &str, updated_at: i64) -> Result<()>;
+
+    /// Quantos links (de qualquer tipo) APONTAM para esta matéria — os "itens
+    /// vinculados" (uma meta de carreira, um livro) que o `contributes_to` liga
+    /// (ADR-0046). Barato; omitido na UI quando é zero.
+    fn linked_count(&self, id: &str) -> Result<i64>;
+}
+
+/// Uma sessão de estudo a registrar. As três ligações são independentes e
+/// opcionais (ADR-0045); `minutes > 0`.
+#[derive(Debug, Clone)]
+pub struct NewStudySession {
+    pub subject_id: Option<String>,
+    pub book_id: Option<String>,
+    pub skill_id: Option<String>,
+    pub topic: Option<String>,
+    pub minutes: i64,
+    pub day: String,
+}
+
+/// Uma sessão de estudo lida de volta.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StudySession {
+    pub id: String,
+    pub subject_id: Option<String>,
+    /// O título da matéria na hora da leitura — para a lista não fazer N JOINs.
+    pub subject_title: Option<String>,
+    pub book_id: Option<String>,
+    pub skill_id: Option<String>,
+    pub topic: Option<String>,
+    pub minutes: i64,
+    pub day: String,
+    pub ts: i64,
+}
+
+/// O resumo agregado das sessões de UMA matéria — o coração do progresso.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSummary {
+    pub total_minutes: i64,
+    pub session_count: i64,
+    /// O dia da última sessão ('YYYY-MM-DD'), ou `None` se nunca estudou.
+    pub last_day: Option<String>,
+    /// Livros distintos tocados em sessões desta matéria.
+    pub books_touched: i64,
+}
+
+pub trait StudySessionRepository: Send + Sync {
+    /// Insere a sessão E grava o evento `study_session_logged`, na MESMA
+    /// transação — estado e história juntos, como o aporte (ADR-0027/0045).
+    fn log_with_event(
+        &self,
+        id: &str,
+        new: &NewStudySession,
+        ts: i64,
+        event: &NewLedgerEvent,
+    ) -> Result<StudySession>;
+
+    /// As sessões mais recentes (globais ou de uma Esfera, via a matéria), do dia
+    /// mais recente ao mais antigo.
+    fn recent(&self, area_id: Option<&str>, limit: i64) -> Result<Vec<StudySession>>;
+
+    /// As últimas sessões de uma matéria específica.
+    fn recent_for_subject(&self, subject_id: &str, limit: i64) -> Result<Vec<StudySession>>;
+
+    /// O resumo agregado de uma matéria (minutos, contagem, último dia, livros).
+    fn subject_summary(&self, subject_id: &str) -> Result<SessionSummary>;
+
+    /// A soma de minutos entre dois dias 'YYYY-MM-DD' (inclusive), opcionalmente
+    /// numa Esfera. Base de "horas por semana" e da tendência.
+    fn minutes_between(&self, area_id: Option<&str>, from: &str, to: &str) -> Result<i64>;
+
+    /// Quantos dias DISTINTOS tiveram ao menos uma sessão desde `from` (inclusive)
+    /// — a "constância".
+    fn active_days_since(&self, area_id: Option<&str>, from: &str) -> Result<i64>;
+
+    /// Minutos somados por hora do dia (0–23), lendo a hora LOCAL de `ts` — a
+    /// única fonte da hora (a sessão só guarda o `day` local, não o turno). Base
+    /// de "melhores horários".
+    fn minutes_by_hour(&self, area_id: Option<&str>) -> Result<Vec<(i64, i64)>>;
+
+    /// (total de minutos, total de sessões) de sempre, opcionalmente numa Esfera.
+    fn totals(&self, area_id: Option<&str>) -> Result<(i64, i64)>;
+}
+
 /* ===== Links entre nodes (M4.6) ===== */
 
 /// Uma ponta de um link, já resolvida para exibir: o node do OUTRO lado + o tipo.
@@ -1435,6 +1569,7 @@ pub struct XpPoints {
     pub goal_checkpoint: i64,
     pub milestone_done: i64,
     pub skill_level_up: i64,
+    pub study_session: i64,
     pub book_finished: i64,
     pub fin_goal_done: i64,
     pub challenge_done: i64,

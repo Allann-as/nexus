@@ -64,6 +64,16 @@ impl GamificationRepository for SqliteGamificationRepository {
                     UNION ALL
                     SELECT n.area_id, COUNT(*) * ?9 FROM nodes n
                      WHERE n.kind = 'annual_goal' AND n.status = 'done' GROUP BY n.area_id
+                    UNION ALL
+                    -- Uma sessão de estudo atribui à Esfera da MATÉRIA, ou à do
+                    -- livro/competência se não tiver matéria (COALESCE). Sessão
+                    -- só de tópico livre cai em area_id NULL — conta no geral.
+                    SELECT COALESCE(subj.area_id, bk.area_id, sk.area_id), COUNT(*) * ?10
+                      FROM study_sessions ss
+                      LEFT JOIN nodes subj ON subj.id = ss.subject_id
+                      LEFT JOIN nodes bk   ON bk.id   = ss.book_id
+                      LEFT JOIN nodes sk   ON sk.id   = ss.skill_id
+                     GROUP BY COALESCE(subj.area_id, bk.area_id, sk.area_id)
                  ) GROUP BY area_id",
             )?;
             let rows = stmt.query_map(
@@ -77,6 +87,7 @@ impl GamificationRepository for SqliteGamificationRepository {
                     p.fin_goal_done,
                     p.challenge_done,
                     p.annual_goal_done,
+                    p.study_session,
                 ],
                 |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, i64>(1)?)),
             )?;

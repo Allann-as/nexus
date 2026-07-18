@@ -26,6 +26,7 @@ use crate::application::use_cases::{
     notes::NoteService,
     score_history::ScoreHistoryService,
     spheres::SphereService,
+    studies::StudyService,
     tasks::TaskService,
     timeline::TimelineService,
 };
@@ -43,7 +44,8 @@ use crate::infrastructure::repositories::{
     insight_repo::SqliteInsightRepository, ledger_repo::SqliteLedgerRepository,
     link_repo::SqliteLinkRepository, node_repo::SqliteNodeRepository,
     note_repo::SqliteNoteRepository, skill_repo::SqliteSkillRepository,
-    sphere_repo::SqliteSphereRepository, task_repo::SqliteTaskRepository,
+    sphere_repo::SqliteSphereRepository, study_session_repo::SqliteStudySessionRepository,
+    subject_repo::SqliteSubjectRepository, task_repo::SqliteTaskRepository,
     timeline_repo::SqliteTimelineRepository,
 };
 
@@ -60,6 +62,7 @@ pub struct AppState {
     pub fin_goals: FinGoalService,
     pub books: BookService,
     pub career: CareerService,
+    pub studies: StudyService,
     pub timeline: TimelineService,
     pub notes: NoteService,
     pub links: LinkService,
@@ -151,6 +154,16 @@ impl AppState {
             skills: Arc::new(SqliteSkillRepository::new(db.clone())),
             areas: area_repo.clone(),
             ledger: ledger.clone(),
+            ids: ids.clone(),
+            clock: clock.clone(),
+        };
+
+        // Os Estudos (item 7): matérias (nodes 'subject') e sessões (um LOG), com
+        // estatísticas determinísticas. A sessão grava estado + ledger juntos.
+        let studies = StudyService {
+            subjects: Arc::new(SqliteSubjectRepository::new(db.clone())),
+            sessions: Arc::new(SqliteStudySessionRepository::new(db.clone())),
+            areas: area_repo.clone(),
             ids: ids.clone(),
             clock: clock.clone(),
         };
@@ -250,6 +263,7 @@ impl AppState {
             fin_goals,
             books,
             career,
+            studies,
             timeline,
             notes,
             links,

@@ -18,5 +18,6 @@ pub mod nodes;
 pub mod notes;
 pub mod score_history;
 pub mod spheres;
+pub mod studies;
 pub mod tasks;
 pub mod timeline;

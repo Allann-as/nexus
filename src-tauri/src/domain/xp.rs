@@ -23,6 +23,15 @@ use serde::Serialize;
 
 /// Um hábito cumprido no dia.
 pub const XP_HABIT_DONE: u32 = 10;
+/// Uma sessão de estudo registrada (M4.6, item 7).
+///
+/// No mesmo tier do hábito (10): a sessão é o gesto atômico da Esfera Estudos,
+/// como o tick é o do hábito — um ato de disciplina que soma pela repetição. O
+/// valor é **plano por sessão**, não por minuto: assim uma sessão de 3h não vale
+/// mais XP que três de 1h, e ninguém "ganha" nível inflando os minutos. É XP
+/// DERIVADO (soma dos eventos `study_session_logged`), atribuído à Esfera da
+/// matéria estudada. Ver ADR-0047.
+pub const XP_STUDY_SESSION: u32 = 10;
 /// Uma tarefa planejada concluída.
 pub const XP_TASK_DONE: u32 = 15;
 /// Um checkpoint registrado numa meta.

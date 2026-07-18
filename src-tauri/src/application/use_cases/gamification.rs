@@ -76,6 +76,7 @@ impl GamificationService {
             goal_checkpoint: xp::XP_GOAL_CHECKPOINT as i64,
             milestone_done: xp::XP_MILESTONE_DONE as i64,
             skill_level_up: xp::XP_SKILL_LEVEL_UP as i64,
+            study_session: xp::XP_STUDY_SESSION as i64,
             book_finished: xp::XP_BOOK_FINISHED as i64,
             fin_goal_done: xp::XP_FIN_GOAL_DONE as i64,
             challenge_done: xp::XP_CHALLENGE_DONE as i64,

@@ -39,6 +39,10 @@ pub enum EventType {
     /// 'skill'; a série destes eventos É a trilha de evolução (o nível é 1 + a
     /// contagem deles, ordenados por `ts`). Vale XP. Ver ADR-0045.
     SkillLevelUp,
+    /// Uma sessão de estudo registrada (M4.6, item 7). `entity_id` é o id da
+    /// linha em `study_sessions` (um LOG, não um node — como o aporte). Vale XP.
+    /// Ver ADR-0047.
+    StudySessionLogged,
 }
 
 impl EventType {
@@ -62,6 +66,7 @@ impl EventType {
             EventType::ChallengeStarted => "challenge_started",
             EventType::ChallengeCompleted => "challenge_completed",
             EventType::SkillLevelUp => "skill_level_up",
+            EventType::StudySessionLogged => "study_session_logged",
         }
     }
 }
@@ -95,6 +100,10 @@ pub enum LedgerEntityKind {
     /// ('YYYY-MM-DD'): um score por dia, e a UNIQUE lógica é "um por dia". Ver
     /// ADR-0039.
     DailyScore,
+    /// Uma sessão de estudo (M4.6, item 7) — um fato de alta frequência que vive
+    /// em `study_sessions`, não em `nodes` (como o aporte, ADR-0027/0045). O
+    /// `entity_id` é o id da sessão. Ver ADR-0047.
+    StudySession,
 }
 
 impl LedgerEntityKind {
@@ -105,6 +114,7 @@ impl LedgerEntityKind {
             LedgerEntityKind::CareerMilestone => "career_milestone",
             LedgerEntityKind::Achievement => "achievement",
             LedgerEntityKind::DailyScore => "daily_score",
+            LedgerEntityKind::StudySession => "study_session",
         }
     }
 }
@@ -163,5 +173,9 @@ mod tests {
             "weekly_review_completed"
         );
         assert_eq!(EventType::SkillLevelUp.as_str(), "skill_level_up");
+        assert_eq!(
+            EventType::StudySessionLogged.as_str(),
+            "study_session_logged"
+        );
     }
 }

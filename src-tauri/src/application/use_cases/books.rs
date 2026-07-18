@@ -11,6 +11,7 @@ use crate::application::ports::{
 use crate::domain::entities::{validate_title, BookStatus, Kind, Status};
 use crate::domain::errors::{NexusError, Result};
 use crate::domain::ledger::{EventType, LedgerEntityKind, NewLedgerEvent};
+use crate::domain::schedule::parse_day;
 
 /// O painel da Esfera Estudos: o que estou lendo, a meta anual, a estante.
 #[derive(Debug, Clone, Serialize)]
@@ -26,6 +27,26 @@ pub struct StudiesOverview {
     pub reading_now: Vec<Book>,
     /// Total de livros na estante (não arquivados).
     pub total_books: i64,
+}
+
+/// As estatísticas de leitura (M4.6, item 7) — funções puras do estado dos livros,
+/// recomputadas, nunca gravadas (mesma filosofia da Saúde Financeira, ADR-0028).
+/// Cada número traz a fórmula à mostra (constituição §2); `None` quando falta dado.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadingStats {
+    pub year: String,
+    /// Livros marcados 'lido' neste ano.
+    pub books_finished_year: i64,
+    /// Páginas dos livros terminados neste ano (só os com contagem de páginas).
+    pub pages_this_year: i64,
+    /// `pages_this_year / dias decorridos no ano`, ou `None` sem páginas.
+    pub pages_per_day: Option<f64>,
+    /// Média de dias entre começar e terminar um livro — só os com as duas datas.
+    pub avg_days_to_finish: Option<f64>,
+    /// Quantos livros entraram na média (têm início e fim) — o tamanho da amostra.
+    pub sample_size: i64,
+    pub formula: String,
 }
 
 pub struct BookService {
@@ -217,6 +238,62 @@ impl BookService {
             finished_this_year: self.books.finished_in_year(&year)?,
             reading_now,
             total_books: all.len() as i64,
+            year,
+        })
+    }
+
+    /// As estatísticas de leitura da Esfera Estudos (item 7): ritmo e tempo médio.
+    pub fn reading_stats(&self, area_id: Option<&str>) -> Result<ReadingStats> {
+        let today = parse_day(&self.clock.today_local())?;
+        let year = self.clock.today_local()[..4].to_string();
+        // Dias decorridos no ano: o ordinal de hoje (1 em 1º de janeiro).
+        let days_elapsed = chrono::Datelike::ordinal(&today) as i64;
+        let books = self.books.list(area_id)?;
+
+        let finished_this_year: Vec<&Book> = books
+            .iter()
+            .filter(|b| b.status == BookStatus::Lido)
+            .filter(|b| b.finished_on.as_deref().map(|d| d.starts_with(&year)) == Some(true))
+            .collect();
+
+        let books_finished_year = finished_this_year.len() as i64;
+        let pages_this_year: i64 = finished_this_year
+            .iter()
+            .filter_map(|b| b.total_pages)
+            .filter(|p| *p > 0)
+            .sum();
+        let pages_per_day = if pages_this_year > 0 && days_elapsed > 0 {
+            Some(pages_this_year as f64 / days_elapsed as f64)
+        } else {
+            None
+        };
+
+        // Média de dias para terminar: só livros com início E fim registrados.
+        let spans: Vec<i64> = books
+            .iter()
+            .filter(|b| b.status == BookStatus::Lido)
+            .filter_map(|b| {
+                let sd = parse_day(b.started_on.as_deref()?).ok()?;
+                let fd = parse_day(b.finished_on.as_deref()?).ok()?;
+                let days = (fd - sd).num_days();
+                (days >= 0).then_some(days)
+            })
+            .collect();
+        let sample_size = spans.len() as i64;
+        let avg_days_to_finish =
+            (sample_size > 0).then(|| spans.iter().sum::<i64>() as f64 / sample_size as f64);
+
+        Ok(ReadingStats {
+            books_finished_year,
+            pages_this_year,
+            pages_per_day,
+            avg_days_to_finish,
+            sample_size,
+            formula: format!(
+                "Páginas/dia = páginas dos livros terminados em {year} ÷ {days_elapsed} dias \
+                 decorridos no ano. Tempo médio para terminar = média de (dia que terminou − \
+                 dia que começou) sobre {sample_size} livro(s) com as duas datas."
+            ),
             year,
         })
     }
