@@ -17,6 +17,7 @@
  */
 
 import {
+  CalendarCheck,
   CalendarRange,
   Calendar,
   FileText,
@@ -47,6 +48,9 @@ export const NAV_ITEMS: NavItem[] = [
   // [[wiki-links]] ligam qualquer node), então ela mora na rail, não numa Esfera.
   { path: "/notes", label: "Notas", icon: FileText, jumpKey: "n" },
   { path: "/timeline", label: "Timeline", icon: History, jumpKey: "t" },
+  // A Revisão Semanal (M5) atravessa a vida inteira (inbox, tarefas, hábitos,
+  // metas, agenda) — é da rail, não de uma Esfera. Um ritual, não uma tela de dado.
+  { path: "/review", label: "Revisão Semanal", icon: CalendarCheck, jumpKey: "r" },
   { path: "/insights", label: "Insights", icon: Sparkles, jumpKey: "s" },
   // Metas Anuais e Conquistas atravessam todas as Esferas (o ano inteiro, o XP de
   // tudo), então moram na rail como o Insights — não numa Esfera.

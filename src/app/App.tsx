@@ -17,6 +17,7 @@ import { GamificationScreen } from "../features/gamification/GamificationScreen"
 import { AnnualGoalsScreen } from "../features/annual-goals/AnnualGoalsScreen";
 import { NotesScreen } from "../features/notes/NotesScreen";
 import { TimelineScreen } from "../features/timeline/TimelineScreen";
+import { WeeklyReviewScreen } from "../features/weekly-review/WeeklyReviewScreen";
 import { useUi, applyTheme, applyDensity, applyReducedMotion } from "../stores/ui";
 
 const queryClient = new QueryClient({
@@ -60,6 +61,7 @@ const router = createHashRouter([
       { path: "projects", element: <ProjectsScreen /> },
       { path: "notes", element: <NotesScreen /> },
       { path: "timeline", element: <TimelineScreen /> },
+      { path: "review", element: <WeeklyReviewScreen /> },
       { path: "insights", element: <InsightsScreen /> },
       { path: "game", element: <GamificationScreen /> },
       { path: "annual-goals", element: <AnnualGoalsScreen /> },

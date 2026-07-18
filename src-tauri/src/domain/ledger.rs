@@ -104,6 +104,11 @@ pub enum LedgerEntityKind {
     /// em `study_sessions`, não em `nodes` (como o aporte, ADR-0027/0045). O
     /// `entity_id` é o id da sessão. Ver ADR-0047.
     StudySession,
+    /// Uma Revisão Semanal concluída (M5) — um RITUAL, não um node. O `entity_id`
+    /// é a segunda-feira daquela semana ('YYYY-MM-DD'): um review por semana, e é
+    /// por ele que se sabe que a semana já foi revisada (idempotência). O evento só
+    /// entra quando os 6 passos fecham — uma revisão abandonada não vira fato.
+    WeeklyReview,
 }
 
 impl LedgerEntityKind {
@@ -115,6 +120,7 @@ impl LedgerEntityKind {
             LedgerEntityKind::Achievement => "achievement",
             LedgerEntityKind::DailyScore => "daily_score",
             LedgerEntityKind::StudySession => "study_session",
+            LedgerEntityKind::WeeklyReview => "weekly_review",
         }
     }
 }

@@ -1744,3 +1744,37 @@ export interface ExportInfo {
 
 /** Exportação humana: JSON por tabela + CSVs + mídia + README numa pasta. */
 export const exportData = () => call<ExportInfo>("export_data");
+
+/* ===== M5 — Revisão Semanal ===== */
+
+export interface WeeklyReviewState {
+  /** A segunda-feira da semana ('YYYY-MM-DD') — o id do review. */
+  weekId: string;
+  weekStart: string;
+  weekEnd: string;
+  /** 0 = ainda não começou; 1..=6 o passo em que o rascunho parou. */
+  step: number;
+  reflection: string;
+  completedThisWeek: boolean;
+}
+
+export interface HabitWeek {
+  habitId: string;
+  title: string;
+  /** Dias em que o hábito estava agendado nesta semana. */
+  scheduled: number;
+  /** Dias cumpridos. */
+  done: number;
+}
+
+export const weeklyReviewState = () => call<WeeklyReviewState>("weekly_review_state");
+
+/** Salva o rascunho (passo + reflexão) — o que torna o ritual retomável. */
+export const saveWeeklyReviewProgress = (step: number, reflection: string) =>
+  call<void>("save_weekly_review_progress", { step, reflection });
+
+export const weeklyReviewHabits = () => call<HabitWeek[]>("weekly_review_habits");
+
+/** Conclui: grava o evento no ledger e apaga o rascunho. Um review por semana. */
+export const completeWeeklyReview = (reflection: string) =>
+  call<LedgerEntry>("complete_weekly_review", { reflection });

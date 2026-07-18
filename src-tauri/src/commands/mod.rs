@@ -27,3 +27,4 @@ pub mod studies;
 pub mod system;
 pub mod tasks;
 pub mod timeline;
+pub mod weekly_review;

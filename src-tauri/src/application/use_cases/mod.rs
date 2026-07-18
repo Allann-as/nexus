@@ -21,3 +21,4 @@ pub mod spheres;
 pub mod studies;
 pub mod tasks;
 pub mod timeline;
+pub mod weekly_review;

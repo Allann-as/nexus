@@ -208,6 +208,10 @@ pub fn run() {
             commands::backup::set_backup_config,
             commands::backup::restore_backup,
             commands::backup::export_data,
+            commands::weekly_review::weekly_review_state,
+            commands::weekly_review::save_weekly_review_progress,
+            commands::weekly_review::weekly_review_habits,
+            commands::weekly_review::complete_weekly_review,
         ])
         .build(tauri::generate_context!())
         .expect("não foi possível construir a janela do NEXUS")

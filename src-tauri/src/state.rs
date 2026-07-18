@@ -29,6 +29,7 @@ use crate::application::use_cases::{
     studies::StudyService,
     tasks::TaskService,
     timeline::TimelineService,
+    weekly_review::WeeklyReviewService,
 };
 use crate::domain::errors::Result;
 use crate::infrastructure::backup::BackupEngine;
@@ -76,6 +77,7 @@ pub struct AppState {
     pub challenges: ChallengeService,
     pub annual_goals: AnnualGoalService,
     pub score_history: ScoreHistoryService,
+    pub weekly_review: WeeklyReviewService,
     pub ledger: Arc<dyn LedgerRepository>,
     pub search: Arc<dyn SearchRepository>,
     /// O motor de backup (M5): snapshot consistente, poda por retenção e restauro.
@@ -229,7 +231,7 @@ impl AppState {
         let challenges = ChallengeService {
             challenges: Arc::new(SqliteChallengeRepository::new(db.clone())),
             areas: area_repo.clone(),
-            habits: habit_repo,
+            habits: habit_repo.clone(),
             ids: ids.clone(),
             clock: clock.clone(),
         };
@@ -253,6 +255,15 @@ impl AppState {
         // política de retenção. `paths.clone()` porque `paths` é movido logo abaixo.
         let backups = BackupEngine::new(db.clone(), paths.clone(), clock.clone());
         let exports = ExportEngine::new(db.clone(), paths.clone(), clock.clone());
+
+        // A Revisão Semanal (M5): o ritual de 6 passos. O rascunho vive em disco
+        // (retomável); o evento só entra no ledger quando os 6 passos fecham.
+        let weekly_review = WeeklyReviewService {
+            ledger: ledger.clone(),
+            habits: habit_repo.clone(),
+            clock: clock.clone(),
+            paths: paths.clone(),
+        };
 
         Ok(Self {
             areas: AreaService {
@@ -286,6 +297,7 @@ impl AppState {
             challenges,
             annual_goals,
             score_history,
+            weekly_review,
             ledger,
             search,
             backups,
