@@ -14,12 +14,12 @@
 
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chrono::{Local, TimeZone};
 use rusqlite::{Connection, OpenFlags};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use zip::write::SimpleFileOptions;
 use zip::{AesMode, CompressionMethod, ZipArchive, ZipWriter};
 
@@ -39,6 +39,52 @@ pub struct BackupInfo {
     pub name: String,
     pub created_at_ms: i64,
     pub size_bytes: u64,
+}
+
+/// A configuração de backup — persistida FORA do banco (`backup-config.json` na
+/// raiz de dados), de propósito: a senha nunca pode viver dentro do próprio
+/// backup que ela protege. Ver ADR-0050.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupConfig {
+    /// O auto-backup diário está ligado? Ligado por padrão — "seus dados a salvo"
+    /// é o estado inicial, não um opt-in.
+    pub enabled: bool,
+    /// A senha do AES-256, se o usuário optou por cifrar. `None` = zip em claro,
+    /// que ainda é um backup perfeitamente restaurável.
+    pub password: Option<String>,
+    /// Uma pasta extra (ex.: OneDrive/Dropbox) para onde cada backup é copiado.
+    pub sync_dir: Option<String>,
+}
+
+impl Default for BackupConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            password: None,
+            sync_dir: None,
+        }
+    }
+}
+
+/// O resumo que o rodapé/Configurações mostram — o indicador de "último backup".
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupStatus {
+    /// O instante do backup mais recente, ou `None` se nunca houve um.
+    pub last_backup_ms: Option<i64>,
+    pub count: usize,
+    pub enabled: bool,
+    /// A UI mostra "protegido por senha" sem NUNCA devolver a senha em si.
+    pub has_password: bool,
+    pub sync_dir: Option<String>,
+}
+
+/// O marcador de um restauro pendente, lido no boot antes de o banco abrir.
+#[derive(Debug, Serialize, Deserialize)]
+struct PendingRestore {
+    name: String,
+    password: Option<String>,
 }
 
 /// O motor: cria snapshots, lista, poda e restaura.
@@ -138,6 +184,71 @@ impl BackupEngine {
         Ok(removed)
     }
 
+    /// A configuração atual (ou o padrão, se o arquivo ainda não existe).
+    pub fn config(&self) -> Result<BackupConfig> {
+        load_config(&self.paths)
+    }
+
+    /// Grava a configuração.
+    pub fn set_config(&self, cfg: &BackupConfig) -> Result<()> {
+        save_config(&self.paths, cfg)
+    }
+
+    /// O resumo para a UI: quando foi o último backup, quantos há, e a config —
+    /// menos a senha, que nunca sai daqui.
+    pub fn status(&self) -> Result<BackupStatus> {
+        let cfg = load_config(&self.paths)?;
+        let list = self.list()?;
+        Ok(BackupStatus {
+            last_backup_ms: list.first().map(|b| b.created_at_ms),
+            count: list.len(),
+            enabled: cfg.enabled,
+            has_password: cfg.password.is_some(),
+            sync_dir: cfg.sync_dir,
+        })
+    }
+
+    /// Cria um backup COM a configuração corrente: cifra com a senha salva (se
+    /// houver) e copia para a pasta de sync (se houver). É o "backup agora" da UI
+    /// e o corpo do auto-backup — um só caminho, para manual e automático saírem
+    /// idênticos.
+    ///
+    /// Best-effort na cópia de sync: se a pasta externa sumiu (pen drive
+    /// desconectado, OneDrive pausado), o backup local ainda vale — a falha da
+    /// cópia é registrada, não propagada.
+    pub fn create_configured(&self) -> Result<BackupInfo> {
+        let cfg = load_config(&self.paths)?;
+        let info = self.create(cfg.password.as_deref())?;
+        if let Some(dir) = cfg.sync_dir.as_deref() {
+            if let Err(e) = copy_to_sync(&self.paths.backups.join(&info.name), dir) {
+                tracing::warn!(error = %e, dir, "cópia do backup para a pasta de sync falhou");
+            }
+        }
+        Ok(info)
+    }
+
+    /// O auto-backup: cria um snapshot se HOJE ainda não tem um e a auto-cópia
+    /// está ligada. Idempotente por dia — chamado na abertura do app (a "primeira
+    /// escrita do dia" na prática é a primeira vez que o app roda no dia). Devolve
+    /// `Some` só quando de fato criou um.
+    pub fn auto_backup_if_due(&self) -> Result<Option<BackupInfo>> {
+        let cfg = load_config(&self.paths)?;
+        if !cfg.enabled {
+            return Ok(None);
+        }
+
+        let today = self.clock.today_local();
+        let has_today = self
+            .list()?
+            .iter()
+            .any(|b| local_day(b.created_at_ms).as_deref() == Some(today.as_str()));
+        if has_today {
+            return Ok(None);
+        }
+
+        self.create_configured().map(Some)
+    }
+
     fn zip_snapshot(&self, snap: &Path, dest: &Path, password: Option<&str>) -> Result<()> {
         let file = fs::File::create(dest).map_err(io_err)?;
         let mut zip = ZipWriter::new(file);
@@ -208,6 +319,92 @@ pub fn restore_from_zip(paths: &Paths, zip_path: &Path, password: Option<&str>) 
     Ok(())
 }
 
+/// Marca um backup para ser restaurado no PRÓXIMO boot, antes de o banco abrir.
+///
+/// Não restaura agora: o `nexus.db` está aberto e travado enquanto o app roda. A
+/// UI grava o marcador e pede um reinício; `apply_pending_restore` faz o trabalho
+/// no boot seguinte, quando nenhuma conexão segura o arquivo. Valida cedo que o
+/// backup existe, para o usuário não reiniciar atrás de um arquivo que não está lá.
+pub fn stage_restore(paths: &Paths, name: &str, password: Option<String>) -> Result<()> {
+    let zip = paths.backups.join(name);
+    if !zip.exists() {
+        return Err(NexusError::NotFound(format!(
+            "backup {name} não encontrado"
+        )));
+    }
+    let pending = PendingRestore {
+        name: name.to_string(),
+        password,
+    };
+    let json = serde_json::to_vec(&pending)
+        .map_err(|e| NexusError::Storage(format!("marcador de restauro ilegível: {e}")))?;
+    fs::write(pending_path(paths), json).map_err(io_err)
+}
+
+/// Aplica um restauro pendente, se houver, ANTES de o banco abrir. Chamado no
+/// topo do boot. Devolve `true` se restaurou.
+///
+/// O marcador é SEMPRE removido no fim — restaurou ou falhou —, para um restauro
+/// que der errado não entrar em loop a cada boot. Se falhar, o banco atual (que
+/// nunca foi tocado, pois a troca só ocorre após o quick_check passar) segue
+/// válido e o app abre normalmente.
+pub fn apply_pending_restore(paths: &Paths) -> Result<bool> {
+    let marker = pending_path(paths);
+    let bytes = match fs::read(&marker) {
+        Ok(b) => b,
+        Err(_) => return Ok(false), // sem marcador = nada a fazer
+    };
+    let pending: PendingRestore = serde_json::from_slice(&bytes)
+        .map_err(|e| NexusError::Storage(format!("marcador de restauro corrompido: {e}")))?;
+
+    let zip = paths.backups.join(&pending.name);
+    let outcome = restore_from_zip(paths, &zip, pending.password.as_deref());
+    let _ = fs::remove_file(&marker);
+    outcome.map(|_| true)
+}
+
+fn pending_path(paths: &Paths) -> PathBuf {
+    paths.root.join(".pending-restore.json")
+}
+
+fn config_path(paths: &Paths) -> PathBuf {
+    paths.root.join("backup-config.json")
+}
+
+/// Lê a config; um arquivo ausente devolve o padrão (auto-backup ligado).
+pub fn load_config(paths: &Paths) -> Result<BackupConfig> {
+    match fs::read(config_path(paths)) {
+        Ok(bytes) => serde_json::from_slice(&bytes)
+            .map_err(|e| NexusError::Storage(format!("config de backup ilegível: {e}"))),
+        Err(_) => Ok(BackupConfig::default()),
+    }
+}
+
+pub fn save_config(paths: &Paths, cfg: &BackupConfig) -> Result<()> {
+    let json = serde_json::to_vec_pretty(cfg)
+        .map_err(|e| NexusError::Storage(format!("config de backup não serializável: {e}")))?;
+    fs::write(config_path(paths), json).map_err(io_err)
+}
+
+/// Copia um zip de backup para a pasta de sync, criando-a se preciso.
+fn copy_to_sync(zip: &Path, sync_dir: &str) -> Result<()> {
+    let dir = Path::new(sync_dir);
+    fs::create_dir_all(dir).map_err(io_err)?;
+    let name = zip
+        .file_name()
+        .ok_or_else(|| NexusError::Storage("nome de backup inválido para copiar".into()))?;
+    fs::copy(zip, dir.join(name)).map_err(io_err)?;
+    Ok(())
+}
+
+/// O dia LOCAL ('YYYY-MM-DD') de um instante — a chave "já tem backup de hoje?".
+fn local_day(ms: i64) -> Option<String> {
+    Local
+        .timestamp_millis_opt(ms)
+        .single()
+        .map(|d| d.format("%Y-%m-%d").to_string())
+}
+
 /// Abre um arquivo de banco só-leitura e roda o `quick_check` — o mesmo veredito
 /// que o `Db::open` exige na abertura.
 fn quick_check_file(path: &Path) -> Result<String> {
@@ -240,4 +437,136 @@ fn io_err(e: std::io::Error) -> NexusError {
 
 fn zip_err(e: zip::result::ZipError) -> NexusError {
     NexusError::Storage(format!("zip: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::clock::test_support::FixedClock;
+    use chrono::TimeZone;
+
+    /// (epoch-ms, dia local) de uma data, consistentes entre si — o dia derivado
+    /// do ms é o mesmo que o relógio reporta, senão a checagem "já tem backup de
+    /// hoje?" nunca casaria.
+    fn moment(y: i32, m: u32, d: u32) -> (i64, String) {
+        let dt = Local.with_ymd_and_hms(y, m, d, 10, 0, 0).single().unwrap();
+        (dt.timestamp_millis(), dt.format("%Y-%m-%d").to_string())
+    }
+
+    fn open(paths: &Paths) -> Arc<Db> {
+        let db = Arc::new(Db::open(paths).unwrap());
+        db.with_write(|c| {
+            c.execute_batch(
+                "INSERT INTO areas (id, name) VALUES ('a1', 'Saúde');
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                 VALUES ('n1', 'note', 'oi', 'a1', 1, 1);",
+            )?;
+            Ok(())
+        })
+        .unwrap();
+        db
+    }
+
+    #[test]
+    fn auto_backup_runs_once_per_day() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::at(dir.path().to_path_buf()).unwrap();
+        let db = open(&paths);
+        let (ms, day) = moment(2026, 7, 18);
+        let engine = BackupEngine::new(db, paths.clone(), Arc::new(FixedClock::new(ms, &day)));
+
+        // Primeira vez no dia: cria.
+        assert!(engine.auto_backup_if_due().unwrap().is_some());
+        // De novo no MESMO dia: não duplica.
+        assert!(engine.auto_backup_if_due().unwrap().is_none());
+        assert_eq!(engine.list().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn auto_backup_respects_the_disabled_switch() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::at(dir.path().to_path_buf()).unwrap();
+        let db = open(&paths);
+        let (ms, day) = moment(2026, 7, 18);
+        let engine = BackupEngine::new(db, paths.clone(), Arc::new(FixedClock::new(ms, &day)));
+
+        engine
+            .set_config(&BackupConfig {
+                enabled: false,
+                password: None,
+                sync_dir: None,
+            })
+            .unwrap();
+
+        assert!(engine.auto_backup_if_due().unwrap().is_none());
+        assert_eq!(engine.list().unwrap().len(), 0, "desligado não cria backup");
+    }
+
+    #[test]
+    fn status_reports_the_latest_backup_and_hides_the_password() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::at(dir.path().to_path_buf()).unwrap();
+        let db = open(&paths);
+        let (ms, day) = moment(2026, 7, 18);
+        let engine = BackupEngine::new(db, paths.clone(), Arc::new(FixedClock::new(ms, &day)));
+
+        engine
+            .set_config(&BackupConfig {
+                enabled: true,
+                password: Some("segredo".into()),
+                sync_dir: None,
+            })
+            .unwrap();
+        let info = engine.create(Some("segredo")).unwrap();
+
+        let status = engine.status().unwrap();
+        assert_eq!(status.last_backup_ms, Some(info.created_at_ms));
+        assert_eq!(status.count, 1);
+        assert!(status.has_password, "a UI sabe que há senha...");
+        // ...mas o BackupStatus não carrega a senha em campo nenhum (só o bool).
+    }
+
+    #[test]
+    fn a_staged_restore_is_applied_on_the_next_boot() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::at(dir.path().to_path_buf()).unwrap();
+
+        // Faz um backup e fecha o banco.
+        let name = {
+            let db = open(&paths);
+            let (ms, day) = moment(2026, 7, 18);
+            let engine = BackupEngine::new(
+                db.clone(),
+                paths.clone(),
+                Arc::new(FixedClock::new(ms, &day)),
+            );
+            let info = engine.create(None).unwrap();
+            drop(engine);
+            drop(db);
+            info.name
+        };
+
+        // Corrompe o banco e marca o restauro.
+        fs::write(&paths.db, b"lixo").unwrap();
+        stage_restore(&paths, &name, None).unwrap();
+
+        // "Boot": aplica o pendente e abre.
+        assert!(
+            apply_pending_restore(&paths).unwrap(),
+            "o restauro pendente foi aplicado"
+        );
+        assert!(
+            !pending_path(&paths).exists(),
+            "o marcador some depois de aplicado"
+        );
+
+        let db = Db::open(&paths).unwrap();
+        let nodes: i64 = db
+            .with_read(|c| Ok(c.query_row("SELECT COUNT(*) FROM nodes", [], |r| r.get(0))?))
+            .unwrap();
+        assert_eq!(nodes, 1, "os dados voltaram");
+
+        // Um segundo boot não repete nada (marcador já foi embora).
+        assert!(!apply_pending_restore(&paths).unwrap());
+    }
 }

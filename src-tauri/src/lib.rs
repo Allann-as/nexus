@@ -39,6 +39,16 @@ pub fn run() {
     let _log_guard = logging::init(&paths);
     tracing::info!(root = %paths.root.display(), "iniciando NEXUS");
 
+    // Um restauro pendente é aplicado ANTES de abrir o banco — é o único momento
+    // em que nenhuma conexão segura o `nexus.db` (ver commands::backup). Falhar
+    // aqui não trava o app: a troca só ocorre após o quick_check passar, então o
+    // banco atual segue válido se o restauro der errado.
+    match infrastructure::backup::apply_pending_restore(&paths) {
+        Ok(true) => tracing::info!("restauro pendente aplicado no boot"),
+        Ok(false) => {}
+        Err(e) => tracing::error!(error = %e, "restauro pendente falhou; mantendo o banco atual"),
+    }
+
     let db = match Db::open(&paths) {
         Ok(db) => db,
         Err(e) => {
@@ -192,7 +202,11 @@ pub fn run() {
             commands::score::freeze_daily_scores,
             commands::score::score_history,
             commands::backup::create_backup,
+            commands::backup::auto_backup,
             commands::backup::list_backups,
+            commands::backup::backup_status,
+            commands::backup::set_backup_config,
+            commands::backup::restore_backup,
         ])
         .build(tauri::generate_context!())
         .expect("não foi possível construir a janela do NEXUS")

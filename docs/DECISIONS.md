@@ -1552,3 +1552,49 @@ não violar o orçamento de movimento (§6) nem a regra de zero animação em id
 **Consequência.** O Hub e toda tela ganham casca de profundidade sem um único frame
 de animação e sem um elemento a mais no fluxo de conteúdo. A moldura é imune à
 rolagem porque o seu container, por definição, não rola.
+
+## ADR-0050 — A senha do backup é opcional, mora em claro fora do backup, e o restauro é aplicado no boot
+
+**Data:** 2026-07-18 · **Status:** aceito
+
+**Contexto.** O auto-backup (M5) precisa cifrar o zip SEM o usuário presente (roda
+sozinho na abertura do dia). Isso força a senha a estar guardada em algum lugar
+legível pelo app. E o restauro precisa trocar o arquivo `nexus.db`, que está aberto
+e travado enquanto o app roda.
+
+**Decisão.**
+
+1. **A senha é OPCIONAL.** Sem senha, o backup é um zip em claro — perfeitamente
+   restaurável. A cifra AES-256 protege o backup em REPOUSO num lugar que não é
+   totalmente confiável: a cópia na pasta de sync (OneDrive/Dropbox), que sai da
+   máquina. O modelo de ameaça é "alguém pega o zip na nuvem", não "alguém tem
+   acesso de administrador ao seu disco local" — contra este último, cifrar o
+   backup com uma senha guardada ao lado não protege coisa alguma, e o app inteiro
+   é local-first sem essa pretensão.
+
+2. **A senha é guardada em `backup-config.json`, em claro, na raiz de dados — NUNCA
+   dentro do banco.** Se ela vivesse no `nexus.db`, estaria dentro do próprio
+   backup que ela cifra (e um atacante com o zip decifraria com a senha que o
+   próprio zip carrega — absurdo). Fora do banco, a cópia remota do backup não traz
+   a senha junto. Consequência que a UI declara COM TODAS AS LETRAS (regra explícita
+   do arquiteto): **perder a senha é perder o backup.** Não há recuperação — é o
+   preço de não ter servidor que a guarde.
+
+3. **O `BackupStatus` nunca devolve a senha** — só um `has_password: bool`. A senha
+   entra (ao configurar) e não volta; trocar exige digitá-la de novo. A UI usa um
+   tri-estado (`None` mantém, `Some("")` desliga, `Some(x)` troca) para editar a
+   config sem nunca precisar reexibir o segredo.
+
+4. **O restauro é aplicado no BOOT, não na hora.** `restore_backup` só MARCA
+   (`.pending-restore.json`); o `lib::run` chama `apply_pending_restore` antes do
+   `Db::open`, quando nenhuma conexão segura o `nexus.db` (o Windows tranca arquivos
+   abertos). O marcador é sempre removido após a tentativa — um restauro que falha
+   não entra em loop. E a troca só ocorre DEPOIS de o snapshot extraído passar no
+   `quick_check`: um zip corrompido ou uma senha errada aborta com o banco vivo
+   intacto. A UI, ao marcar, pede o reinício.
+
+**Consequência.** O auto-backup roda cifrado e sem supervisão; a senha nunca entra
+no artefato que protege; e o restauro é seguro por construção — ou devolve um banco
+que passou no quick_check, ou não toca no que já existe. O `%APPDATA%/Nexus` real
+segue intocado por qualquer verificação de dev (ADR-0048): tudo isto foi provado no
+banco de teste isolado.
