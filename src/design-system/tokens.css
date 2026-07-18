@@ -59,6 +59,10 @@
      não hardcoded porque o tema claro precisa de outras. */
   --dot-alpha: 0.035;
   --aurora-alpha: 0.13;
+  /* O grão da camada de viewport (ver .nx-viewport-fx). Alto o
+     bastante para dar casca ao fundo, baixo o bastante para sumir
+     sobre o texto. */
+  --grain-alpha: 0.05;
 
   color-scheme: dark;
 }
@@ -100,6 +104,7 @@
 
   --dot-alpha: 0.05;
   --aurora-alpha: 0.07;
+  --grain-alpha: 0.04;
 
   color-scheme: light;
 }

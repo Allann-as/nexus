@@ -16,17 +16,19 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Info, Plus, Settings, Trophy } from "lucide-react";
+import { Flame, Info, LayoutGrid, Plus, Settings, Trophy } from "lucide-react";
 
 import {
   dashboardToday,
   gamificationOverview,
+  getInsights,
+  scoreHistory,
   sphereOverview,
   toNexusError,
   type Level,
 } from "../../lib/ipc";
 import { Button, cx } from "../../design-system/primitives";
-import { Gauge } from "../../design-system/charts";
+import { Gauge, Sparkline } from "../../design-system/charts";
 import { ScoreDetail } from "./ScoreDetail";
 import { SphereCard } from "./SphereCard";
 import { TodayStrip } from "./TodayStrip";
@@ -39,6 +41,12 @@ export function HubScreen() {
   const spheres = useQuery({ queryKey: ["spheres", "overview"], queryFn: sphereOverview });
   const today = useQuery({ queryKey: ["dashboard", "today"], queryFn: dashboardToday });
   const gami = useQuery({ queryKey: ["gamification"], queryFn: gamificationOverview });
+  // A forma dos últimos 30 dias do Score, sob o gauge. O boot já congelou os
+  // dias fechados (useBootTasks); aqui só lemos.
+  const scores = useQuery({ queryKey: ["score-history", 30], queryFn: () => scoreHistory(30) });
+  // O alerta de carga vem do CACHE dos insights (leitura instantânea, `null` no
+  // primeiro boot) — o Hub nunca recomputa. Só aparece quando dispara.
+  const insights = useQuery({ queryKey: ["insights", "cache"], queryFn: getInsights });
 
   const levelByArea = new Map<string, Level>(
     (gami.data?.spheres ?? []).map((s) => [s.areaId, s.level]),
@@ -144,6 +152,26 @@ export function HubScreen() {
               label="Nexus Score"
               color={scoreColor(score?.value ?? null)}
             />
+            {/* A tendência de 30 dias: o gauge diz "hoje", a linha diz "para onde".
+                Só desenha com dois dias fechados — antes disso não há forma. */}
+            {(() => {
+              const points = scores.data ?? [];
+              if (points.length < 2) return null;
+              const latest = points[points.length - 1].value;
+              return (
+                <div className="mt-2 flex flex-col items-center gap-0.5">
+                  <Sparkline
+                    data={points.map((p) => p.value / 100)}
+                    color={scoreColor(latest)}
+                    width={132}
+                    height={26}
+                  />
+                  <span className="text-[9px] font-medium tracking-[0.1em] text-[var(--text-tertiary)] uppercase">
+                    últimos {points.length} dias
+                  </span>
+                </div>
+              );
+            })()}
             {score && (
               <button
                 onClick={() => setShowMath((s) => !s)}
@@ -165,6 +193,44 @@ export function HubScreen() {
           </div>
         </header>
 
+        {/* ===== alerta de carga (só quando dispara) ===== */}
+        {insights.data?.burnout?.alert && (
+          <button
+            onClick={() => navigate("/insights")}
+            className={cx(
+              "mt-6 flex w-full items-center gap-3 rounded-[var(--radius-lg)] border p-3.5 text-left",
+              "transition-colors duration-[var(--dur-fast)]",
+            )}
+            style={{
+              borderColor: "var(--warning)",
+              background: "color-mix(in srgb, var(--warning) 8%, var(--bg-surface))",
+            }}
+          >
+            <span
+              className="grid size-9 shrink-0 place-items-center rounded-full"
+              style={{
+                background: "color-mix(in oklab, var(--warning) 18%, transparent)",
+                color: "var(--warning)",
+              }}
+            >
+              <Flame size={17} aria-hidden />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[13px] font-semibold text-[var(--text-primary)]">
+                Sua carga está acima do normal
+              </span>
+              <span className="block text-[12px] text-[var(--text-secondary)]">
+                Esta semana está em{" "}
+                <strong className="tabular text-[var(--text-primary)]">
+                  {insights.data.burnout.ratio.toFixed(2)}×
+                </strong>{" "}
+                a média das últimas {insights.data.burnout.baselineWeeks} semanas. Ver nos
+                Insights →
+              </span>
+            </span>
+          </button>
+        )}
+
         {/* ===== a grade de Esferas ===== */}
         <section className="mt-8">
           <SectionLabel>Suas Esferas</SectionLabel>
@@ -172,14 +238,16 @@ export function HubScreen() {
           {spheres.isPending ? (
             <SkeletonGrid />
           ) : list.length === 0 ? (
-            <div className="mt-3 rounded-[var(--radius-lg)] border border-dashed border-[var(--border-subtle)] p-10 text-center">
+            <div className="mt-3 flex flex-col items-center gap-3 rounded-[var(--radius-lg)] border border-dashed border-[var(--border-subtle)] p-10 text-center">
+              <span className="grid size-12 place-items-center rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                <LayoutGrid size={20} className="text-[var(--text-tertiary)]" strokeWidth={1.75} aria-hidden />
+              </span>
               <p className="text-[13px] text-[var(--text-tertiary)]">
                 Nenhuma Esfera ativa. Todas arquivadas?
               </p>
               <Button
                 variant="secondary"
                 size="sm"
-                className="mt-3"
                 onClick={() => navigate("/areas")}
               >
                 Gerenciar Esferas

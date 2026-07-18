@@ -156,6 +156,61 @@
       radial-gradient(circle, rgb(12 20 36 / var(--dot-alpha)) 1px, transparent 1px);
   }
 
+  /* ============================================================
+     A CAMADA DE VIEWPORT — profundidade que emoldura, não que rola
+     ------------------------------------------------------------
+     A aurora e o dot grid vivem no `.nx-page` e ROLAM com o
+     conteúdo (background-attachment: local) — eles são a identidade
+     da tela. Mas grão e vinheta emolduram os OLHOS, não o texto:
+     têm que ficar presos à viewport enquanto a página rola por
+     baixo. Por isso moram aqui, sobre o `<main>` do Shell — que é
+     `overflow-hidden` e do tamanho da janela — e não sobre a
+     página rolante.
+
+     Duas camadas, ambas estáticas, ambas `pointer-events: none`,
+     ambas puro CSS: custo de render ~zero, nada de canvas, nada de
+     frame de animação. Como não há movimento, não há o que desligar
+     em `prefers-reduced-motion` — mas o grão também some com o
+     tema/preferência abaixo. */
+  .nx-viewport-fx {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    /* A vinheta: os cantos escurecem de leve para o centro puxar o
+       olho. Elipse, não círculo, porque a janela é mais larga que
+       alta. O miolo (60%) fica 100% transparente — nada de véu
+       cinza sobre o conteúdo. */
+    background: radial-gradient(
+      130% 130% at 50% 42%,
+      transparent 58%,
+      color-mix(in srgb, var(--bg-void) 55%, transparent) 100%
+    );
+  }
+
+  /* O grão: a mesma textura de filme dos fundos escuros bons.
+     feTurbulence embarcado como data-URI (zero rede), lado a lado
+     em tiles de 140px, em `overlay` para pegar só a luz — sobre
+     texto ele é literalmente imperceptível, sobre as áreas chapadas
+     dá a "casca" que separa o fundo de um PDF. */
+  .nx-viewport-fx::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 140px 140px;
+    mix-blend-mode: overlay;
+    opacity: var(--grain-alpha);
+  }
+
+  /* No tema claro o `overlay` do grão clareia demais — quase branca
+     a tela. Reduz a presença; a vinheta escura sobre fundo claro já
+     é suave por natureza. */
+  :root[data-theme="light"] .nx-viewport-fx::before {
+    mix-blend-mode: multiply;
+    opacity: calc(var(--grain-alpha) * 0.6);
+  }
+
   /* A entrada de uma tela: fade + 12px. Só na montagem. */
   .nx-enter {
     animation: nexus-enter 160ms var(--ease) both;

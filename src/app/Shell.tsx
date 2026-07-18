@@ -45,9 +45,12 @@ export function Shell() {
         {/* `overflow-hidden` e não `overflow-y-auto`: cada tela é dona da própria
             rolagem agora. O `.nx-page` pinta o fundo em camadas, e um container
             rolante por fora arrastaria a aurora para fora da viewport junto com
-            o conteúdo — o fundo tem que ficar parado enquanto o texto rola. */}
-        <main className="min-h-0 flex-1 overflow-hidden">
+            o conteúdo — o fundo tem que ficar parado enquanto o texto rola.
+            `relative` ancora a camada de grão + vinheta, que emoldura a viewport
+            (fica parada) enquanto a página rola por dentro. */}
+        <main className="relative min-h-0 flex-1 overflow-hidden">
           <Outlet />
+          <div className="nx-viewport-fx" aria-hidden />
         </main>
       </div>
 
