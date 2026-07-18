@@ -28,6 +28,7 @@ import {
 
 import { NAV_ITEMS, SECONDARY_ROUTES } from "../../app/navigation";
 import { listAccounts, listAreas, search, type Kind } from "../../lib/ipc";
+import { SPHERE_SECTIONS } from "../spheres/sections";
 import { sphereIcon } from "../hub/SphereIcon";
 import { parseAporte } from "../finance/parseAporte";
 import { useAporte } from "../../stores/aporte";
@@ -146,6 +147,17 @@ export function CommandPalette({
         icon: sphereIcon(area.icon),
         run: () => navigate(`/sphere/${area.id}`),
       })),
+      // Cada SEÇÃO de cada Esfera é um destino direto — o teclado alcança
+      // "Saúde · Treino" sem passar pela tela da Esfera. O fuzzy filtra o volume.
+      ...areas.flatMap((area) =>
+        SPHERE_SECTIONS[area.template].map((section) => ({
+          id: `section:${area.id}:${section.key}`,
+          label: `${area.name} · ${section.label}`,
+          hint: "Seção",
+          icon: section.icon,
+          run: () => navigate(`/sphere/${area.id}?s=${section.key}`),
+        })),
+      ),
     ],
     [areas, navigate],
   );

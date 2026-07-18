@@ -161,6 +161,12 @@
     animation: nexus-enter 160ms var(--ease) both;
   }
 
+  /* A troca de seção dentro de uma Esfera: fade + 6px, curto. A `key` do bloco
+     remonta e dispara isto; o bloco global de prefers-reduced-motion o neutraliza. */
+  .nx-section-enter {
+    animation: nexus-section-enter var(--dur-base) var(--ease) both;
+  }
+
   /* O painel de vidro dos overlays (palette, modais).
      MÁXIMO UM VISÍVEL POR VEZ. O backdrop-filter é o efeito mais
      caro do arsenal: ele força o compositor a reamostrar tudo que

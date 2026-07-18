@@ -247,6 +247,17 @@
   }
 }
 
+@keyframes nexus-section-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* As listras de uma barra de progresso ativa. Aplicada APENAS
    quando há atividade recente — uma barra listrada eternamente em
    movimento é uma animação rodando com o app ocioso. */

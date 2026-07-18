@@ -12,11 +12,12 @@
  */
 
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Settings2 } from "lucide-react";
 
 import {
+  countNodes,
   getArea,
   listAccounts,
   sphereOverview,
@@ -25,8 +26,10 @@ import {
   type SphereCard,
   type Template,
 } from "../../lib/ipc";
-import { Button, cx } from "../../design-system/primitives";
+import { Button } from "../../design-system/primitives";
 import { SphereIcon } from "../hub/SphereIcon";
+import { SphereNav } from "./SphereNav";
+import { SPHERE_SECTIONS, resolveIndicator, type IndicatorView } from "./sections";
 import { GoalsList } from "../goals/GoalsList";
 import { SphereDashboard } from "./SphereDashboard";
 import { HealthDashboard } from "./HealthDashboard";
@@ -41,62 +44,10 @@ import { CareerContent } from "../career/CareerContent";
 import { StudiesContent } from "../studies/StudiesContent";
 import { SimpleContent } from "../simple/SimpleContent";
 
-/**
- * As tabs de cada template.
- *
- * `milestone` = o marco em que a tab ganha conteúdo. `undefined` = já funciona.
- */
-interface Tab {
-  key: string;
-  label: string;
-  milestone?: string;
-}
-
-const TABS: Record<Template, Tab[]> = {
-  health: [
-    { key: "dashboard", label: "Painel" },
-    { key: "goals", label: "Metas" },
-    { key: "checkpoints", label: "Checkpoints" },
-    { key: "training", label: "Treino" },
-    { key: "exams", label: "Exames" },
-  ],
-  finance: [
-    { key: "dashboard", label: "Painel" },
-    { key: "goals", label: "Metas" },
-    { key: "contributions", label: "Aportes" },
-    // A alocação (donut + Saúde Financeira) mora no Painel — é o resumo da
-    // Esfera. Uma tab só para ela repetiria o que o Painel já mostra.
-  ],
-  fin_goals: [
-    { key: "boxes", label: "Caixinhas" },
-    { key: "goals", label: "Metas" },
-  ],
-  career: [
-    { key: "dashboard", label: "Painel" },
-    { key: "goals", label: "Metas" },
-    { key: "projects", label: "Projetos" },
-    { key: "skills", label: "Habilidades" },
-  ],
-  studies: [
-    { key: "dashboard", label: "Painel" },
-    { key: "goals", label: "Metas" },
-    { key: "languages", label: "Idiomas" },
-    { key: "college", label: "Faculdade" },
-    { key: "courses", label: "Cursos" },
-    { key: "library", label: "Biblioteca" },
-  ],
-  simple: [
-    { key: "dashboard", label: "Painel" },
-    { key: "goals", label: "Metas" },
-    { key: "agenda", label: "Agenda" },
-    { key: "checklists", label: "Checklists" },
-  ],
-};
-
 export function SphereScreen() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
-  const [tab, setTab] = useState("dashboard");
+  const [params, setParams] = useSearchParams();
 
   const area = useQuery({ queryKey: ["areas", id], queryFn: () => getArea(id) });
   // O card já vem calculado pelo Hub; reusar a mesma query evita uma segunda
@@ -104,6 +55,24 @@ export function SphereScreen() {
   // navegação Hub → Esfera ser instantânea.
   const overview = useQuery({ queryKey: ["spheres", "overview"], queryFn: sphereOverview });
   const card = overview.data?.find((s) => s.id === id);
+
+  // Os números dos micro-indicadores. `active_goals` é universal (toda Esfera tem
+  // "Metas"); os outros dois só valem a viagem no template que os mostra.
+  const goals = useQuery({
+    queryKey: ["nodes", "count", { kind: "goal", status: "active", areaId: id }],
+    queryFn: () => countNodes({ kind: "goal", status: "active", areaId: id }),
+    enabled: !!id,
+  });
+  const boxes = useQuery({
+    queryKey: ["nodes", "count", { kind: "fin_goal", status: "active", areaId: id }],
+    queryFn: () => countNodes({ kind: "fin_goal", status: "active", areaId: id }),
+    enabled: !!id && area.data?.template === "fin_goals",
+  });
+  const reading = useQuery({
+    queryKey: ["nodes", "count", { kind: "book", status: "active", areaId: id }],
+    queryFn: () => countNodes({ kind: "book", status: "active", areaId: id }),
+    enabled: !!id && area.data?.template === "studies",
+  });
 
   if (area.error) {
     return (
@@ -116,8 +85,27 @@ export function SphereScreen() {
   }
 
   const sphere = area.data;
-  const tabs = sphere ? TABS[sphere.template] : [];
-  const active = tabs.find((t) => t.key === tab) ?? tabs[0];
+  const sections = sphere ? SPHERE_SECTIONS[sphere.template] : [];
+  // A seção ativa vive no URL (`?s=`): deep-linkável, sobrevive ao voltar, e é o
+  // que deixa o Ctrl+K abrir uma seção direto. Uma chave inválida cai na primeira.
+  const requested = params.get("s");
+  const active = sections.find((s) => s.key === requested)?.key ?? sections[0]?.key ?? "dashboard";
+  const setActive = (key: string) => {
+    const next = new URLSearchParams(params);
+    next.set("s", key);
+    // replace: as setas trocam de seção rápido; empilhar histórico a cada tecla
+    // encheria o "voltar" de passos que ninguém pediu.
+    setParams(next, { replace: true });
+  };
+
+  const indicatorData = {
+    card,
+    activeGoals: goals.data ?? 0,
+    activeBoxes: boxes.data ?? 0,
+    reading: reading.data ?? 0,
+  };
+  const indicators: Record<string, IndicatorView | null> = {};
+  for (const s of sections) indicators[s.key] = resolveIndicator(s.indicator, indicatorData);
 
   return (
     <div
@@ -170,42 +158,24 @@ export function SphereScreen() {
           </Button>
         </header>
 
-        {/* ===== tabs pill ===== */}
-        <nav className="mt-6 flex flex-wrap gap-1.5">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => !t.milestone && setTab(t.key)}
-              disabled={!!t.milestone}
-              title={t.milestone ? `Chega no ${t.milestone}` : undefined}
-              className={cx(
-                "flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[12.5px] font-medium",
-                "transition-[background-color,color,border-color] duration-[var(--dur-fast)] ease-[var(--ease)]",
-                "border",
-                t.key === active?.key
-                  ? "border-[color-mix(in_srgb,var(--sphere)_40%,transparent)] bg-[color-mix(in_srgb,var(--sphere)_14%,transparent)] text-[var(--text-primary)]"
-                  : t.milestone
-                    ? "cursor-not-allowed border-transparent text-[var(--text-tertiary)] opacity-60"
-                    : "border-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-raised)] hover:text-[var(--text-primary)]",
-              )}
-            >
-              {t.label}
-              {t.milestone && (
-                <span className="rounded-full bg-[var(--bg-raised)] px-1.5 py-0.5 font-mono text-[9px] text-[var(--text-tertiary)]">
-                  {t.milestone}
-                </span>
-              )}
-            </button>
-          ))}
-        </nav>
+        {sphere && (
+          <div className="mt-6">
+            <SphereNav
+              sections={sections}
+              active={active}
+              indicators={indicators}
+              onSelect={setActive}
+            />
+          </div>
+        )}
 
+        {/* A troca de seção anima o conteúdo (fade + 6px). A `key` remonta o
+            bloco, disparando a keyframe; `prefers-reduced-motion` a corta. */}
         <div className="mt-6">
           {sphere && (
-            <SphereContent
-              sphere={sphere}
-              card={card}
-              tab={active?.key ?? "dashboard"}
-            />
+            <div key={active} className="nx-section-enter">
+              <SphereContent sphere={sphere} card={card} tab={active} />
+            </div>
           )}
         </div>
       </div>

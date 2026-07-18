@@ -1281,3 +1281,47 @@ por `generate.mjs` — a geometria nasce de math a partir do centro, nada "a olh
 **Consequência.** A marca tem permanência e uma só identidade em qualquer fundo. Os
 outros dois conceitos ficam arquivados em `docs/logo-concepts-v2/` — se um dia a
 marca for revista, o ponto de partida é rico, não um recomeço do zero.
+
+## ADR-0044 — Navegação interna por Esfera: um padrão único, com indicador de estado real
+
+**Data:** 2026-07-18 · **Status:** aceito · **M4.6** · §2.3/2.4 do redesign
+
+**Contexto.** Dentro de uma Esfera, a navegação eram tabs "pill" (Painel/Metas/
+Checkpoints…) num `Record<Template, Tab[]>` local do `SphereScreen`: rótulo puro,
+sem ícone, sem estado, e o estado da tab morava num `useState` (não deep-linkável,
+o "voltar" não voltava). O redesign pediu navegação **contextual da Esfera** com
+ícone + **micro-indicador de estado** por seção, e teclado de primeira classe.
+
+**Decisão.**
+
+1. **Um catálogo único (`features/spheres/sections.ts`), como `app/navigation.ts` é
+   para o global.** `SPHERE_SECTIONS[template]` dá as seções (chave, rótulo, ícone
+   Lucide, e qual indicador cada uma mostra). O `SphereNav` desenha, o `SphereScreen`
+   resolve o conteúdo, e a Command Palette registra cada seção como destino — todos
+   leem a MESMA lista. A anatomia é idêntica em toda Esfera (ADR-0044 é sobre isso):
+   o que muda por Esfera é cor, ícones e seções, nunca o desenho.
+
+2. **O micro-indicador é REAL ou não existe.** `resolveIndicator` (função pura)
+   traduz um `IndicatorKind` num rótulo a partir de números crus (o `SphereCard` do
+   Hub, custo zero, para streak/checkpoints/projetos; um `count_nodes` barato para
+   metas/caixinhas/leitura ativas). Sem dado → o indicador é **omitido**, nunca um
+   zero inventado. Streak de 0, `habitsTodayTotal` de 0 etc. somem.
+
+3. **A seção ativa mora no URL (`?s=<chave>`), não em estado.** Deep-linkável, o
+   "voltar" funciona, e é o que permite o **Ctrl+K abrir "Saúde · Treino" direto**.
+   Troca de seção usa `replace` (as setas não devem entulhar o histórico). Chave
+   inválida cai na primeira seção.
+
+4. **Teclado:** o `SphereNav` é um `tablist` de verdade — roving tabindex, setas/
+   Home/End movem e ativam, `1–9` saltam. Motion na troca: a `key={active}` remonta
+   o bloco e dispara `nexus-section-enter` (fade + 6px, `--dur-base`, `--ease` =
+   `cubic-bezier(0.2,0,0,1)`), neutralizado pelo `prefers-reduced-motion` global.
+
+5. **As pills antigas morreram em TODAS as Esferas no mesmo commit** — nada de
+   estado híbrido. O conceito de tab "com marco" (desabilitada até um milestone)
+   saiu junto: no M4.6 toda seção já tem conteúdo.
+
+**Consequência.** Uma anatomia só, consistente, que segura conteúdos muito
+diferentes (checkpoints da Saúde, aportes das Finanças, biblioteca dos Estudos) sem
+um design por Esfera. Os indicadores começam onde o dado já existe; Carreira (item 6)
+e Estudos (item 7) aprofundam os seus quando trouxerem os dados novos.
