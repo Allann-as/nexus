@@ -36,6 +36,7 @@ import {
   Search as SearchIcon,
   Settings,
   Sparkles,
+  Target,
   Timer,
   Trophy,
   type LucideIcon,
@@ -128,6 +129,7 @@ export function TheNexo({ open, onClose }: { open: boolean; onClose: () => void 
       {
         label: "Análise",
         items: [
+          { id: "/objectives", label: "Objetivos", icon: Target, path: "/objectives", jumpKey: "o" },
           { id: "/insights", label: "Insights", icon: Sparkles, path: "/insights", jumpKey: "s" },
           { id: "/game", label: "Conquistas", icon: Trophy, path: "/game", jumpKey: "q" },
           { id: "/annual-goals", label: "Metas Anuais", icon: CalendarRange, path: "/annual-goals", jumpKey: "a" },

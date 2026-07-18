@@ -1832,3 +1832,36 @@ ledger":
 O padrão vale para qualquer LOG-fato futuro (a sessão de foco já apagava estado mantendo a
 história; agora o aporte também apenda a correção, um degrau mais honesto para dado que a
 Timeline desenha).
+
+## ADR-0057 — "Objetivos" é uma superfície de agregação, não um novo node; constância = meta anual + ritmo
+
+**Contexto.** Dirigindo o app, o usuário formulou o conceito: *"um objetivo pode ser uma
+promoção, pode ser correr 250x no ano; os objetivos financeiros podem entrar na aba de
+Finanças."* Na cabeça dele, a caixinha (dinheiro guardado), a meta de carreira e a meta de
+constância ("correr 100 dias") são a MESMA coisa — algo que se persegue no tempo. Mas no
+modelo eles são entidades diferentes: `fin_goal`, `annual_goal`, marcos de carreira. Unificá-los
+num node novo exigiria migração destrutiva e reescreveria história — o oposto da constituição.
+
+**Decisão.** "Objetivos" não é uma entidade nova: é uma **superfície de agregação** (read-only)
+sobre os nodes que já existem.
+
+1. **O hub `/objectives`** lê `list_fin_goals` (todas as caixinhas) + `annual_goal_year` (as
+   metas do ano) e as apresenta num grid único, filtrável por **tipo** e por **Esfera**. Cada
+   card leva à sua tela de ORIGEM (a caixinha à sua Esfera, a meta a Metas Anuais) — a
+   superfície agrega, não possui. Nada é migrado; some o hub, os dados seguem intactos.
+
+2. **Finanças ganha a aba "Objetivos"** (as caixinhas), porque dado financeiro mora junto do
+   dinheiro. É a mesma `CaixinhasTab`, agora também acessível de dentro da Esfera de Finanças —
+   uma segunda porta para os mesmos nodes, não uma cópia.
+
+3. **Constância = meta anual quantitativa + INDICADOR DE RITMO.** "Correr 100 dias em 2026" é
+   uma `annual_goal` quantitativa (alvo 100, unidade "dias"). O que faltava era a leitura viva:
+   `annualPace` (puro, testado) projeta o fim de ano por extrapolação linear do quanto do ano já
+   passou — `projeção = atual / fração_decorrida` — e diz quanto por mês falta para bater. A
+   frase aparece no card da meta e no hub. Determinístico, exibível, sem IA — a régua de sempre.
+
+**Consequência.** O usuário ganha o "lugar dos objetivos" que pediu, com a constância viva
+(ritmo, não só placar), sem um node novo nem migração. O que fica para o ARSENAL adiante (v1.1,
+honestamente): o tracker plugável de dias (heatmap anexável a qualquer contexto via `links`) e a
+contagem AUTOMÁTICA a partir de um hábito ligado — hoje a meta quantitativa é incrementada à mão.
+A superfície e o ritmo já estão de pé para recebê-los.

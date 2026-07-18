@@ -8,7 +8,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Target, Trash2 } from "lucide-react";
+import { Plus, Target, Trash2, TrendingUp } from "lucide-react";
 
 import {
   abandonAnnualGoal,
@@ -28,6 +28,7 @@ import { ProgressBar } from "../../design-system/charts";
 import { useToasts } from "../../stores/toasts";
 import { NodeLinkSection } from "../links/NodeLinkSection";
 import { NewAnnualGoalModal } from "./NewAnnualGoalModal";
+import { annualPace } from "../objectives/pace";
 
 const pct = (r: number) => Math.round(r * 100);
 
@@ -96,7 +97,13 @@ export function AnnualGoalsScreen() {
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {(data?.goals ?? []).map((g) => (
-              <GoalCard key={g.id} goal={g} area={g.areaId ? areaById.get(g.areaId) : undefined} year={year} />
+              <GoalCard
+                key={g.id}
+                goal={g}
+                area={g.areaId ? areaById.get(g.areaId) : undefined}
+                year={year}
+                elapsed={data?.yearElapsedRatio ?? 0}
+              />
             ))}
           </div>
         )}
@@ -149,10 +156,13 @@ function GoalCard({
   goal,
   area,
   year,
+  elapsed,
 }: {
   goal: AnnualGoal;
   area: Area | undefined;
   year: number;
+  /** Fração do ano decorrida — alimenta o indicador de ritmo (REFINO R7). */
+  elapsed: number;
 }) {
   const qc = useQueryClient();
   const pushError = useToasts((s) => s.pushError);
@@ -213,6 +223,27 @@ function GoalCard({
         </p>
       )}
       <ProgressBar value={goal.progressRatio} color={color} className="mt-2" />
+
+      {/* O indicador de RITMO (REFINO R7): "no ritmo atual fecha em X". É o que
+          faz de uma meta de constância ("correr 100 dias") algo vivo. */}
+      {active &&
+        quantitative &&
+        goal.targetValue != null &&
+        (() => {
+          const p = annualPace(goal.currentValue, goal.targetValue!, elapsed);
+          if (!p) return null;
+          return (
+            <p
+              className={cx(
+                "mt-2 flex items-center gap-1.5 text-[11px] leading-[15px]",
+                p.onTrack ? "text-[var(--success)]" : "text-[var(--warning)]",
+              )}
+            >
+              <TrendingUp size={12} className="shrink-0" />
+              {p.message}
+            </p>
+          );
+        })()}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {active && quantitative && (

@@ -216,7 +216,7 @@ function SphereContent({
   }
 
   if (sphere.template === "finance") {
-    return <FinanceContent tab={tab} />;
+    return <FinanceContent tab={tab} areaId={sphere.id} />;
   }
 
   if (sphere.template === "fin_goals") {
@@ -244,7 +244,7 @@ function SphereContent({
  * O modal vive AQUI e não em cada tab: abrir um aporte do Painel e da lista tem
  * que ser o mesmo gesto, e um modal por tab teria dois estados a sincronizar.
  */
-function FinanceContent({ tab }: { tab: string }) {
+function FinanceContent({ tab, areaId }: { tab: string; areaId: string }) {
   const client = useQueryClient();
   const [aporte, setAporte] = useState(false);
   const { data: accounts = [] } = useQuery({
@@ -261,6 +261,9 @@ function FinanceContent({ tab }: { tab: string }) {
     <>
       {tab === "contributions" ? (
         <ContributionsTab onAporte={() => setAporte(true)} />
+      ) : tab === "objetivos" ? (
+        // Os objetivos financeiros (caixinhas) desta Esfera (REFINO R7).
+        <CaixinhasTab areaId={areaId} />
       ) : (
         <FinanceDashboard onAporte={() => setAporte(true)} />
       )}

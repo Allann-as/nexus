@@ -15,6 +15,7 @@ import { CalendarScreen } from "../features/calendar/CalendarScreen";
 import { InsightsScreen } from "../features/insights/InsightsScreen";
 import { GamificationScreen } from "../features/gamification/GamificationScreen";
 import { AnnualGoalsScreen } from "../features/annual-goals/AnnualGoalsScreen";
+import { ObjectivesScreen } from "../features/objectives/ObjectivesScreen";
 import { NotesScreen } from "../features/notes/NotesScreen";
 import { TimelineScreen } from "../features/timeline/TimelineScreen";
 import { FocusScreen } from "../features/focus/FocusScreen";
@@ -70,6 +71,7 @@ const router = createHashRouter([
       { path: "insights", element: <InsightsScreen /> },
       { path: "game", element: <GamificationScreen /> },
       { path: "annual-goals", element: <AnnualGoalsScreen /> },
+      { path: "objectives", element: <ObjectivesScreen /> },
       { path: "settings", element: <SettingsScreen /> },
     ],
   },

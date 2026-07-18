@@ -59,6 +59,9 @@ export const NAV_ITEMS: NavItem[] = [
   // Metas Anuais e Conquistas atravessam todas as Esferas (o ano inteiro, o XP de
   // tudo), então moram na rail como o Insights — não numa Esfera.
   { path: "/annual-goals", label: "Metas Anuais", icon: CalendarRange, jumpKey: "a" },
+  // Objetivos (REFINO R7): o hub que agrega objetivos de qualquer natureza —
+  // caixinhas, metas anuais, constância. Global como os outros da rail.
+  { path: "/objectives", label: "Objetivos", icon: Target, jumpKey: "o" },
   { path: "/game", label: "Conquistas", icon: Trophy, jumpKey: "q" },
 ];
 

@@ -67,6 +67,9 @@ export const SPHERE_SECTIONS: Record<Template, SphereSection[]> = {
     { key: "dashboard", label: "Painel", icon: LayoutDashboard },
     { key: "goals", label: "Metas", icon: Target, indicator: "active_goals" },
     { key: "contributions", label: "Aportes", icon: Banknote },
+    // Os objetivos financeiros (caixinhas) moram junto do resto de Finanças
+    // (REFINO R7) — dado financeiro no lugar do dinheiro.
+    { key: "objetivos", label: "Objetivos", icon: PiggyBank, indicator: "active_boxes" },
   ],
   fin_goals: [
     { key: "boxes", label: "Caixinhas", icon: PiggyBank, indicator: "active_boxes" },
