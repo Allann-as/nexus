@@ -24,6 +24,7 @@ import {
   Keyboard,
   KeyRound,
   Layers,
+  Lock,
   Moon,
   Palette,
   RotateCcw,
@@ -43,10 +44,13 @@ import {
   createBackup,
   exportData,
   listBackups,
+  disablePin,
+  lockStatus,
   quickCheck,
   rebuildSearchIndex,
   restoreBackup,
   setBackupConfig,
+  setPin,
   systemInfo,
   toNexusError,
   vacuumDb,
@@ -60,6 +64,7 @@ import { Formula } from "../../design-system/Formula";
 import { NexusMark } from "../../design-system/NexusMark";
 import { useToasts } from "../../stores/toasts";
 import { useUi } from "../../stores/ui";
+import { useLock } from "../../stores/lock";
 import { allShortcuts } from "./shortcuts";
 
 interface SettingsSection {
@@ -73,6 +78,7 @@ const SECTIONS: SettingsSection[] = [
   { key: "atalhos", label: "Atalhos", icon: Keyboard },
   { key: "dados", label: "Backup & Dados", icon: Database },
   { key: "manutencao", label: "Manutenção", icon: Wrench },
+  { key: "seguranca", label: "Segurança", icon: Lock },
   { key: "gamificacao", label: "Gamificação", icon: Trophy },
   { key: "sobre", label: "Sobre", icon: Info },
 ];
@@ -121,6 +127,7 @@ export function SettingsScreen() {
             {active === "atalhos" && <ShortcutsSection />}
             {active === "dados" && <DataSection />}
             {active === "manutencao" && <MaintenanceSection />}
+            {active === "seguranca" && <SecuritySection />}
             {active === "gamificacao" && <GamificationSection />}
             {active === "sobre" && <AboutSection />}
           </div>
@@ -719,6 +726,137 @@ function MaintenanceSection() {
         onClick={() => vacuum.mutate()}
       />
     </div>
+  );
+}
+
+/* ===== Segurança (M5.5 §3.5) ===== */
+
+function SecuritySection() {
+  const qc = useQueryClient();
+  const push = useToasts((s) => s.push);
+  const pushError = useToasts((s) => s.pushError);
+  const setEnabled = useLock((s) => s.setEnabled);
+  const status = useQuery({ queryKey: ["lock-status"], queryFn: lockStatus });
+  const enabled = status.data?.enabled ?? false;
+
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [off, setOff] = useState("");
+
+  const afterChange = (nowEnabled: boolean) => {
+    setEnabled(nowEnabled);
+    setCurrent("");
+    setNext("");
+    setOff("");
+    qc.invalidateQueries({ queryKey: ["lock-status"] });
+  };
+
+  const change = useMutation({
+    mutationFn: () => setPin(enabled ? current : null, next),
+    onSuccess: () => {
+      push("success", enabled ? "PIN alterado" : "Tela de bloqueio ativada");
+      afterChange(true);
+    },
+    onError: pushError,
+  });
+
+  const disable = useMutation({
+    mutationFn: () => disablePin(off),
+    onSuccess: () => {
+      push("success", "Tela de bloqueio desativada");
+      afterChange(false);
+    },
+    onError: pushError,
+  });
+
+  const isPin = (v: string) => /^\d{6}$/.test(v);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-start gap-3 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3">
+        <ShieldCheck size={16} className="mt-0.5 shrink-0 text-[var(--accent)]" />
+        <p className="text-[12px] leading-[18px] text-[var(--text-secondary)]">
+          O PIN é <strong className="text-[var(--text-primary)]">privacidade de tela</strong>:
+          impede que alguém que pega o computador desbloqueado abra o NEXUS. Ele{" "}
+          <strong className="text-[var(--text-primary)]">não cifra o banco</strong> — quem tem
+          acesso à máquina consegue ler o arquivo. Guardamos só um hash com salt, nunca o PIN. O
+          backup e a restauração não dependem dele. Bloqueie a qualquer momento com <Kbd>Ctrl</Kbd>{" "}
+          <Kbd>L</Kbd>.
+        </p>
+      </div>
+
+      <SettingCard
+        title={enabled ? "Trocar o PIN" : "Ativar a tela de bloqueio"}
+        hint={
+          enabled
+            ? "Informe o PIN atual e o novo. Seis dígitos."
+            : "Defina um PIN de seis dígitos. O app passará a abrir bloqueado."
+        }
+      >
+        <div className="flex flex-col gap-2.5">
+          {enabled && (
+            <PinInput value={current} onChange={setCurrent} placeholder="PIN atual" />
+          )}
+          <PinInput value={next} onChange={setNext} placeholder="Novo PIN (6 dígitos)" />
+          <div>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={change.isPending || !isPin(next) || (enabled && !isPin(current))}
+              onClick={() => change.mutate()}
+            >
+              {change.isPending ? "…" : enabled ? "Trocar PIN" : "Ativar"}
+            </Button>
+          </div>
+        </div>
+      </SettingCard>
+
+      {enabled && (
+        <SettingCard
+          title="Desativar a tela de bloqueio"
+          hint="Informe o PIN atual para desligar. O app voltará a abrir direto."
+        >
+          <div className="flex flex-col gap-2.5">
+            <PinInput value={off} onChange={setOff} placeholder="PIN atual" />
+            <div>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={disable.isPending || !isPin(off)}
+                onClick={() => disable.mutate()}
+              >
+                {disable.isPending ? "…" : "Desativar"}
+              </Button>
+            </div>
+          </div>
+        </SettingCard>
+      )}
+    </div>
+  );
+}
+
+/** Um campo de PIN: seis dígitos, mascarado, só aceita número. */
+function PinInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <input
+      type="password"
+      inputMode="numeric"
+      autoComplete="off"
+      maxLength={6}
+      value={value}
+      onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 6))}
+      placeholder={placeholder}
+      data-selectable
+      className="tabular w-full max-w-[240px] rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-3 py-1.5 text-[14px] tracking-[0.3em] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] placeholder:tracking-normal placeholder:text-[var(--text-tertiary)]"
+    />
   );
 }
 

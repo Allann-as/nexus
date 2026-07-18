@@ -52,6 +52,7 @@ use crate::infrastructure::repositories::{
     study_session_repo::SqliteStudySessionRepository, subject_repo::SqliteSubjectRepository,
     task_repo::SqliteTaskRepository, timeline_repo::SqliteTimelineRepository,
 };
+use crate::infrastructure::security::SecurityService;
 
 pub struct AppState {
     pub db: Arc<Db>,
@@ -86,6 +87,8 @@ pub struct AppState {
     pub backups: BackupEngine,
     /// A exportação humana (M5): JSON por tabela + CSVs + mídia + README.
     pub exports: ExportEngine,
+    /// A tela de bloqueio por PIN (M5.5 §3.5): privacidade de tela, não de disco.
+    pub security: SecurityService,
 }
 
 impl AppState {
@@ -267,6 +270,11 @@ impl AppState {
         let backups = BackupEngine::new(db.clone(), paths.clone(), clock.clone());
         let exports = ExportEngine::new(db.clone(), paths.clone(), clock.clone());
 
+        // A tela de bloqueio (M5.5 §3.5): semeia o PIN de fábrica no primeiro boot
+        // (idempotente). Vive em disco, fora do banco — sobrevive a um restauro.
+        let security = SecurityService::new(paths.clone());
+        security.ensure_seeded()?;
+
         // A Revisão Semanal (M5): o ritual de 6 passos. O rascunho vive em disco
         // (retomável); o evento só entra no ledger quando os 6 passos fecham.
         let weekly_review = WeeklyReviewService {
@@ -314,6 +322,7 @@ impl AppState {
             search,
             backups,
             exports,
+            security,
             db,
             paths,
         })

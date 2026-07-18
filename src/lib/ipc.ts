@@ -1805,6 +1805,30 @@ export interface ExportInfo {
 /** Exportação humana: JSON por tabela + CSVs + mídia + README numa pasta. */
 export const exportData = () => call<ExportInfo>("export_data");
 
+/* ===== M5.5 — tela de bloqueio por PIN ===== */
+
+export interface LockStatus {
+  /** Há um PIN ativo? A tela de bloqueio no boot segue isto. */
+  enabled: boolean;
+}
+
+/** O app deve abrir bloqueado? Lido no boot. */
+export const lockStatus = () => call<LockStatus>("lock_status");
+
+/** Confere um PIN — só um booleano volta; o hash fica no backend. */
+export const verifyPin = (pin: string) => call<boolean>("verify_pin", { pin });
+
+/**
+ * Troca (ou define) o PIN. `current` é exigido quando já há um PIN ativo — a UI
+ * pede o atual antes. `newPin` deve ter 6 dígitos.
+ */
+export const setPin = (current: string | null, newPin: string) =>
+  call<void>("set_pin", { current, newPin });
+
+/** Desliga a tela de bloqueio — exige o PIN atual. */
+export const disablePin = (current: string) =>
+  call<void>("disable_pin", { current });
+
 /* ===== M5 — Revisão Semanal ===== */
 
 export interface WeeklyReviewState {

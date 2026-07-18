@@ -1731,3 +1731,43 @@ verificados na dirigida ao vivo do M6 (app instalado, não o dev).
 **Consequência.** Os orçamentos deixam de ser fé e viram número reproduzível. Se um
 dia uma query nova varrer o ledger inteiro (o erro clássico), o `bench_scale` a pega
 antes do usuário — a rede de segurança de escala que faltava.
+
+## ADR-0054 — A tela de bloqueio por PIN é privacidade de TELA, não cifra de disco
+
+**Contexto.** O M5.5 §3.5 pede uma tela de bloqueio por PIN na abertura do app. A
+tentação é vendê-la como "seus dados protegidos". Seria mentira: o NEXUS é um único
+`nexus.db` em `%APPDATA%/Nexus`, em claro no disco. Cifrar o banco de verdade (SQLCipher
+ou similar) mudaria a constituição — a chave teria que morar em algum lugar, o backup e a
+exportação humana (ADR-0050) parariam de ser legíveis "daqui a 30 anos sem o app", e o
+custo de abertura cresceria. Não é o que este PIN é.
+
+**Decisão.** O PIN é **privacidade de tela**: impede que alguém que pega o computador
+desbloqueado abra o NEXUS e leia a sua vida. Ele NÃO cifra o banco — quem tem acesso ao
+arquivo continua conseguindo lê-lo. A UI diz isso com todas as letras nas Configurações; o
+produto não finge uma proteção que não tem.
+
+1. **O PIN nunca vive em claro.** Guardamos `hash = SHA-256^120000(salt ‖ pin)` com um
+   **salt aleatório por instalação** (UUID v4). Não é Argon2 — e não precisa ser: o espaço
+   é de 10^6 PINs e o adversário que tem o arquivo `security.json` tem o `nexus.db` em claro
+   ao lado. O key-stretch existe para o hash não ser instantâneo, não para resistir a quem
+   já venceu (tem o disco). Fingir Argon2 aqui seria teatro de segurança.
+
+2. **A config mora FORA do banco** (`security.json` na raiz de dados), como a do backup
+   (ADR-0050). Duas consequências desejadas: o PIN é lido no boot **sem depender do banco**,
+   e **sobrevive a um restauro** — restaurar um snapshot antigo não reabre a sua tela, e o
+   PIN não viaja dentro da exportação humana (ele não é "dado seu", é uma trava de sessão).
+
+3. **Backup e restauração independem do PIN.** A trava é um overlay de UI acima do router;
+   o boot (auto-backup, congelar Score, sync de conquistas) roda por baixo dela. Perder o
+   PIN nunca é perder os dados — o banco e os backups seguem intactos e legíveis.
+
+4. **PIN de fábrica `242807`, semeado no primeiro boot** (idempotente). Está no MANUAL: não
+   é segredo, é o ponto de partida. O usuário troca ou desliga nas Configurações — e trocar
+   ou desligar **exige o PIN atual** (a fechadura que qualquer um reconfigura não tranca
+   nada). `Ctrl+L` bloqueia à mão. Seis dígitos, seis círculos; do 3º erro em diante, um
+   atraso de 1s por tentativa esfria o brute force manual.
+
+**Consequência.** O NEXUS ganha a trava de tela que faltava para um app que concentra a
+vida inteira, sem mentir sobre o que ela protege nem quebrar a longevidade do dado. Cifra
+de disco de verdade, se um dia for pedida, é outra decisão — e teria que resolver a chave,
+o backup e a exportação de propósito, não de brinde.

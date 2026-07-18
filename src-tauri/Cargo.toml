@@ -27,7 +27,7 @@ r2d2 = "0.8"
 r2d2_sqlite = "0.31"
 rusqlite_migration = "2"
 
-uuid = { version = "1", features = ["v7"] }
+uuid = { version = "1", features = ["v7", "v4"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 thiserror = "2"
 tracing = "0.1"

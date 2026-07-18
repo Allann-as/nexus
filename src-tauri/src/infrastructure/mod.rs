@@ -9,3 +9,4 @@ pub mod fts;
 pub mod logging;
 pub mod paths;
 pub mod repositories;
+pub mod security;

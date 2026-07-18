@@ -20,6 +20,9 @@ import { TimelineScreen } from "../features/timeline/TimelineScreen";
 import { FocusScreen } from "../features/focus/FocusScreen";
 import { WeeklyReviewScreen } from "../features/weekly-review/WeeklyReviewScreen";
 import { useUi, applyTheme, applyDensity, applyReducedMotion } from "../stores/ui";
+import { useLock } from "../stores/lock";
+import { lockStatus } from "../lib/ipc";
+import { LockScreen } from "../features/lock/LockScreen";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -89,6 +92,44 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
+      <LockGate />
     </QueryClientProvider>
   );
+}
+
+/**
+ * A cortina do PIN (M5.5 §3.5). No boot, lê `lock_status`: se há PIN ativo, abre
+ * bloqueado. `Ctrl+L` bloqueia à mão a qualquer momento. Fica ACIMA do router —
+ * a tela de bloqueio cobre o app inteiro, topbar incluída.
+ */
+function LockGate() {
+  const locked = useLock((s) => s.locked);
+  const setEnabled = useLock((s) => s.setEnabled);
+
+  useEffect(() => {
+    let alive = true;
+    lockStatus()
+      .then((s) => {
+        if (!alive) return;
+        setEnabled(s.enabled);
+        if (s.enabled) useLock.setState({ locked: true });
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [setEnabled]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "l") {
+        e.preventDefault();
+        useLock.getState().lock();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  return locked ? <LockScreen /> : null;
 }

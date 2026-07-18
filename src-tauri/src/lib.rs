@@ -216,6 +216,10 @@ pub fn run() {
             commands::weekly_review::save_weekly_review_progress,
             commands::weekly_review::weekly_review_habits,
             commands::weekly_review::complete_weekly_review,
+            commands::security::lock_status,
+            commands::security::verify_pin,
+            commands::security::set_pin,
+            commands::security::disable_pin,
         ])
         .build(tauri::generate_context!())
         .expect("não foi possível construir a janela do NEXUS")
