@@ -23,6 +23,7 @@ use crate::application::use_cases::{
     insights::{InsightService, InsightWorker},
     nodes::NodeService,
     notes::NoteService,
+    score_history::ScoreHistoryService,
     spheres::SphereService,
     tasks::TaskService,
     timeline::TimelineService,
@@ -66,6 +67,7 @@ pub struct AppState {
     pub gamification: GamificationService,
     pub challenges: ChallengeService,
     pub annual_goals: AnnualGoalService,
+    pub score_history: ScoreHistoryService,
     pub ledger: Arc<dyn LedgerRepository>,
     pub search: Arc<dyn SearchRepository>,
 }
@@ -210,6 +212,13 @@ impl AppState {
             clock: clock.clone(),
         };
 
+        // O Nexus Score congelado (ADR-0039): congela os dias fechados no ledger.
+        let score_history = ScoreHistoryService {
+            insights: Arc::new(SqliteInsightRepository::new(db.clone())),
+            ledger: ledger.clone(),
+            clock: clock.clone(),
+        };
+
         Ok(Self {
             areas: AreaService {
                 repo: area_repo.clone(),
@@ -239,6 +248,7 @@ impl AppState {
             gamification,
             challenges,
             annual_goals,
+            score_history,
             ledger,
             search,
             db,

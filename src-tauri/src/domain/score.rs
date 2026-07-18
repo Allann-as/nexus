@@ -158,6 +158,41 @@ pub fn compute(input: ScoreInputs) -> Score {
     }
 }
 
+/// A versão da fórmula do score CONGELADO. Gravada no payload de cada evento
+/// `nexus_score` — se a fórmula mudar, muda daí para frente, e cada linha antiga
+/// diz sob qual versão nasceu (ADR-0039).
+pub const FROZEN_FORMULA_VERSION: &str = "m4.5-behavioural";
+
+/// O score COMPORTAMENTAL de um dia — só hábitos e tarefas, os dois sinais que a
+/// história consegue reconstruir (ADR-0039).
+///
+/// Rotina matinal e "inbox zerada" são sinais de AGORA (a rotina é inferida do
+/// estado corrente; "zerada" é o inbox de hoje), não reconstruíveis para um dia
+/// que passou — então não entram no congelado. Os pesos se redistribuem entre o
+/// que se aplica (ADR-0014), como no score ao vivo. `None` quando não havia nem
+/// hábito agendado nem tarefa planejada: não há o que medir.
+pub fn behavioural(
+    habits_scheduled: u32,
+    habits_done: u32,
+    tasks_planned: u32,
+    tasks_done: u32,
+) -> Option<u8> {
+    let mut earned = 0.0;
+    let mut weight = 0.0;
+    if habits_scheduled > 0 {
+        earned += W_HABITS * ratio(habits_done, habits_scheduled);
+        weight += W_HABITS;
+    }
+    if tasks_planned > 0 {
+        earned += W_TASKS * ratio(tasks_done, tasks_planned);
+        weight += W_TASKS;
+    }
+    if weight == 0.0 {
+        return None;
+    }
+    Some((earned / weight * 100.0).round().clamp(0.0, 100.0) as u8)
+}
+
 fn ratio(done: u32, total: u32) -> f64 {
     if total == 0 {
         return 0.0;
@@ -328,6 +363,26 @@ mod tests {
         }
         assert!(s.formula.contains("3 de 4 hábitos agendados"));
         assert!(s.formula.contains("2 itens aguardando triagem"));
+    }
+
+    #[test]
+    fn behavioural_redistributes_over_habits_and_tasks() {
+        // Só hábitos e tarefas, tudo cumprido → 100.
+        assert_eq!(behavioural(4, 4, 3, 3), Some(100));
+        // Metade dos hábitos, tarefas perfeitas: (40*0.5 + 30*1.0)/70 = 71,4 → 71.
+        assert_eq!(behavioural(4, 2, 3, 3), Some(71));
+        // Só hábitos (sem tarefa planejada): 2 de 4 → 50.
+        assert_eq!(behavioural(4, 2, 0, 0), Some(50));
+    }
+
+    #[test]
+    fn behavioural_is_none_when_the_day_had_nothing() {
+        assert_eq!(behavioural(0, 0, 0, 0), None);
+    }
+
+    #[test]
+    fn behavioural_never_exceeds_100_on_overshoot() {
+        assert_eq!(behavioural(2, 9, 1, 4), Some(100));
     }
 
     #[test]

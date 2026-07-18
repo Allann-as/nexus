@@ -18,6 +18,7 @@ pub mod habits;
 pub mod insights;
 pub mod nodes;
 pub mod notes;
+pub mod score;
 pub mod search;
 pub mod spheres;
 pub mod system;

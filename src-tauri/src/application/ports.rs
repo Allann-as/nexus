@@ -1154,6 +1154,12 @@ pub trait InsightRepository: Send + Sync {
     /// metade da carga da semana (converte `starts_at` ms → dia local).
     fn event_count_by_day(&self, from_day: &str, to_day: &str) -> Result<Vec<(String, i64)>>;
 
+    /// Tarefas PLANEJADAS por dia local (`scheduled_at`) — para o Score congelado.
+    fn scheduled_tasks_by_day(&self, from_day: &str, to_day: &str) -> Result<Vec<(String, i64)>>;
+
+    /// Tarefas CONCLUÍDAS por dia local (`completed_at`) — para o Score congelado.
+    fn completed_tasks_by_day(&self, from_day: &str, to_day: &str) -> Result<Vec<(String, i64)>>;
+
     /// Lê uma entrada do cache de insights.
     fn cache_get(&self, key: &str) -> Result<Option<CachedInsight>>;
 

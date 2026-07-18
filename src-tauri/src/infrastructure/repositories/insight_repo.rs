@@ -121,6 +121,38 @@ impl InsightRepository for SqliteInsightRepository {
         })
     }
 
+    fn scheduled_tasks_by_day(&self, from_day: &str, to_day: &str) -> Result<Vec<(String, i64)>> {
+        self.db.with_read(|c| {
+            let mut stmt = c.prepare_cached(
+                "SELECT date(scheduled_at / 1000, 'unixepoch', 'localtime') AS d, COUNT(*)
+                   FROM task_details
+                  WHERE scheduled_at IS NOT NULL
+                    AND date(scheduled_at / 1000, 'unixepoch', 'localtime') BETWEEN ?1 AND ?2
+                  GROUP BY d",
+            )?;
+            let rows = stmt.query_map(params![from_day, to_day], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+            })?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        })
+    }
+
+    fn completed_tasks_by_day(&self, from_day: &str, to_day: &str) -> Result<Vec<(String, i64)>> {
+        self.db.with_read(|c| {
+            let mut stmt = c.prepare_cached(
+                "SELECT date(completed_at / 1000, 'unixepoch', 'localtime') AS d, COUNT(*)
+                   FROM task_details
+                  WHERE completed_at IS NOT NULL
+                    AND date(completed_at / 1000, 'unixepoch', 'localtime') BETWEEN ?1 AND ?2
+                  GROUP BY d",
+            )?;
+            let rows = stmt.query_map(params![from_day, to_day], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+            })?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        })
+    }
+
     fn cache_get(&self, key: &str) -> Result<Option<CachedInsight>> {
         self.db.with_read(|c| {
             let row = c

@@ -15,6 +15,7 @@ pub mod habits;
 pub mod insights;
 pub mod nodes;
 pub mod notes;
+pub mod score_history;
 pub mod spheres;
 pub mod tasks;
 pub mod timeline;

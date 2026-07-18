@@ -1162,3 +1162,44 @@ um dia hábitos ganharem duração, a fórmula soma minutos sem mudar a arquitet
 recomputação diária; um agendador noturno dedicado entra com o M5 (backup/manutenção),
 onde já haverá um lugar para tarefas periódicas. O congelamento de rollups do Score
 é o ADR-0039/0034.
+
+---
+
+## ADR-0041 — O Score congelado é COMPORTAMENTAL; rotina e inbox são sinais de agora
+
+**Data:** 2026-07-17 · **Status:** aceito · **M4.5** · **refina o ADR-0039**
+
+**Contexto.** O ADR-0039 decidiu congelar o Nexus Score de cada dia no ledger. Ao
+implementar, uma pergunta apareceu: o score ao vivo (`domain::score::compute`) tem
+QUATRO parcelas — hábitos (40%), tarefas (30%), rotina matinal (20%) e inbox zerada
+(10%). Duas delas não são reconstruíveis para um dia que passou:
+
+- **Rotina matinal** é INFERIDA do estado corrente (qual hábito tem lembrete antes
+  das 12h, `DashboardService::morning_routine_progress`) — não há registro histórico
+  de "qual era a rotina naquele dia".
+- **Inbox zerada** é o inbox de HOJE; o inbox de uma terça de três meses atrás não é
+  reconstruível sem reprocessar todo o ledger de triagem, e mesmo assim de forma frágil.
+
+**Decisão.** O score CONGELADO usa só as duas parcelas que a história prova:
+**hábitos (agendados/cumpridos) e tarefas (planejadas/concluídas) do dia**, com os
+pesos redistribuídos entre elas (ADR-0014) — `domain::score::behavioural`. O payload
+grava `formulaVersion = "m4.5-behavioural"`, então a diferença fica documentada em
+cada linha. O score AO VIVO do Hub continua com as quatro parcelas: ele mede o agora,
+onde rotina e inbox existem.
+
+**Duas aproximações honestas, registradas.** (1) A agenda dos hábitos aplicada ao
+passado é a agenda ATUAL — trocas de agenda não são versionadas; um hábito que virou
+"3× por semana" ontem conta como tal para todo o histórico. (2) Só hábitos ATIVOS
+entram; um hábito arquivado depois some da reconstrução. Ambas movem o número de
+alguns pontos em casos raros e nunca a direção da tendência — que é o que o gráfico
+mostra.
+
+**Sem rollup pré-agregado para o Score.** Ao contrário das contagens de evento (que
+podem ser milhares por mês e por isso viram `timeline_rollups`), o score é ≤ 1 evento
+por dia — ≤ 366 por ano. Ler e mediar um ano de scores congelados do ledger é trivial;
+pré-agregar seria complexidade sem ganho. O `score_history` lê direto do ledger
+(`entity_kind = daily_score`), filtrado por `day` (usa `idx_ledger_day`).
+
+**A escrita mora na abertura.** `freeze_daily_scores` congela os dias FECHADOS ainda
+sem linha (teto de 60 dias por passada), idempotente pelo `entity_id = dia`. Mesmo
+padrão "a navegação paga a escrita" do ADR-0026/0034 — o pool de leitura é `query_only`.
