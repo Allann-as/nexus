@@ -1,8 +1,8 @@
 # NEXUS — Arquitetura
 
 > Documento vivo. Atualize-o no mesmo commit que muda a estrutura.
-> Estado atual: **M4.5 em andamento** (Vida: BI, gamificação, Metas Anuais).
-> Base: M4 concluído (Esferas II + Memória).
+> Estado atual: **M4.5 concluído** (Vida: BI, gamificação, Metas Anuais).
+> Próximo: M4.6 — Aurora 2.0 (redesign).
 
 ## 1. O que o NEXUS é
 
@@ -101,7 +101,7 @@ logs/      rotação diária
 | **M3** | Calendário (timeblocking, RFC-5545, conflitos), Metas + sub-desafios | ✅ **concluído** |
 | **M3.5** | Esferas I: Saúde (checkpoints, treino, exames) + Finanças (aportes, Saúde Financeira) | ✅ **concluído** |
 | **M4** | Esferas II: Objetivos Financeiros, Estudos + Biblioteca, Carreira; Notas; Timeline | ✅ **concluído** |
-| M4.5 | `bi_engine`, Momentum, Conquistas, Retrospectiva, Metas Anuais | 🔧 em andamento |
+| **M4.5** | `bi_engine`, XP/níveis, Conquistas, Temporadas, Metas Anuais, Score congelado | ✅ **concluído** |
 | M5 | Backup/restore, export, Revisão Semanal, Modo Foco, seed de 5 anos | ⬜ |
 | M6 | Ícone, instalador, manual, entrega | ⬜ |
 
@@ -218,6 +218,34 @@ logs/      rotação diária
   ADR-0035).
 - **Migration 0011**: recria `nodes` UMA vez para os dois kinds novos (ADR-0029), mais
   `fin_goal_details`/`fin_goal_deposits`, `book_details` e `reading_goals`.
+
+### O que o M4.5 entrega de verdade
+
+- **`bi_engine`** (`InsightService` + `InsightWorker`, ADR-0040): numa thread
+  própria, lê do pool `query_only` e grava só o `insight_cache`; aquece no boot e
+  recomputa **debounced** (30 s), com `input_signature` pulando o que não mudou. Os
+  insights que cruzam entidades: **correlações** entre pares de hábitos (2×2 sobre
+  os dias em que ambos estavam agendados, `domain::correlation`, com as guardas
+  n≥30 / faixa morta / pisos do template) e a **guarda anti-burnout**
+  (`domain::burnout`). Verificado ponta a ponta em `tests/life.rs`.
+- **Gamificação DERIVADA** (ADR-0037): XP por Esfera é a soma dos pontos de tudo
+  que o usuário fez (uma query só, pontos vindos do domínio), nunca uma coluna;
+  `domain::xp` dá o nível pela curva `100·n^1.5`. A **galeria de conquistas** tem
+  o catálogo no código (`domain::achievements`, ícones Lucide, nunca emoji) e o
+  desbloqueio no ledger, sincronizado de forma idempotente (ADR-0038).
+- **Temporadas** (kind `challenge`, ADR-0036): placar computado (ticks de um hábito
+  na janela, ou contador manual), estado "vencida" **derivado** da passagem do tempo,
+  ciclo completo (criar/incrementar/abandonar/`sync` que fecha as que bateram o alvo).
+- **Metas Anuais** (kind `annual_goal`, ADR-0036): organizadas por ano, binárias ou
+  quantitativas, com a visão do ano cruzando **% decorrido vs progresso** e os
+  checkpoints no ledger. Cria para o ano corrente e futuros; o passado é recusado.
+- **Nexus Score congelado** (ADR-0039/0041): cada dia fechado vira um evento
+  `nexus_score` no ledger — a história nunca é recomputada. O congelado é
+  comportamental (hábitos + tarefas), pois rotina e inbox são sinais de agora.
+- **Frontend**: telas de Insights, Conquistas (`/game`) e Metas Anuais
+  (`/annual-goals`), todas com ícones Lucide/SVG e "ⓘ como calculamos"
+  (`design-system/Formula`). As rotas e a rail vêm de `app/navigation.ts` (fonte
+  única), sem acoplar à sidebar — o M4.6 troca a casca lendo o mesmo array.
 
 ### Medições reais (build `tauri build`, release)
 

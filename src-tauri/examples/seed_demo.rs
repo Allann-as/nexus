@@ -18,9 +18,10 @@ use nexus_lib::application::ports::{
     NewContribution, NewEvent, NewEventDetails, NewGoal, NewGoalDetails, NewMilestone,
 };
 use nexus_lib::application::use_cases::{
-    areas::AreaService, books::BookService, career::CareerService, events::EventService,
-    fin_goals::FinGoalService, finance::FinanceService, goals::GoalService, habits::HabitService,
-    nodes::NodeService, notes::NoteService, tasks::TaskService,
+    annual_goals::AnnualGoalService, areas::AreaService, books::BookService, career::CareerService,
+    challenges::ChallengeService, events::EventService, fin_goals::FinGoalService,
+    finance::FinanceService, goals::GoalService, habits::HabitService, nodes::NodeService,
+    notes::NoteService, tasks::TaskService,
 };
 use nexus_lib::domain::entities::CareerMilestoneKind;
 use nexus_lib::domain::entities::{
@@ -33,7 +34,8 @@ use nexus_lib::infrastructure::clock::{SystemClock, Uuid7Gen};
 use nexus_lib::infrastructure::db::Db;
 use nexus_lib::infrastructure::paths::Paths;
 use nexus_lib::infrastructure::repositories::{
-    area_repo::SqliteAreaRepository, book_repo::SqliteBookRepository,
+    annual_goal_repo::SqliteAnnualGoalRepository, area_repo::SqliteAreaRepository,
+    book_repo::SqliteBookRepository, challenge_repo::SqliteChallengeRepository,
     contribution_repo::SqliteContributionRepository, event_repo::SqliteEventRepository,
     fin_goal_repo::SqliteFinGoalRepository, goal_repo::SqliteGoalRepository,
     habit_repo::SqliteHabitRepository, ledger_repo::SqliteLedgerRepository,
@@ -204,6 +206,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         None,
         None,
     )?;
+    // Um par CORRELACIONADO de propósito, para a tela de Insights ter um card que
+    // passa as guardas: nos dias em que "Dormir cedo" acontece, "Acordar cedo"
+    // dispara. Ambos diários → 120 dias de amostra comum (bem acima do n≥30).
+    let dormir = habits.create(
+        "Dormir cedo",
+        Some(&saude.id),
+        Schedule::Daily,
+        None,
+        None,
+        None,
+        Some("23:00".into()),
+    )?;
+    let acordar = habits.create(
+        "Acordar cedo",
+        Some(&saude.id),
+        Schedule::Daily,
+        None,
+        None,
+        None,
+        Some("06:00".into()),
+    )?;
     println!("  {} hábitos", habits.list(None)?.len());
 
     // ===== Histórico: 120 dias de ticks =====
@@ -257,6 +280,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let wd = nexus_lib::domain::schedule::weekday_index(day);
         if matches!(wd, 1 | 3 | 6) {
             habits.tick(&academia.id, Some(&d), TickStatus::Done, None)?;
+            ticks += 1;
+        }
+
+        // O par correlacionado. "Dormir cedo" em ~80% dos dias; "Acordar cedo"
+        // depende FORTE dele: quase sempre quando dormiu cedo, quase nunca quando
+        // não — o que produz lift alto e phi acima do piso do template.
+        let dormiu = n % 5 != 0;
+        if dormiu {
+            habits.tick(&dormir.id, Some(&d), TickStatus::Done, None)?;
+            ticks += 1;
+        }
+        let acordou = if dormiu { n % 13 != 0 } else { n % 4 == 0 };
+        if acordou {
+            habits.tick(&acordar.id, Some(&d), TickStatus::Done, None)?;
             ticks += 1;
         }
     }
@@ -792,6 +829,78 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(&saude.id),
         None,
     )?;
+
+    // ===== Temporadas (M4.5) =====
+    let challenges = ChallengeService {
+        challenges: Arc::new(SqliteChallengeRepository::new(db.clone())),
+        areas: area_repo.clone(),
+        habits: Arc::new(SqliteHabitRepository::new(db.clone())),
+        ids: ids.clone(),
+        clock: clock.clone(),
+    };
+    // Ligada à Academia: conta os ticks dos últimos 60 dias na janela.
+    challenges.create(
+        "90 dias de treino",
+        Some(saude.id.clone()),
+        &format_day(today - chrono::Duration::days(60)),
+        &format_day(today + chrono::Duration::days(30)),
+        "habit_days",
+        Some(academia.id.clone()),
+        30,
+    )?;
+    // Manual, com progresso parcial marcado à mão.
+    let ingles = challenges.create(
+        "Q3 sem faltar inglês",
+        Some(carreira.id.clone()),
+        &format_day(today - chrono::Duration::days(10)),
+        &format_day(today + chrono::Duration::days(80)),
+        "manual",
+        None,
+        60,
+    )?;
+    for _ in 0..18 {
+        challenges.increment(&ingles.challenge.id, 1)?;
+    }
+    println!("  2 temporadas");
+
+    // ===== Metas Anuais (M4.5) =====
+    let annual = AnnualGoalService {
+        annual_goals: Arc::new(SqliteAnnualGoalRepository::new(db.clone())),
+        areas: area_repo.clone(),
+        ids: ids.clone(),
+        clock: clock.clone(),
+    };
+    let year: i64 = clock.today_local()[..4].parse().unwrap_or(2026);
+    let ler_ano = annual.create(
+        "Ler 12 livros",
+        Some(carreira.id.clone()),
+        year,
+        "quantitative",
+        Some("livros".into()),
+        Some(12.0),
+        Some("livros".into()),
+    )?;
+    annual.update_progress(&ler_ano.goal.id, 5.0)?;
+    annual.create(
+        "Correr uma meia-maratona",
+        Some(saude.id.clone()),
+        year,
+        "binary",
+        None,
+        None,
+        None,
+    )?;
+    // Uma meta para o ano QUE VEM — planejar o futuro desde já (§2.3).
+    annual.create(
+        "Aprender alemão",
+        Some(carreira.id.clone()),
+        year + 1,
+        "binary",
+        None,
+        None,
+        None,
+    )?;
+    println!("  3 metas anuais ({year} e {})", year + 1);
 
     println!(
         "pronto — {} nodes no total",
