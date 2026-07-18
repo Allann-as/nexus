@@ -85,3 +85,11 @@ pub fn skill_track(
 ) -> Result<Vec<crate::application::use_cases::career::SkillPoint>> {
     state.career.skill_track(&id)
 }
+
+#[tauri::command]
+pub fn skills_evolving(
+    state: State<'_, AppState>,
+    area_id: String,
+) -> Result<Vec<crate::application::ports::Skill>> {
+    state.career.skills_evolving(&area_id)
+}

@@ -1170,6 +1170,10 @@ export const listSkills = (areaId: string | null) =>
 /** A trilha de evolução: (dia, nível). Um ponto só = competência nova. */
 export const skillTrack = (id: string) => call<SkillPoint[]>("skill_track", { id });
 
+/** As competências que subiram de nível nos últimos 90 dias — "em evolução". */
+export const skillsEvolving = (areaId: string) =>
+  call<Skill[]>("skills_evolving", { areaId });
+
 /* ===== Timeline: a Máquina do Tempo ===== */
 
 /** Um mês congelado da visão ANO — mirrors `ports::MonthRollup`. */

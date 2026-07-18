@@ -170,4 +170,12 @@ impl CareerService {
             .map(|(day, level)| SkillPoint { day, level })
             .collect())
     }
+
+    /// As competências "em evolução" do painel: as que subiram de nível nos últimos
+    /// 90 dias. A janela é fixa — o painel quer "o que está esquentando agora".
+    pub fn skills_evolving(&self, area_id: &str) -> Result<Vec<Skill>> {
+        let today = parse_day(&self.clock.today_local())?;
+        let since = format_day(today - chrono::Duration::days(90));
+        self.skills.evolving_since(area_id, &since)
+    }
 }

@@ -1383,6 +1383,10 @@ pub trait SkillRepository: Send + Sync {
     /// 'skill_level_up' (o nível é a posição na ordem), do mais antigo ao recente.
     /// A UI omite o sparkline quando há um ponto só (competência nova).
     fn level_history(&self, id: &str) -> Result<Vec<(String, i64)>>;
+
+    /// As competências de uma Esfera que subiram de nível desde `since_day` — as
+    /// "em evolução" do painel. Maior nível primeiro.
+    fn evolving_since(&self, area_id: &str, since_day: &str) -> Result<Vec<Skill>>;
 }
 
 /* ===== Gamificação (M4.5) ===== */

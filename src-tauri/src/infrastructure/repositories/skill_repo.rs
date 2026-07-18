@@ -163,6 +163,23 @@ impl SkillRepository for SqliteSkillRepository {
                 .collect())
         })
     }
+
+    fn evolving_since(&self, area_id: &str, since_day: &str) -> Result<Vec<Skill>> {
+        self.db.with_read(|c| {
+            // As competências da Esfera com ao menos um 'skill_level_up' desde o
+            // corte. O EXISTS usa `idx_ledger_entity`; nada de trazer o histórico.
+            let mut stmt = c.prepare_cached(&format!(
+                "{SELECT} WHERE n.area_id = ?1 AND n.status <> 'archived' \
+                   AND EXISTS (SELECT 1 FROM ledger l \
+                                WHERE l.entity_id = n.id \
+                                  AND l.event_type = 'skill_level_up' \
+                                  AND l.day >= ?2) \
+                 ORDER BY s.level DESC, n.title"
+            ))?;
+            let rows = stmt.query_map(params![area_id, since_day], map_skill)?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        })
+    }
 }
 
 #[cfg(test)]
@@ -172,11 +189,11 @@ mod tests {
     use crate::domain::ledger::{EventType, LedgerEntityKind, NewLedgerEvent};
     use crate::infrastructure::paths::Paths;
 
-    fn fixture() -> (tempfile::TempDir, SqliteSkillRepository) {
+    fn fixture() -> (tempfile::TempDir, SqliteSkillRepository, Arc<Db>) {
         let dir = tempfile::tempdir().unwrap();
         let paths = Paths::at(dir.path().to_path_buf()).unwrap();
         let db = Arc::new(Db::open(&paths).unwrap());
-        (dir, SqliteSkillRepository::new(db))
+        (dir, SqliteSkillRepository::new(db.clone()), db)
     }
 
     fn created(id: &str) -> NewLedgerEvent {
@@ -226,7 +243,7 @@ mod tests {
 
     #[test]
     fn a_new_skill_starts_at_level_one() {
-        let (_d, repo) = fixture();
+        let (_d, repo, _db) = fixture();
         let s = make(&repo, "sk1", None);
         assert_eq!(s.level, 1);
         assert_eq!(s.status, "active");
@@ -235,7 +252,7 @@ mod tests {
 
     #[test]
     fn leveling_up_climbs_and_logs_one_event_each() {
-        let (_d, repo) = fixture();
+        let (_d, repo, _db) = fixture();
         make(&repo, "sk1", None);
         assert_eq!(
             level_up(&repo, "sk1", 2_000, "2026-07-19").unwrap().level,
@@ -256,14 +273,14 @@ mod tests {
     #[test]
     fn a_brand_new_skill_has_a_single_history_point() {
         // A UI omite o sparkline quando há um ponto só — aqui está a fonte disso.
-        let (_d, repo) = fixture();
+        let (_d, repo, _db) = fixture();
         make(&repo, "sk1", None);
         assert_eq!(repo.level_history("sk1").unwrap().len(), 1);
     }
 
     #[test]
     fn the_cap_refuses_leveling_past_the_max() {
-        let (_d, repo) = fixture();
+        let (_d, repo, _db) = fixture();
         make(&repo, "sk1", Some(2));
         assert_eq!(
             level_up(&repo, "sk1", 2_000, "2026-07-19").unwrap().level,
@@ -277,7 +294,51 @@ mod tests {
 
     #[test]
     fn leveling_a_missing_skill_is_not_found() {
-        let (_d, repo) = fixture();
+        let (_d, repo, _db) = fixture();
         assert!(level_up(&repo, "ghost", 1, "2026-07-19").is_err());
+    }
+
+    #[test]
+    fn evolving_since_finds_only_skills_leveled_after_the_cut() {
+        let (_d, repo, db) = fixture();
+        // A Esfera precisa existir: `nodes.area_id` tem FK para `areas`.
+        db.with_write(|c| {
+            c.execute("INSERT INTO areas (id, name) VALUES ('a1', 'Carreira')", [])?;
+            Ok(())
+        })
+        .unwrap();
+        // Duas competências na mesma Esfera; uma sobe de nível "recente", a outra não.
+        for id in ["sk1", "sk2"] {
+            repo.create_with_event(
+                id,
+                &NewNode {
+                    kind: Kind::Skill,
+                    title: id.into(),
+                    area_id: Some("a1".into()),
+                    parent_id: None,
+                },
+                &NewSkill {
+                    title: String::new(),
+                    area_id: None,
+                    category: None,
+                    max_level: None,
+                },
+                &NewLedgerEvent {
+                    entity_id: id.into(),
+                    title_snapshot: id.into(),
+                    ..created(id)
+                },
+            )
+            .unwrap();
+        }
+        // sk1 sobe em julho (dentro do corte); sk2 nunca sobe.
+        level_up(&repo, "sk1", 5_000, "2026-07-15").unwrap();
+
+        let evolving = repo.evolving_since("a1", "2026-05-01").unwrap();
+        assert_eq!(evolving.len(), 1);
+        assert_eq!(evolving[0].id, "sk1");
+
+        // Um corte depois da subida não pega ninguém.
+        assert!(repo.evolving_since("a1", "2026-08-01").unwrap().is_empty());
     }
 }

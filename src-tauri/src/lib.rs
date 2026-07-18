@@ -136,6 +136,7 @@ pub fn run() {
             commands::career::level_up_skill,
             commands::career::list_skills,
             commands::career::skill_track,
+            commands::career::skills_evolving,
             commands::timeline::timeline_range,
             commands::timeline::timeline_year,
             commands::timeline::on_this_day,
