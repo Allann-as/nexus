@@ -232,12 +232,13 @@ export function TheNexo({ open, onClose }: { open: boolean; onClose: () => void 
         onKeyDown={onKeyDown}
         className="nx-enter relative z-10 my-auto flex max-h-[92vh] w-[760px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-strong)] bg-[var(--bg-surface)] shadow-[var(--shadow-float)]"
       >
-        {/* ===== 1. A FAIXA ORBITAL ===== */}
-        <OrbitalBand
+        {/* ===== 1. O MAPA RADIAL ===== */}
+        <RadialMap
           spheres={sphereList}
           levelByArea={levelByArea}
           mounted={mounted}
           onPick={(id) => go(`/sphere/${id}`)}
+          onHub={() => go("/")}
         />
 
         {/* ===== 2. BUSCA + DESTINOS ===== */}
@@ -289,69 +290,100 @@ export function TheNexo({ open, onClose }: { open: boolean; onClose: () => void 
   );
 }
 
-/* ===================== A faixa orbital ===================== */
+/* ===================== O mapa radial ===================== */
 
-function OrbitalBand({
+/**
+ * O NexusMark no centro e as Esferas num CÍRCULO COMPLETO à volta (REFINO R1) —
+ * um mapa mental da vida, não um arco. Linhas finas de constelação ligam o centro
+ * a cada Esfera; o centro leva ao Hub, cada Esfera à sua tela. Na abertura, os
+ * anéis se alinham num gesto sutil (200ms); estático em reduced-motion.
+ */
+function RadialMap({
   spheres,
   levelByArea,
   mounted,
   onPick,
+  onHub,
 }: {
   spheres: SphereCard[];
   levelByArea: Map<string, Level>;
   mounted: boolean;
   onPick: (id: string) => void;
+  onHub: () => void;
 }) {
   const W = 760;
+  const H = 320;
   const cx0 = W / 2;
-  const cy0 = 30; // o centro da órbita (onde mora o NexusMark)
-  // Órbita ELÍPTICA: larga na horizontal para as Esferas se espalharem sem
-  // afundarem — um círculo do mesmo raio as empilharia perto do centro do arco.
-  const RX = 270;
-  const RY = 112;
+  const cy0 = 150;
+  const R = 112;
   const n = spheres.length;
-  // O leque abre conforme o número de Esferas, com teto — 9 não podem colar.
-  const spanHalf = n <= 1 ? 0 : Math.min(72, 16 + n * 7);
+
+  // Posição de cada Esfera no círculo: começa no topo (−90°) e distribui igual.
+  const pos = (i: number) => {
+    const deg = -90 + (i * 360) / Math.max(1, n);
+    const rad = (deg * Math.PI) / 180;
+    return [cx0 + R * Math.cos(rad), cy0 + R * Math.sin(rad)] as const;
+  };
 
   return (
-    <div className="relative h-[196px] shrink-0 overflow-hidden">
-      {/* o anel da órbita: um círculo tracejado passando pelas Esferas. O topo
-          sai pela borda (fica clipado) e o que resta lê como arco. */}
+    <div className="relative shrink-0 overflow-hidden" style={{ height: H }}>
+      {/* o anel da órbita + as linhas de constelação do centro a cada Esfera */}
       <svg
-        className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.5]"
-        viewBox={`0 0 ${W} 196`}
+        className="pointer-events-none absolute inset-0 h-full w-full"
+        viewBox={`0 0 ${W} ${H}`}
         fill="none"
         aria-hidden
       >
-        <ellipse
+        <circle
           cx={cx0}
           cy={cy0}
-          rx={RX}
-          ry={RY}
+          r={R}
           stroke="var(--border-strong)"
           strokeWidth="1"
           strokeDasharray="2 5"
+          opacity="0.5"
         />
+        {spheres.map((s, i) => {
+          const [x, y] = pos(i);
+          return (
+            <line
+              key={s.id}
+              x1={cx0}
+              y1={cy0}
+              x2={x}
+              y2={y}
+              stroke="var(--border-strong)"
+              strokeWidth="1"
+              opacity={mounted ? 0.4 : 0}
+              style={{ transition: "opacity 200ms var(--ease)", transitionDelay: `${i * 28}ms` }}
+            />
+          );
+        })}
       </svg>
 
-      {/* o NexusMark ao centro da órbita */}
-      <div
-        className="absolute -translate-x-1/2 -translate-y-1/2"
+      {/* o NexusMark ao centro — clicar leva ao Hub */}
+      <button
+        onClick={onHub}
+        title="Hub"
+        aria-label="Ir para o Hub"
+        className="group absolute -translate-x-1/2 -translate-y-1/2 rounded-full transition-transform duration-[var(--dur-fast)] hover:scale-105"
         style={{ left: cx0, top: cy0 }}
       >
-        <NexusMark size={44} />
-      </div>
+        <span
+          className="grid place-items-center rounded-full p-1.5"
+          style={{ boxShadow: "0 0 32px color-mix(in srgb, var(--accent) 22%, transparent)" }}
+        >
+          <NexusMark size={52} />
+        </span>
+      </button>
 
       {n === 0 ? (
-        <p className="absolute inset-x-0 bottom-4 text-center text-[12px] text-[var(--text-tertiary)]">
+        <p className="absolute inset-x-0 bottom-5 text-center text-[12px] text-[var(--text-tertiary)]">
           Nenhuma Esfera ativa.
         </p>
       ) : (
         spheres.map((s, i) => {
-          const theta = n === 1 ? 0 : -spanHalf + (i * (spanHalf * 2)) / (n - 1);
-          const rad = (theta * Math.PI) / 180;
-          const x = cx0 + RX * Math.sin(rad);
-          const y = cy0 + RY * Math.cos(rad);
+          const [x, y] = pos(i);
           const total = s.habitsTodayTotal;
           const ratio = total > 0 ? s.habitsTodayDone / total : 0;
           const level = levelByArea.get(s.id);
@@ -365,8 +397,10 @@ function OrbitalBand({
                   left: x,
                   top: y,
                   "--sphere": s.color,
-                  // o alinhamento sutil dos anéis: entram de baixo e assentam.
-                  transform: `translate(-50%, -50%) translateY(${mounted ? 0 : 10}px) scale(${mounted ? 1 : 0.86})`,
+                  // o alinhamento dos anéis: partem do centro e assentam no lugar.
+                  transform: mounted
+                    ? "translate(-50%, -50%) scale(1)"
+                    : `translate(-50%, -50%) translate(${(cx0 - x) * 0.5}px, ${(cy0 - y) * 0.5}px) scale(0.7)`,
                   opacity: mounted ? 1 : 0,
                   transition: "transform 200ms var(--ease), opacity 200ms var(--ease)",
                   transitionDelay: `${i * 28}ms`,
@@ -393,7 +427,7 @@ function OrbitalBand({
                   </span>
                 )}
               </span>
-              <span className="max-w-[76px] truncate text-[10px] font-medium text-[var(--text-secondary)]">
+              <span className="max-w-[84px] truncate text-[10px] font-medium text-[var(--text-secondary)]">
                 {s.name}
               </span>
             </button>
