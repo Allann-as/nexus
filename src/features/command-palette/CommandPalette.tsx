@@ -27,6 +27,7 @@ import {
   Trophy,
   Award,
   GraduationCap,
+  Timer,
   type LucideIcon,
 } from "lucide-react";
 
@@ -36,6 +37,7 @@ import { SPHERE_SECTIONS } from "../spheres/sections";
 import { sphereIcon } from "../hub/SphereIcon";
 import { parseAporte } from "../finance/parseAporte";
 import { useAporte } from "../../stores/aporte";
+import { useFocus } from "../../stores/focus";
 import { fuzzyScore } from "./fuzzy";
 import { cx, Kbd } from "../../design-system/primitives";
 
@@ -138,6 +140,13 @@ export function CommandPalette({
 
   const actions = useMemo<Row[]>(
     () => [
+      {
+        id: "focus:start",
+        label: "Iniciar foco",
+        hint: "Modo Foco",
+        icon: Timer,
+        run: () => useFocus.getState().start(),
+      },
       ...NAV_ITEMS.map((item) => ({
         id: `nav:${item.path}`,
         label: `Ir para ${item.label}`,

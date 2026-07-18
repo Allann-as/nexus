@@ -1255,6 +1255,66 @@ export const studyStats = (areaId?: string | null) =>
 export const deleteStudySession = (id: string) =>
   call<void>("delete_study_session", { id });
 
+/* ===== Modo Foco: blocos de foco (M5) ===== */
+
+/** Um bloco de foco — um LOG (não node). `taskTitle` já vem resolvido. */
+export interface FocusSession {
+  id: string;
+  taskId: string | null;
+  taskTitle: string | null;
+  label: string | null;
+  minutes: number;
+  day: string;
+  ts: number;
+}
+
+export interface FocusHourBucket {
+  hour: number;
+  minutes: number;
+}
+
+/** As estatísticas de foco (M5) — determinísticas, com fórmula. */
+export interface FocusStats {
+  minutesLast7: number;
+  minutesPrev7: number;
+  activeDays30: number;
+  bestHour: number | null;
+  bestHourMinutes: number;
+  byHour: FocusHourBucket[];
+  totalMinutes: number;
+  totalSessions: number;
+  formula: string;
+}
+
+/**
+ * Registra um bloco de foco CONCLUÍDO — um fato no ledger que vale XP. Chame só
+ * quando o timer zera; abandonar não loga nada (ADR-0052).
+ */
+export const logFocusSession = (s: {
+  taskId?: string | null;
+  label?: string | null;
+  minutes: number;
+  day?: string | null;
+}) =>
+  call<FocusSession>("log_focus_session", {
+    session: {
+      taskId: s.taskId ?? null,
+      label: s.label ?? null,
+      minutes: s.minutes,
+      day: s.day ?? null,
+    },
+  });
+
+export const recentFocusSessions = (areaId?: string | null) =>
+  call<FocusSession[]>("recent_focus_sessions", { areaId: areaId ?? null });
+
+export const focusStats = (areaId?: string | null) =>
+  call<FocusStats>("focus_stats", { areaId: areaId ?? null });
+
+/** Apaga um bloco registrado por engano — corrige o estado; o ledger fica. */
+export const deleteFocusSession = (id: string) =>
+  call<void>("delete_focus_session", { id });
+
 /* ===== Carreira: os marcos profissionais ===== */
 
 /** O tipo de um marco. Espelha `domain::entities::CareerMilestoneKind`. */

@@ -17,6 +17,7 @@ import { GamificationScreen } from "../features/gamification/GamificationScreen"
 import { AnnualGoalsScreen } from "../features/annual-goals/AnnualGoalsScreen";
 import { NotesScreen } from "../features/notes/NotesScreen";
 import { TimelineScreen } from "../features/timeline/TimelineScreen";
+import { FocusScreen } from "../features/focus/FocusScreen";
 import { WeeklyReviewScreen } from "../features/weekly-review/WeeklyReviewScreen";
 import { useUi, applyTheme, applyDensity, applyReducedMotion } from "../stores/ui";
 
@@ -61,6 +62,7 @@ const router = createHashRouter([
       { path: "projects", element: <ProjectsScreen /> },
       { path: "notes", element: <NotesScreen /> },
       { path: "timeline", element: <TimelineScreen /> },
+      { path: "focus", element: <FocusScreen /> },
       { path: "review", element: <WeeklyReviewScreen /> },
       { path: "insights", element: <InsightsScreen /> },
       { path: "game", element: <GamificationScreen /> },

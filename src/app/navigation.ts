@@ -28,6 +28,7 @@ import {
   Repeat,
   Sparkles,
   Target,
+  Timer,
   Trophy,
   type LucideIcon,
 } from "lucide-react";
@@ -48,6 +49,9 @@ export const NAV_ITEMS: NavItem[] = [
   // [[wiki-links]] ligam qualquer node), então ela mora na rail, não numa Esfera.
   { path: "/notes", label: "Notas", icon: FileText, jumpKey: "n" },
   { path: "/timeline", label: "Timeline", icon: History, jumpKey: "t" },
+  // O Foco (M5) atravessa a vida inteira: um pomodoro parte de qualquer tarefa,
+  // de qualquer Esfera. É da rail, como o Inbox e a Timeline.
+  { path: "/focus", label: "Foco", icon: Timer, jumpKey: "f" },
   // A Revisão Semanal (M5) atravessa a vida inteira (inbox, tarefas, hábitos,
   // metas, agenda) — é da rail, não de uma Esfera. Um ritual, não uma tela de dado.
   { path: "/review", label: "Revisão Semanal", icon: CalendarCheck, jumpKey: "r" },

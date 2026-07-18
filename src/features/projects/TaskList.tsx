@@ -24,10 +24,11 @@ import {
 } from "@dnd-kit/sortable";
 import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Timer } from "lucide-react";
 
 import { Checkbox } from "../../design-system/Checkbox";
 import { cx } from "../../design-system/primitives";
+import { useFocus } from "../../stores/focus";
 import type { Task } from "../../lib/ipc";
 
 const ROW_H = 40;
@@ -245,6 +246,21 @@ function RowBody({
         >
           {priority.label}
         </span>
+      )}
+
+      {/* Focar nesta tarefa: um pomodoro parte de qualquer tarefa aberta (M5). A
+          aparição no hover mantém a linha limpa até o gesto ser convidado. */}
+      {!done && (
+        <button
+          onClick={() =>
+            useFocus.getState().start({ taskId: task.id, taskTitle: task.title })
+          }
+          aria-label={`Focar em ${task.title}`}
+          title="Focar nesta tarefa"
+          className="shrink-0 text-[var(--text-tertiary)] opacity-0 transition-opacity duration-[var(--dur-fast)] group-hover:opacity-100 hover:text-[var(--accent)]"
+        >
+          <Timer size={14} />
+        </button>
       )}
     </>
   );
