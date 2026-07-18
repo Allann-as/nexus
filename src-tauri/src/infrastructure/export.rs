@@ -93,21 +93,40 @@ impl ExportEngine {
             .join(format!("nexus-export-{today}-{stamp}"))
     }
 
-    /// As tabelas de dados do usuário — exclui os internos do SQLite e as tabelas
-    /// sombra do FTS5 (índice binário, não é dado do usuário).
+    /// As tabelas de dados do usuário — exclui os internos do SQLite e o índice
+    /// de busca FTS5.
+    ///
+    /// O FTS5 (`search_index`) é uma tabela VIRTUAL apoiada em tabelas-sombra
+    /// regulares (`search_index_data`, `_idx`, `_docsize`, `_config`, ...) cujo
+    /// conteúdo é um índice BINÁRIO, reconstruível a partir do resto — não é dado
+    /// do usuário. Filtrar por nome ("_fts") não pega, porque a virtual pode ter
+    /// qualquer nome; então descobrimos as virtuais pelo `sql` e excluímos cada
+    /// uma E tudo que começa com `<virtual>_` (as sombras).
     fn user_tables(&self) -> Result<Vec<String>> {
         self.db.with_read(|c| {
-            let mut stmt = c.prepare(
+            let mut vstmt = c.prepare(
                 "SELECT name FROM sqlite_master
-                 WHERE type = 'table'
-                   AND name NOT LIKE 'sqlite_%'
-                   AND name NOT LIKE '%_fts%'
-                 ORDER BY name",
+                 WHERE type = 'table' AND sql LIKE 'CREATE VIRTUAL TABLE%'",
             )?;
-            let names = stmt
+            let virtuals: Vec<String> = vstmt
                 .query_map([], |r| r.get::<_, String>(0))?
                 .collect::<std::result::Result<Vec<_>, _>>()?;
-            Ok(names)
+
+            let mut stmt = c.prepare(
+                "SELECT name FROM sqlite_master
+                 WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+                 ORDER BY name",
+            )?;
+            let all: Vec<String> = stmt
+                .query_map([], |r| r.get::<_, String>(0))?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+
+            let is_index = |t: &String| {
+                virtuals
+                    .iter()
+                    .any(|v| t == v || t.starts_with(&format!("{v}_")))
+            };
+            Ok(all.into_iter().filter(|t| !is_index(t)).collect())
         })
     }
 
@@ -352,6 +371,17 @@ mod tests {
         assert!(out.join("areas.json").exists());
         assert!(info.tables >= 2);
         assert!(info.rows >= 2);
+
+        // O índice de busca FTS5 e suas sombras NÃO saem na exportação — são
+        // índice binário reconstruível, não dado do usuário.
+        assert!(
+            !out.join("search_index.json").exists(),
+            "a tabela FTS não é exportada"
+        );
+        assert!(
+            !out.join("search_index_data.json").exists(),
+            "as sombras do FTS não são exportadas"
+        );
 
         // O JSON reabre e tem a linha semeada.
         let nodes: serde_json::Value =
