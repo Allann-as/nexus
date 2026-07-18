@@ -118,7 +118,7 @@ export function AgendaTab({ areaId }: { areaId: string }) {
             type="datetime-local"
             value={when}
             onChange={(e) => setWhen(e.target.value)}
-            className="h-9 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-2 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--sphere)] [color-scheme:dark]"
+            className="h-9 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-2 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--sphere)]"
           />
           <Button variant="primary" size="sm" onClick={create} disabled={!title.trim()}>
             Criar

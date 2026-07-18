@@ -121,7 +121,7 @@ export function RecordMilestoneModal({
                 type="date"
                 value={happenedOn}
                 onChange={(e) => setHappenedOn(e.target.value)}
-                className="h-10 w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-3 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--sphere)] [color-scheme:dark]"
+                className="h-10 w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-3 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--sphere)]"
               />
             </Field>
 
