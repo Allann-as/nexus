@@ -26,6 +26,7 @@ import {
   GraduationCap,
   MonitorPlay,
   BookOpen,
+  Brain,
   CalendarDays,
   Flame,
   type LucideIcon,
@@ -44,7 +45,8 @@ export type IndicatorKind =
   | "open_projects" // projetos em aberto (card)
   | "active_goals" // metas ativas (count_nodes)
   | "active_boxes" // caixinhas ativas (count_nodes)
-  | "reading"; // livros em leitura/fila (count_nodes)
+  | "reading" // livros em leitura/fila (count_nodes)
+  | "subjects"; // matérias ativas (count_nodes)
 
 export interface SphereSection {
   key: string;
@@ -78,6 +80,7 @@ export const SPHERE_SECTIONS: Record<Template, SphereSection[]> = {
   ],
   studies: [
     { key: "dashboard", label: "Painel", icon: LayoutDashboard, indicator: "streak" },
+    { key: "subjects", label: "Matérias", icon: Brain, indicator: "subjects" },
     { key: "goals", label: "Metas", icon: Target, indicator: "active_goals" },
     { key: "languages", label: "Idiomas", icon: Languages },
     { key: "college", label: "Faculdade", icon: GraduationCap },
@@ -107,6 +110,7 @@ export interface IndicatorData {
   activeGoals: number;
   activeBoxes: number;
   reading: number;
+  activeSubjects: number;
 }
 
 /**
@@ -140,5 +144,9 @@ export function resolveIndicator(
       return data.activeBoxes > 0 ? { text: String(data.activeBoxes), tone: "neutral" } : null;
     case "reading":
       return data.reading > 0 ? { text: String(data.reading), tone: "neutral" } : null;
+    case "subjects":
+      return data.activeSubjects > 0
+        ? { text: String(data.activeSubjects), tone: "neutral" }
+        : null;
   }
 }

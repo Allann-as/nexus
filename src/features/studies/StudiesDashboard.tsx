@@ -1,26 +1,58 @@
 /**
- * O Painel dos Estudos — a resposta à pergunta "como vai minha leitura?".
+ * O Painel dos Estudos — a resposta a "como vão meus estudos e minha leitura?".
  *
- * Um HeroCard com a meta anual (o número gigante de terminados + o anel), a
- * linha de StatCards satélites, a frase determinística e a seção "Lendo agora"
- * com o quanto falta de cada livro em curso.
+ * Duas frentes: o RITMO de estudo (horas na semana, constância, horários — das
+ * sessões, item 7) e a LEITURA (a meta anual, o que está em curso — dos livros,
+ * M4). O HeroCard é a leitura; a faixa de estudo vem logo abaixo, com o botão de
+ * registrar uma sessão sempre à mão.
  */
 
-import { useQuery } from "@tanstack/react-query";
-import { BookOpen, CheckCircle2, Library } from "lucide-react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { BookOpen, CheckCircle2, Clock, Library } from "lucide-react";
 
 import { CountUp, HeroCard, StatCard, SummaryCard, Val } from "../../design-system/cards";
 import { ProgressBar, ProgressRing } from "../../design-system/charts";
-import { EmptyState } from "../../design-system/primitives";
-import { studiesOverview, type Book } from "../../lib/ipc";
+import { Button, EmptyState } from "../../design-system/primitives";
+import {
+  recentStudySessions,
+  studiesOverview,
+  studyStats,
+  type Book,
+  type StudySession,
+} from "../../lib/ipc";
 import { coverStyle, bookInitials } from "./bookCover";
 import { computePace, SetGoalInline } from "./readingGoal";
+import { StudyStatsPanel } from "./StudyStatsPanel";
+import { LogSessionModal } from "./LogSessionModal";
+import { formatMinutes, shortDay } from "./studyFormat";
 
 export function StudiesDashboard({ areaId }: { areaId: string }) {
+  const client = useQueryClient();
+  const [logging, setLogging] = useState(false);
+
   const overview = useQuery({
     queryKey: ["studies", areaId],
     queryFn: () => studiesOverview(areaId),
   });
+  const stats = useQuery({
+    queryKey: ["study-stats", areaId],
+    queryFn: () => studyStats(areaId),
+  });
+  const recent = useQuery({
+    queryKey: ["recent-sessions", areaId],
+    queryFn: () => recentStudySessions(areaId),
+  });
+
+  const refreshAfterLog = () => {
+    setLogging(false);
+    void client.invalidateQueries({ queryKey: ["study-stats", areaId] });
+    void client.invalidateQueries({ queryKey: ["recent-sessions", areaId] });
+    void client.invalidateQueries({ queryKey: ["subjects", areaId] });
+    void client.invalidateQueries({ queryKey: ["subject-progress"] });
+    void client.invalidateQueries({ queryKey: ["gamification"] });
+    void client.invalidateQueries({ queryKey: ["spheres", "overview"] });
+  };
 
   if (overview.isLoading) {
     return (
@@ -52,8 +84,37 @@ export function StudiesDashboard({ areaId }: { areaId: string }) {
         ? "var(--warning)"
         : "var(--sphere)";
 
+  const st = stats.data;
+  const hasSessions = (st?.totalSessions ?? 0) > 0;
+  const sessions = recent.data ?? [];
+
   return (
     <div className="nx-enter flex flex-col gap-4">
+      <div className="flex justify-end">
+        <Button variant="primary" size="sm" icon={Clock} onClick={() => setLogging(true)}>
+          Registrar sessão
+        </Button>
+      </div>
+
+      {/* ===== O ritmo de estudo ===== */}
+      {hasSessions && st ? (
+        <StudyStatsPanel stats={st} />
+      ) : (
+        <EmptyState
+          icon={Clock}
+          title="Nenhuma sessão de estudo ainda"
+          hint="Registre quanto tempo estudou de cada matéria e o NEXUS mostra suas horas na semana, sua constância e seus melhores horários."
+          action={
+            <Button variant="primary" size="sm" icon={Clock} onClick={() => setLogging(true)}>
+              Registrar sessão
+            </Button>
+          }
+        />
+      )}
+
+      {sessions.length > 0 && <RecentSessions sessions={sessions} />}
+
+      {/* ===== A leitura ===== */}
       <HeroCard
         label={`Terminados em ${ov.year}`}
         value={<CountUp to={finished} />}
@@ -87,16 +148,8 @@ export function StudiesDashboard({ areaId }: { areaId: string }) {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard
-          icon={BookOpen}
-          label="Lendo agora"
-          value={<CountUp to={readingNow.length} />}
-        />
-        <StatCard
-          icon={Library}
-          label="Na estante"
-          value={<CountUp to={ov.totalBooks} />}
-        />
+        <StatCard icon={BookOpen} label="Lendo agora" value={<CountUp to={readingNow.length} />} />
+        <StatCard icon={Library} label="Na estante" value={<CountUp to={ov.totalBooks} />} />
         <StatCard
           icon={CheckCircle2}
           label="Terminados no ano"
@@ -144,7 +197,40 @@ export function StudiesDashboard({ areaId }: { areaId: string }) {
           </div>
         )}
       </section>
+
+      {logging && (
+        <LogSessionModal areaId={areaId} onClose={() => setLogging(false)} onSaved={refreshAfterLog} />
+      )}
     </div>
+  );
+}
+
+/** As últimas sessões registradas — a memória curta do estudo. */
+function RecentSessions({ sessions }: { sessions: StudySession[] }) {
+  return (
+    <section className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
+      <h3 className="mb-3 text-[10px] font-semibold tracking-[0.14em] text-[var(--text-tertiary)] uppercase">
+        Sessões recentes
+      </h3>
+      <div className="flex flex-col gap-2">
+        {sessions.map((s) => (
+          <div key={s.id} className="flex items-baseline justify-between gap-3 text-[12.5px]">
+            <div className="min-w-0 flex items-baseline gap-2">
+              <span className="truncate font-medium text-[var(--text-primary)]">
+                {s.subjectTitle ?? s.topic ?? "Estudo"}
+              </span>
+              {s.subjectTitle && s.topic && (
+                <span className="truncate text-[11px] text-[var(--text-tertiary)]">{s.topic}</span>
+              )}
+            </div>
+            <span className="tabular shrink-0 text-[var(--text-tertiary)]">
+              <span className="font-semibold text-[var(--sphere)]">{formatMinutes(s.minutes)}</span>{" "}
+              · {shortDay(s.day)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

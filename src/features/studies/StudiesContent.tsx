@@ -9,8 +9,10 @@
 import { LibraryTab } from "./LibraryTab";
 import { StudyProjectsTab } from "./StudyProjectsTab";
 import { StudiesDashboard } from "./StudiesDashboard";
+import { SubjectsTrack } from "./SubjectsTrack";
 
 export function StudiesContent({ areaId, tab }: { areaId: string; tab: string }) {
+  if (tab === "subjects") return <SubjectsTrack areaId={areaId} />;
   if (tab === "library") return <LibraryTab areaId={areaId} />;
   if (tab === "languages") return <StudyProjectsTab areaId={areaId} label="Idiomas" />;
   if (tab === "college") return <StudyProjectsTab areaId={areaId} label="Faculdade" />;

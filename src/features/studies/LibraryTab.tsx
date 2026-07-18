@@ -12,12 +12,15 @@ import { BookMarked, Library, Plus, Star } from "lucide-react";
 
 import { CountUp } from "../../design-system/cards";
 import { ProgressRing } from "../../design-system/charts";
+import { Formula } from "../../design-system/Formula";
 import { Button, EmptyState, cx } from "../../design-system/primitives";
 import {
   listBooks,
+  readingStats,
   studiesOverview,
   type Book,
   type BookStatus,
+  type ReadingStats,
 } from "../../lib/ipc";
 import { BookCard, STATUS_META } from "./BookCard";
 import { BookActionsModal } from "./BookActionsModal";
@@ -44,6 +47,10 @@ export function LibraryTab({ areaId }: { areaId: string }) {
   const overview = useQuery({
     queryKey: ["studies", areaId],
     queryFn: () => studiesOverview(areaId),
+  });
+  const stats = useQuery({
+    queryKey: ["reading-stats", areaId],
+    queryFn: () => readingStats(areaId),
   });
 
   const refresh = () => {
@@ -104,6 +111,9 @@ export function LibraryTab({ areaId }: { areaId: string }) {
           Adicionar livro
         </Button>
       </header>
+
+      {/* ===== Estatísticas de leitura ===== */}
+      {stats.data && <ReadingStatsRow stats={stats.data} />}
 
       {/* ===== Filtros ===== */}
       {all.length > 0 && (
@@ -242,6 +252,47 @@ function GoalWidget({
           </span>
         </p>
       </div>
+    </div>
+  );
+}
+
+/**
+ * A faixa de estatísticas de leitura (item 7): ritmo e tempo médio para terminar.
+ * Determinística, com a fórmula do backend à mostra. Um número sem dado é omitido
+ * — nada de "0 páginas/dia" quando ainda não há livro terminado com páginas.
+ */
+function ReadingStatsRow({ stats }: { stats: ReadingStats }) {
+  const cells: Array<{ label: string; value: string }> = [];
+  if (stats.pagesPerDay != null) {
+    cells.push({ label: "Páginas por dia", value: stats.pagesPerDay.toFixed(1) });
+  }
+  if (stats.avgDaysToFinish != null) {
+    const d = Math.round(stats.avgDaysToFinish);
+    cells.push({
+      label: "Tempo médio p/ terminar",
+      value: d === 0 ? "no dia" : `${d} ${d === 1 ? "dia" : "dias"}`,
+    });
+  }
+  if (stats.pagesThisYear > 0) {
+    cells.push({ label: `Páginas em ${stats.year}`, value: String(stats.pagesThisYear) });
+  }
+  if (cells.length === 0) return null;
+
+  return (
+    <div className="mb-5 rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
+      <div className="flex flex-wrap gap-x-10 gap-y-4">
+        {cells.map((c) => (
+          <div key={c.label}>
+            <div className="tabular text-[22px] leading-none font-semibold text-[var(--text-primary)]">
+              {c.value}
+            </div>
+            <div className="mt-1 text-[10px] font-medium tracking-[0.1em] text-[var(--text-tertiary)] uppercase">
+              {c.label}
+            </div>
+          </div>
+        ))}
+      </div>
+      <Formula>{stats.formula}</Formula>
     </div>
   );
 }

@@ -73,6 +73,11 @@ export function SphereScreen() {
     queryFn: () => countNodes({ kind: "book", status: "active", areaId: id }),
     enabled: !!id && area.data?.template === "studies",
   });
+  const subjects = useQuery({
+    queryKey: ["nodes", "count", { kind: "subject", status: "active", areaId: id }],
+    queryFn: () => countNodes({ kind: "subject", status: "active", areaId: id }),
+    enabled: !!id && area.data?.template === "studies",
+  });
 
   if (area.error) {
     return (
@@ -103,6 +108,7 @@ export function SphereScreen() {
     activeGoals: goals.data ?? 0,
     activeBoxes: boxes.data ?? 0,
     reading: reading.data ?? 0,
+    activeSubjects: subjects.data ?? 0,
   };
   const indicators: Record<string, IndicatorView | null> = {};
   for (const s of sections) indicators[s.key] = resolveIndicator(s.indicator, indicatorData);

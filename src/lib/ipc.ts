@@ -1098,6 +1098,129 @@ export const studiesOverview = (areaId?: string | null) =>
 export const setReadingGoal = (target: number) =>
   call<void>("set_reading_goal", { target });
 
+/** As estatísticas de leitura (item 7) — ritmo e tempo médio, com fórmula. */
+export interface ReadingStats {
+  year: string;
+  booksFinishedYear: number;
+  pagesThisYear: number;
+  pagesPerDay: number | null;
+  avgDaysToFinish: number | null;
+  sampleSize: number;
+  formula: string;
+}
+
+export const readingStats = (areaId?: string | null) =>
+  call<ReadingStats>("reading_stats", { areaId: areaId ?? null });
+
+/* ===== Estudos: matérias e sessões (item 7) ===== */
+
+/** Uma matéria (`subject`). O progresso é COMPUTADO das sessões (ver SubjectProgress). */
+export interface Subject {
+  id: string;
+  title: string;
+  areaId: string | null;
+  status: Status;
+  category: string | null;
+  targetMinutes: number | null;
+  createdAt: number;
+}
+
+/** Uma sessão de estudo — um LOG (não node). `subjectTitle` já vem resolvido. */
+export interface StudySession {
+  id: string;
+  subjectId: string | null;
+  subjectTitle: string | null;
+  bookId: string | null;
+  skillId: string | null;
+  topic: string | null;
+  minutes: number;
+  day: string;
+  ts: number;
+}
+
+/** O progresso agregado de uma matéria — tudo computado das sessões. */
+export interface SubjectProgress {
+  subject: Subject;
+  totalMinutes: number;
+  sessionCount: number;
+  lastDay: string | null;
+  booksTouched: number;
+  linkedCount: number;
+  /** `totalMinutes / targetMinutes`, saturado em 1 — `null` se não há meta. */
+  targetProgress: number | null;
+  recent: StudySession[];
+}
+
+export interface HourBucket {
+  hour: number;
+  minutes: number;
+}
+
+/** As estatísticas de estudo (item 7) — determinísticas, com fórmula. */
+export interface StudyStats {
+  minutesLast7: number;
+  minutesPrev7: number;
+  activeDays30: number;
+  bestHour: number | null;
+  bestHourMinutes: number;
+  byHour: HourBucket[];
+  totalMinutes: number;
+  totalSessions: number;
+  formula: string;
+}
+
+export const createSubject = (s: {
+  title: string;
+  areaId?: string | null;
+  category?: string | null;
+  targetMinutes?: number | null;
+}) =>
+  call<Subject>("create_subject", {
+    subject: {
+      title: s.title,
+      areaId: s.areaId ?? null,
+      category: s.category ?? null,
+      targetMinutes: s.targetMinutes ?? null,
+    },
+  });
+
+export const listSubjects = (areaId: string | null) =>
+  call<Subject[]>("list_subjects", { areaId });
+
+export const setSubjectTarget = (id: string, targetMinutes: number | null) =>
+  call<Subject>("set_subject_target", { id, targetMinutes });
+
+export const archiveSubject = (id: string) => call<void>("archive_subject", { id });
+
+export const subjectProgress = (id: string) =>
+  call<SubjectProgress>("subject_progress", { id });
+
+/** Registra uma sessão de estudo — um fato no ledger que vale XP (ADR-0047). */
+export const logStudySession = (s: {
+  subjectId?: string | null;
+  bookId?: string | null;
+  skillId?: string | null;
+  topic?: string | null;
+  minutes: number;
+  day?: string | null;
+}) =>
+  call<StudySession>("log_study_session", {
+    session: {
+      subjectId: s.subjectId ?? null,
+      bookId: s.bookId ?? null,
+      skillId: s.skillId ?? null,
+      topic: s.topic ?? null,
+      minutes: s.minutes,
+      day: s.day ?? null,
+    },
+  });
+
+export const recentStudySessions = (areaId?: string | null) =>
+  call<StudySession[]>("recent_study_sessions", { areaId: areaId ?? null });
+
+export const studyStats = (areaId?: string | null) =>
+  call<StudyStats>("study_stats", { areaId: areaId ?? null });
+
 /* ===== Carreira: os marcos profissionais ===== */
 
 /** O tipo de um marco. Espelha `domain::entities::CareerMilestoneKind`. */
