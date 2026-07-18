@@ -29,6 +29,7 @@ fn migrations() -> Migrations<'static> {
         M::up(include_str!(
             "../../../migrations/0011_studies_fin_goals.sql"
         )),
+        M::up(include_str!("../../../migrations/0012_life.sql")),
     ])
 }
 
@@ -516,6 +517,90 @@ mod tests {
                 )
                 .unwrap();
             assert_eq!(n, 3, "os três índices de nodes voltaram");
+        }
+
+        #[test]
+        fn annual_goal_and_challenge_join_the_vocabulary_in_the_third_recreation() {
+            // O M4.5 recria `nodes` PELA TERCEIRA VEZ (0012), agora para
+            // 'annual_goal' e 'challenge' — a segunda recriação sobre dado já
+            // existente. Ambos entram, e o CHECK continua recusando lixo. Ver
+            // ADR-0036.
+            let mut conn = seeded_at_v6();
+            migrations().to_latest(&mut conn).unwrap();
+
+            conn.execute(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('ag1', 'annual_goal', 'Ler 12 livros em 2026', 0, 0)",
+                [],
+            )
+            .expect("'annual_goal' entrou no vocabulário");
+            conn.execute(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('ch1', 'challenge', '90 dias de treino', 0, 0)",
+                [],
+            )
+            .expect("'challenge' entrou no vocabulário");
+
+            let junk = conn.execute(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('z2', 'lasanha', 'nao', 0, 0)",
+                [],
+            );
+            assert!(junk.is_err(), "o CHECK não pode ter sumido na 3ª recriação");
+        }
+
+        #[test]
+        fn the_life_satellites_cascade_from_their_node() {
+            // annual_goal_details e challenge_details apagam junto com o node dono.
+            let mut conn = seeded_at_v6();
+            migrations().to_latest(&mut conn).unwrap();
+            conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+
+            conn.execute_batch(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('ag1', 'annual_goal', 'Meta', 0, 0);
+                 INSERT INTO annual_goal_details (node_id, year) VALUES ('ag1', 2026);
+                 INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('ch1', 'challenge', 'Temporada', 0, 0);
+                 INSERT INTO challenge_details
+                        (node_id, starts_on, ends_on, metric, target_count)
+                      VALUES ('ch1', '2026-01-01', '2026-03-31', 'manual', 90);",
+            )
+            .unwrap();
+
+            conn.execute("DELETE FROM nodes WHERE id IN ('ag1','ch1')", [])
+                .unwrap();
+
+            let (ag, ch): (i64, i64) = conn
+                .query_row(
+                    "SELECT (SELECT COUNT(*) FROM annual_goal_details),
+                            (SELECT COUNT(*) FROM challenge_details)",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!(ag, 0, "o satélite da meta anual some com o node");
+            assert_eq!(ch, 0, "o satélite da temporada some com o node");
+        }
+
+        #[test]
+        fn the_challenge_metric_check_is_live() {
+            let mut conn = seeded_at_v6();
+            migrations().to_latest(&mut conn).unwrap();
+
+            conn.execute(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('ch1', 'challenge', 'Temporada', 0, 0)",
+                [],
+            )
+            .unwrap();
+            let bad = conn.execute(
+                "INSERT INTO challenge_details
+                        (node_id, starts_on, ends_on, metric, target_count)
+                      VALUES ('ch1', '2026-01-01', '2026-03-31', 'telepatia', 90)",
+                [],
+            );
+            assert!(bad.is_err(), "uma métrica fora do vocabulário é recusada");
         }
     }
 }

@@ -44,6 +44,17 @@ pub enum Kind {
     /// Kind próprio: um livro tem autor, páginas, status de leitura e nota, e não
     /// é nenhum dos kinds existentes.
     Book,
+    /// Uma meta anual, organizada por ano ("ler 12 livros em 2026").
+    ///
+    /// Kind próprio, e não um `Goal` (ADR-0036): uma meta anual pertence a um ANO
+    /// e a uma seção própria. Reusa o PADRÃO de goal (métrica/alvo/progresso), não
+    /// a tabela — enfiá-la em `goal` a faria vazar para a tela de Metas.
+    AnnualGoal,
+    /// Uma temporada/desafio ("90 dias de treino").
+    ///
+    /// Kind próprio: tem janela de datas, fonte de progresso (um hábito ou um
+    /// contador manual) e um alvo. Não é nenhum dos kinds existentes.
+    Challenge,
 }
 
 impl Kind {
@@ -61,6 +72,8 @@ impl Kind {
             Kind::Milestone => "milestone",
             Kind::FinGoal => "fin_goal",
             Kind::Book => "book",
+            Kind::AnnualGoal => "annual_goal",
+            Kind::Challenge => "challenge",
         }
     }
 
@@ -78,6 +91,8 @@ impl Kind {
             "milestone" => Kind::Milestone,
             "fin_goal" => Kind::FinGoal,
             "book" => Kind::Book,
+            "annual_goal" => Kind::AnnualGoal,
+            "challenge" => Kind::Challenge,
             other => {
                 return Err(NexusError::Validation(format!(
                     "kind desconhecido: {other}"

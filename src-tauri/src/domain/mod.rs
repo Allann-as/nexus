@@ -5,6 +5,9 @@
 //! testáveis sem banco e sem janela. `errors` cita `rusqlite` apenas para
 //! convertê-lo na fronteira (ADR-0003).
 
+pub mod achievements;
+pub mod burnout;
+pub mod correlation;
 pub mod entities;
 pub mod errors;
 pub mod financial_health;
@@ -17,3 +20,4 @@ pub mod schedule;
 pub mod score;
 pub mod streak;
 pub mod wikilink;
+pub mod xp;

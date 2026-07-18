@@ -974,3 +974,144 @@ Checklists reordenáveis.
 
 3. **Uma Checklist é um `project`; cada item é uma `task`.** `completed_at` da tarefa
    É o checkbox, e `sort_order` (REAL, ADR-0015) dá o reordenável — zero tabela nova.
+
+---
+
+## ADR-0036 — M4.5: dois kinds novos ('annual_goal', 'challenge') numa recriação só, e a Meta Anual REUSA o padrão de goal, não a tabela
+
+**Data:** 2026-07-17 · **Status:** aceito · **M4.5** · **complementa o ADR-0029**
+
+**Contexto.** O M4.5 traz a seção **Metas Anuais** e as **Temporadas/Desafios**.
+Cada uma quer ser um node — pertence a uma Esfera, tem título, status, aparece na
+busca, nos links e na Timeline —, e cada `kind` novo custa uma recriação de
+`nodes` (ADR-0020: o SQLite não sabe alterar um CHECK).
+
+**Decisão.**
+
+1. **Um kind para cada, numa recriação só (0012).** `annual_goal` e `challenge`
+   entram no mesmo 12-step — a TERCEIRA recriação do projeto, a segunda sobre dado
+   já existente. As três armadilhas (CASCADE, rowid, rename dos gatilhos de FTS)
+   ganham mais um teste em `migrations.rs`. É a decisão do ADR-0029 aplicada de
+   novo: pagar a recriação o mínimo de vezes.
+
+2. **A Meta Anual reusa o PADRÃO de goal, não a tabela `goal_details`.** Um
+   `annual_goal_details` próprio guarda `year`, `goal_kind` (binary/quantitative),
+   `metric_name`/`target_value`/`current_value`/`unit`. Por que não `goal_details`:
+   ela tem `direction` e `start_value` obrigatórios que uma meta binária ("mudar de
+   emprego") não tem, e `goal_checkpoints.goal_id` referencia `goal_details(node_id)`
+   por FK — reusá-la obrigaria uma linha-fantasma em `goal_details` para cada meta
+   anual. O progresso de uma meta anual quantitativa é `current_value/target_value`,
+   e cada atualização de `current_value` vira um evento `goal_checkpoint` no **ledger**
+   (a história da meta), não linhas numa tabela de checkpoints diários — uma meta
+   anual é um horizonte, não um diário de medições como uma meta de peso.
+
+3. **O estado da Meta Anual e da Temporada É o `nodes.status`.** ativa=`active`,
+   concluída=`done`, abandonada=`dropped`, arquivada=`archived`. Nenhuma coluna de
+   status nova. "Vencida" (a janela da temporada fechou sem bater o alvo) é
+   **derivada** (`ends_on < hoje` e ainda `active`), nunca gravada: um estado que só
+   depende da passagem do tempo mentiria até um job corrigi-lo.
+
+**Escopo fechado da Temporada.** A fonte de progresso é um CHECK de dois valores:
+`habit_days` (conta os ticks 'done' de um hábito ligado na janela — reusa
+`habit_ticks`) ou `manual` (um contador que o usuário incrementa, cobrindo
+qualquer objetivo que não seja um hábito). Ligar uma temporada a uma meta ou a um
+projeto inteiro fica para V2 — `manual` já cobre o caso geral sem inchar o M4.5.
+
+**Consequência.** `annual_goal_details` e `challenge_details` nascem na 0012. O
+custo do 12-step é pago uma vez para os dois; o padrão node se estende sem virar
+martelo (a Meta Anual pega o que precisa do goal, não a tabela inteira).
+
+---
+
+## ADR-0037 — XP e níveis são DERIVADOS do estado, nunca estado sagrado novo
+
+**Data:** 2026-07-17 · **Status:** aceito · **M4.5**
+
+**Contexto.** A gamificação (§2.2) dá XP por Esfera a cada feito e níveis por uma
+curva (`nível n custa 100·n^1.5 XP`). A pergunta: XP é uma coluna que se soma a
+cada tick, ou um número computado?
+
+**Decisão.** **Computado.** XP por Esfera é a soma dos pontos de tudo que o usuário
+fez (`habit_ticks`, tarefas concluídas, `goal_checkpoints`, livros terminados,
+caixinhas fechadas, temporadas vencidas, metas anuais concluídas), agrupado pela
+`area_id` do node — recomputável a qualquer momento a partir do estado. A tabela de
+pontos e a curva de nível vivem em `domain::xp` (puras, testadas) e estão
+documentadas em `docs/DATA_MODEL.md`. O resultado é cacheado em `insight_cache`
+como qualquer outro insight; a fonte da verdade é o estado, não o cache.
+
+**Por que não uma coluna de XP.** Uma coluna que se incrementa a cada ação é um
+segundo estado que pode divergir do primeiro — exatamente o bug que o
+ledger-como-fonte-única evita (a lição da Saúde Financeira, ADR-0028). Um XP
+gravado que discorda do que os ticks dizem é um número em que ninguém confia. E a
+constituição §2 manda: todo número do NEXUS é computado e explicável.
+
+**Consequência.** Apagar um tick ajusta o XP na próxima recomputação, sem lixo a
+reconciliar. **Subir de nível NÃO grava evento no ledger** neste milestone: o nível
+é derivado, e um "leveled_up" gravado seria estado derivado congelado que a
+recomputação poderia contradizer. A celebração de nível é da UI, no momento em que
+a tela vê o número subir. (A evolução de skills da Carreira, no M4.6, é outra
+história: lá o "subiu de nível" é um fato registrado pelo usuário, não uma derivação.)
+
+---
+
+## ADR-0038 — Conquistas: catálogo no código, desbloqueio no ledger, sincronização idempotente
+
+**Data:** 2026-07-17 · **Status:** aceito · **M4.5** · unifica o 🏆 ad-hoc do M4
+
+**Contexto.** O M4 já gravava "conquistas" soltas no ledger (a caixinha fechada, o
+livro terminado) como eventos `completed` com um campo `achievement` no payload. O
+M4.5 pede uma **galeria** (desbloqueadas + silhuetas das bloqueadas) e mais famílias
+(streaks 7/30/100/365, N revisões, meses de aporte, temporadas). Isso precisa de
+uma fonte única de "o que já foi desbloqueado".
+
+**Decisão.**
+
+- **O catálogo vive no código** (`domain::achievements`): cada conquista é uma regra
+  (`métrica >= limiar`), e regras são código, não linhas. Cada uma traz `key`
+  estável, título, descrição, ícone **Lucide** (nunca emoji — M4.6 §3.2) e um `tier`
+  visual.
+- **O desbloqueio é um evento no ledger** — `event_type = achievement_unlocked`,
+  `entity_kind = achievement`, `entity_id = <key>`. Um fato da vida do usuário
+  (ADR-0023: "aconteceu?" — sim), que a Timeline mostra e a galeria lê.
+- **A sincronização é idempotente.** Um passo (`sync_achievements`) computa as `key`s
+  que os contadores atuais satisfazem (`achievements::evaluate`), subtrai as que o
+  ledger já registrou, e grava só a diferença — numa transação. Rodar duas vezes não
+  duplica; o `entity_id = key` é a UNIQUE lógica.
+
+**Por que não derivar a galeria só do estado, sem ledger.** Uma conquista tem uma
+DATA (quando caiu) que só o ledger guarda, e a Timeline a quer como fato. Derivar
+"desbloqueada agora" a cada abertura perderia o "desbloqueada em março".
+
+**Sobre o 🏆 do M4.** Os eventos `book_finished`/`fin_goal_complete` continuam como
+fatos próprios ("livro terminado", "objetivo alcançado"); o catálogo tem conquistas
+que a sincronização desbloqueia lendo o MESMO estado (ex.: `book_first`), sem
+conflito — são camadas distintas: o fato da vida, e a conquista que ele cruza.
+
+---
+
+## ADR-0039 — O Nexus Score do dia é congelado no ledger; o passado nunca é recomputado
+
+**Data:** 2026-07-17 · **Status:** aceito · **M4.5** · decisão do arquiteto (§1 do prompt)
+
+**Contexto.** O Score do dia (`domain::score`) é computado ao vivo para o Hub. Para
+a Timeline mostrar a evolução histórica do Score, alguém precisa guardá-lo — e a
+pergunta é se o histórico é recomputado sob demanda ou congelado.
+
+**Decisão (do arquiteto).** **Congelar.** O Score de um dia vira um evento diário no
+ledger — `event_type = nexus_score`, `entity_kind = daily_score`, `entity_id = <dia
+YYYY-MM-DD>` — com o valor e a **versão da fórmula** no payload. O fechamento de mês
+o agrega em `timeline_rollups` (a tabela que já existe desde a 0003, cumprindo o
+ADR-0034). **O passado nunca é recomputado.**
+
+**Por que congelar, e não recomputar.** É a filosofia do ledger: a história é o que
+você viu na época. Recomputar o Score de um dia de 2024 sobre a fórmula de 2026
+reescreveria o que o app te mostrou naquele dia — e a fórmula EVOLUI (pesos podem
+mudar quando features novas entram, como os 20% da rotina matinal ou os 25% dos
+objetivos financeiros que já se redistribuíram). A versão no payload documenta a
+transição: se a fórmula muda, muda daí para frente, e cada linha antiga diz sob qual
+versão nasceu.
+
+**Um por dia.** O `entity_id = dia` é a UNIQUE lógica; congelar o Score de um dia que
+já tem linha é no-op. O congelamento roda no fechamento do dia (na abertura do app,
+para o dia anterior ainda não gravado) — o mesmo padrão "a navegação paga a escrita"
+do ADR-0026/0034, e pela mesma razão (o pool de leitura é `query_only`).

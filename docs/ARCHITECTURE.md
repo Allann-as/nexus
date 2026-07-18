@@ -1,7 +1,8 @@
 # NEXUS — Arquitetura
 
 > Documento vivo. Atualize-o no mesmo commit que muda a estrutura.
-> Estado atual: **M4 concluído** (Esferas II + Memória). Próximo: M4.5 — Vida (BI).
+> Estado atual: **M4.5 em andamento** (Vida: BI, gamificação, Metas Anuais).
+> Base: M4 concluído (Esferas II + Memória).
 
 ## 1. O que o NEXUS é
 
@@ -99,7 +100,7 @@ logs/      rotação diária
 | **M3** | Calendário (timeblocking, RFC-5545, conflitos), Metas + sub-desafios | ✅ **concluído** |
 | **M3.5** | Esferas I: Saúde (checkpoints, treino, exames) + Finanças (aportes, Saúde Financeira) | ✅ **concluído** |
 | **M4** | Esferas II: Objetivos Financeiros, Estudos + Biblioteca, Carreira; Notas; Timeline | ✅ **concluído** |
-| M4.5 | `bi_engine`, Momentum, Conquistas, Retrospectiva | ⬜ |
+| M4.5 | `bi_engine`, Momentum, Conquistas, Retrospectiva, Metas Anuais | 🔧 em andamento |
 | M5 | Backup/restore, export, Revisão Semanal, Modo Foco, seed de 5 anos | ⬜ |
 | M6 | Ícone, instalador, manual, entrega | ⬜ |
 

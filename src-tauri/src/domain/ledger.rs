@@ -23,6 +23,18 @@ pub enum EventType {
     Renamed,
     Deleted,
     WeeklyReviewCompleted,
+    /// O Nexus Score do dia, congelado (M4.5). A história é o que você viu na
+    /// época: o passado nunca é recomputado. O payload carrega o valor e a VERSÃO
+    /// da fórmula — se ela evoluir, muda daí para frente. Ver ADR-0039.
+    NexusScore,
+    /// Uma conquista desbloqueada (M4.5). `entity_id` é a chave estável da
+    /// conquista no catálogo (`domain::achievements`); a linha entra uma vez só,
+    /// e a galeria a lê daqui. Ver ADR-0038.
+    AchievementUnlocked,
+    /// Uma temporada/desafio começou.
+    ChallengeStarted,
+    /// Uma temporada/desafio foi concluído (o placar bateu o alvo).
+    ChallengeCompleted,
 }
 
 impl EventType {
@@ -41,6 +53,10 @@ impl EventType {
             EventType::Renamed => "renamed",
             EventType::Deleted => "deleted",
             EventType::WeeklyReviewCompleted => "weekly_review_completed",
+            EventType::NexusScore => "nexus_score",
+            EventType::AchievementUnlocked => "achievement_unlocked",
+            EventType::ChallengeStarted => "challenge_started",
+            EventType::ChallengeCompleted => "challenge_completed",
         }
     }
 }
@@ -65,6 +81,15 @@ pub enum LedgerEntityKind {
     /// vida do usuário que não é um node (§2.3, ADR-0027): ele não tem tela nem
     /// satélite, só existe na história. A Timeline o desenha com destaque.
     CareerMilestone,
+    /// Uma conquista desbloqueada (M4.5) — um fato sem node. O `entity_id` é a
+    /// chave estável do catálogo (`domain::achievements`), não um id de linha: é
+    /// por ele que a galeria sabe o que já foi desbloqueado e que a segunda
+    /// tentativa de desbloquear a mesma conquista é ignorada. Ver ADR-0038.
+    Achievement,
+    /// O Nexus Score de um dia, congelado (M4.5). O `entity_id` é o próprio dia
+    /// ('YYYY-MM-DD'): um score por dia, e a UNIQUE lógica é "um por dia". Ver
+    /// ADR-0039.
+    DailyScore,
 }
 
 impl LedgerEntityKind {
@@ -73,6 +98,8 @@ impl LedgerEntityKind {
             LedgerEntityKind::Node(k) => k.as_str(),
             LedgerEntityKind::Contribution => "contribution",
             LedgerEntityKind::CareerMilestone => "career_milestone",
+            LedgerEntityKind::Achievement => "achievement",
+            LedgerEntityKind::DailyScore => "daily_score",
         }
     }
 }

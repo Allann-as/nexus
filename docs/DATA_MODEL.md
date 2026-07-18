@@ -358,6 +358,69 @@ SEGUNDA recriação sobre dados existentes também é segura.
 (`entity_kind='career_milestone'`, ADR-0032). Nenhuma tabela nova: `timeline_rollups`
 e `insight_cache` já existiam desde a 0003.
 
+## 5.9 Vida: Metas Anuais e Temporadas (0012)
+
+**Dois kinds novos numa recriação só de `nodes`** (a TERCEIRA do projeto, ADR-0036):
+`annual_goal` (a seção Metas Anuais) e `challenge` (as Temporadas/Desafios). As três
+armadilhas do 12-step ganharam mais um teste — a segunda recriação sobre dado já
+existente prova, de novo, que CASCADE/rowid/rename estão sob controle.
+
+- **`annual_goal_details`** — a meta anual: `year` (INTEGER, o eixo da visão por ano;
+  índice `idx_annual_goal_year`), `goal_kind` (`binary`/`quantitative`, CHECK),
+  `metric_name`/`target_value`/`current_value`/`unit` (só a quantitativa usa). O
+  **status é o `nodes.status`** (ativa=`active`, concluída=`done`, abandonada=`dropped`).
+  Ela **reusa o padrão de goal, não a tabela** `goal_details` (ADR-0036): o progresso
+  de uma quantitativa é `current_value/target_value`, e cada atualização vira um
+  evento `goal_checkpoint` no ledger — não linhas numa tabela de checkpoints diários.
+- **`challenge_details`** — a temporada: janela `starts_on`/`ends_on` ('YYYY-MM-DD'
+  local), `metric` (`habit_days`/`manual`, CHECK), `habit_id` (o hábito que alimenta
+  `habit_days`, reusando `habit_ticks`), `target_count` (>0, o alvo do placar) e
+  `manual_count` (o contador de `manual`). Índice parcial `idx_challenge_habit`. O
+  estado é o `nodes.status`; **"vencida" é DERIVADO** (`ends_on < hoje` e ainda
+  `active`), nunca gravado.
+
+**Nada de tabela para XP, conquistas ou Score** — os três são derivados/eventos:
+
+- **XP e níveis por Esfera** (ADR-0037) — DERIVADOS do estado. `domain::xp` é a
+  aritmética pura: a tabela de pontos abaixo, e a curva `custo(n) = 100·n^1.5` para
+  ALCANÇAR o nível `n` (nível 1 = 0 XP; a soma acumulada dos custos dá o piso de cada
+  nível). O XP por Esfera é a soma dos pontos de tudo que o usuário fez, agrupado pela
+  `area_id` do node. Cacheado em `insight_cache`; a fonte é o estado.
+
+  | Feito | Pontos |
+  |---|---|
+  | Hábito cumprido no dia | 10 |
+  | Tarefa planejada concluída | 15 |
+  | Checkpoint de meta | 20 |
+  | Sub-desafio de meta concluído | 25 |
+  | Livro terminado | 60 |
+  | Caixinha (objetivo financeiro) fechada | 80 |
+  | Temporada vencida | 120 |
+  | Meta anual concluída | 200 |
+
+- **Conquistas** (ADR-0038) — o **catálogo vive em `domain::achievements`** (regra =
+  `métrica >= limiar`, com ícone Lucide, nunca emoji); o **desbloqueio é um evento no
+  ledger** (`achievement_unlocked`, `entity_kind='achievement'`, `entity_id=<key>`),
+  sincronizado de forma idempotente (o `key` é a UNIQUE lógica). A galeria = catálogo
+  ∪ desbloqueadas; as bloqueadas viram silhuetas.
+
+- **Nexus Score congelado** (ADR-0039) — um evento diário no ledger (`nexus_score`,
+  `entity_kind='daily_score'`, `entity_id=<dia>`), com o valor e a **versão da fórmula**
+  no payload, agregado em `timeline_rollups` no fechamento de mês. **O passado nunca é
+  recomputado** — a história é o que você viu na época.
+
+### Insights determinísticos ganham forma (`domain::correlation`, `domain::burnout`)
+
+As guardas da §5 saíram do papel para código puro e testado:
+
+- **Correlação 2×2** (`correlation`): lift e phi (φ), com `n >= 30` obrigatório, a
+  **faixa morta** de lift `[0,9 ; 1,1]` (efeito indistinguível de acaso, nunca vira
+  card) e os pisos do template afirmativo (`φ >= 0,25` **e** `lift >= 1,3`). Sem
+  denominador dos dois lados (A feito todo dia, ou B nunca sem A) → `None`, não um
+  número inventado.
+- **Anti-burnout** (`burnout`): carga da semana ÷ média móvel de até 8 semanas
+  (mínimo 4 para falar), alerta acima de `1,25×`. Base zero → `None`.
+
 ## 6. Integridade e migrations
 
 - `user_version` gerenciado pelo `rusqlite_migration`.
