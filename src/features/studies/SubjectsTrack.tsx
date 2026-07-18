@@ -22,6 +22,7 @@ import {
 } from "../../lib/ipc";
 import { formatMinutes, toHours, shortDay } from "./studyFormat";
 import { LogSessionModal } from "./LogSessionModal";
+import { HabitTracker } from "../habits/HabitTracker";
 
 export function SubjectsTrack({ areaId }: { areaId: string }) {
   const client = useQueryClient();
@@ -261,6 +262,11 @@ function SubjectCard({ subject, onLog }: { subject: Subject; onLog: () => void }
         <Clock size={13} strokeWidth={2.2} />
         Registrar sessão
       </button>
+
+      {/* O tracker plugável (ADR-0058): um hábito ligado desenha aqui os dias que
+          alimentam esta matéria. Só exibição — a matéria não tem alvo de dias a
+          contar sozinho como a Meta. */}
+      <HabitTracker nodeId={subject.id} year={new Date().getFullYear()} color="var(--sphere)" />
     </Card>
   );
 }

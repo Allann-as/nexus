@@ -27,6 +27,8 @@ import { Button, Card, EmptyState, PageHeader, PAGE_CONTAINER, cx } from "../../
 import { ProgressBar } from "../../design-system/charts";
 import { useToasts } from "../../stores/toasts";
 import { NodeLinkSection } from "../links/NodeLinkSection";
+import { HabitTracker } from "../habits/HabitTracker";
+import { Formula } from "../../design-system/Formula";
 import { NewAnnualGoalModal } from "./NewAnnualGoalModal";
 import { annualPace } from "../objectives/pace";
 
@@ -206,6 +208,10 @@ function GoalCard({
   const done = goal.status === "done";
   const active = goal.status === "active";
   const quantitative = goal.goalKind === "quantitative";
+  // Rastreada por hábito (ADR-0058): o número vem dos ticks, não da coluna, e a
+  // edição manual sai de cena — os ticks são donos da contagem.
+  const tracked = goal.trackedCount != null;
+  const effective = tracked ? goal.trackedCount! : goal.currentValue;
 
   return (
     <Card className="p-4">
@@ -219,18 +225,19 @@ function GoalCard({
 
       {quantitative && (
         <p className="tabular mt-2 text-[12px] text-[var(--text-tertiary)]">
-          {goal.currentValue} / {goal.targetValue} {goal.unit ?? goal.metricName}
+          {effective} / {goal.targetValue} {goal.unit ?? goal.metricName}
         </p>
       )}
       <ProgressBar value={goal.progressRatio} color={color} className="mt-2" />
 
       {/* O indicador de RITMO (REFINO R7): "no ritmo atual fecha em X". É o que
-          faz de uma meta de constância ("correr 100 dias") algo vivo. */}
+          faz de uma meta de constância ("correr 100 dias") algo vivo. Lê o valor
+          EFETIVO — rastreado, vem dos ticks. */}
       {active &&
         quantitative &&
         goal.targetValue != null &&
         (() => {
-          const p = annualPace(goal.currentValue, goal.targetValue!, elapsed);
+          const p = annualPace(effective, goal.targetValue!, elapsed);
           if (!p) return null;
           return (
             <p
@@ -245,8 +252,17 @@ function GoalCard({
           );
         })()}
 
+      {tracked && (
+        <Formula>
+          Contagem automática: dias distintos em que um hábito ligado foi cumprido em{" "}
+          {year} (fonte: os ticks; nunca um número digitado).
+        </Formula>
+      )}
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {active && quantitative && (
+        {/* A edição manual só existe quando NÃO há hábito ligado — senão dois
+            donos disputariam o mesmo número. */}
+        {active && quantitative && !tracked && (
           <>
             <input
               type="number"
@@ -299,6 +315,11 @@ function GoalCard({
           )}
         </div>
       </div>
+
+      {/* O tracker plugável (ADR-0058): ligar um hábito faz a contagem vir dos
+          ticks e desenha o ano em dias. Só nas quantitativas — é onde "dias"
+          significam algo. */}
+      {quantitative && <HabitTracker nodeId={goal.id} year={year} color={color} />}
 
       {/* O backlink: as metas de carreira que contam para esta meta anual
           (ADR-0046). Só leitura — o vínculo se cria do lado da meta de carreira. */}

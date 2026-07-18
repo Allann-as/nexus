@@ -303,11 +303,14 @@ fn completion_event(id: &str, title: &str, now: i64, day: &str) -> NewLedgerEven
 }
 
 fn to_card(goal: AnnualGoal) -> AnnualGoalCard {
+    // O valor efetivo: se há hábito ligado (ADR-0058), o número vem dos ticks
+    // (`tracked_count`), não da coluna manual. A barra e o ritmo leem daqui.
+    let effective = goal.tracked_count.unwrap_or(goal.current_value);
     let progress_ratio = if goal.status == "done" {
         1.0
     } else if goal.goal_kind == "quantitative" {
         match goal.target_value {
-            Some(t) if t > 0.0 => (goal.current_value / t).clamp(0.0, 1.0),
+            Some(t) if t > 0.0 => (effective / t).clamp(0.0, 1.0),
             _ => 0.0,
         }
     } else {

@@ -16,7 +16,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarRange, PiggyBank, Target, TrendingUp, type LucideIcon } from "lucide-react";
+import { Activity, CalendarRange, PiggyBank, Target, TrendingUp, type LucideIcon } from "lucide-react";
 
 import {
   annualGoalYear,
@@ -39,6 +39,8 @@ interface ObjCard {
   areaId: string | null;
   ratio: number;
   detail: string;
+  /** A meta conta sozinha pelos ticks de um hábito ligado (ADR-0058). */
+  tracked?: boolean;
   pace?: { message: string; onTrack: boolean };
   onOpen: () => void;
 }
@@ -85,14 +87,17 @@ export function ObjectivesScreen() {
     for (const g of (yearGoals.data?.goals ?? []) as AnnualGoal[]) {
       const quantitative = g.goalKind === "quantitative" && g.targetValue != null;
       const unit = g.unit ? ` ${g.unit}` : "";
+      // Rastreada por hábito (ADR-0058): o número efetivo vem dos ticks.
+      const tracked = g.trackedCount != null;
+      const effective = tracked ? g.trackedCount! : g.currentValue;
       const detail = quantitative
-        ? `${g.currentValue} / ${g.targetValue}${unit}`
+        ? `${effective} / ${g.targetValue}${unit}`
         : g.progressRatio >= 1
           ? "Concluída"
           : "Em aberto";
       const pace =
         quantitative && g.targetValue
-          ? annualPace(g.currentValue, g.targetValue, elapsed)
+          ? annualPace(effective, g.targetValue, elapsed)
           : null;
       out.push({
         id: `meta:${g.id}`,
@@ -101,6 +106,7 @@ export function ObjectivesScreen() {
         areaId: g.areaId,
         ratio: Math.min(1, g.progressRatio),
         detail,
+        tracked,
         pace: pace ? { message: pace.message, onTrack: pace.onTrack } : undefined,
         onOpen: () => navigate("/annual-goals"),
       });
@@ -198,11 +204,23 @@ function ObjectiveCard({
           </span>
           <h3 className="truncate text-[14px] font-semibold text-[var(--text-primary)]">{card.title}</h3>
         </div>
-        {area && (
-          <span className="flex shrink-0 items-center gap-1 text-[10px] text-[var(--text-tertiary)]">
-            <SphereIcon name={area.icon} size={12} style={{ color: "var(--sphere)" }} />
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {card.tracked && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold text-[var(--sphere)]"
+              style={{ background: "color-mix(in srgb, var(--sphere) 14%, transparent)" }}
+              title="A contagem vem sozinha dos ticks de um hábito ligado"
+            >
+              <Activity size={9} />
+              auto
+            </span>
+          )}
+          {area && (
+            <span className="flex items-center gap-1 text-[10px] text-[var(--text-tertiary)]">
+              <SphereIcon name={area.icon} size={12} style={{ color: "var(--sphere)" }} />
+            </span>
+          )}
+        </div>
       </div>
 
       <div>

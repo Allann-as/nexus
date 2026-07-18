@@ -1865,3 +1865,69 @@ sobre os nodes que já existem.
 honestamente): o tracker plugável de dias (heatmap anexável a qualquer contexto via `links`) e a
 contagem AUTOMÁTICA a partir de um hábito ligado — hoje a meta quantitativa é incrementada à mão.
 A superfície e o ritmo já estão de pé para recebê-los.
+
+## ADR-0058 — ARSENAL (M5.6): a batelada de tipos que NÃO houve, e o tracker que reusa `contributes_to`
+
+**Contexto — a regra de batch.** Um `kind` ou um `link_type` novo custa uma recriação de `nodes`
+ou de `links` pelo 12-step (§5.6 do DATA_MODEL, ADR-0029/0036/0045/0046). A regra da constituição
+é olhar o roadmap inteiro ANTES de recriar, para pagar uma recriação só. Abrindo o ARSENAL (as 8
+features do M5.6) a pergunta obrigatória foi: **quais delas pedem tipo novo?**
+
+**O levantamento, feature a feature:**
+
+| Feature | Precisa de `kind`/`link_type` novo? | Como é servida |
+|---|---|---|
+| 1. Tracker plugável + contagem automática | **Não** | Reusa `contributes_to` (hábito → contexto) — já no CHECK de `links` desde a 0014. |
+| 2. Semana perfeita | Não | `EventType`/`LedgerEntityKind` novos (enum Rust) + entradas no catálogo de conquistas. |
+| 3. Recordes pessoais | Não | Idem — evento no ledger; o ledger não tem CHECK em `event_type`/`entity_kind`. |
+| 4. Ano em pixels | Não | Leitura de `timeline_rollups` + eventos `nexus_score`. |
+| 5. Comparativo de períodos | Não | Leitura de `timeline_rollups`. |
+| 6. Horizonte | Não | Leitura de eventos/metas + `links` (`related`), já existentes. |
+| 7. Retrospectiva anual | Não | Leitura + arquivos gerados (retenção, como backups). |
+| 8. NEXUS na bandeja | Não | Integração de SO (tray, atalho global) + um flag de configuração. |
+
+**Decisão.** O ARSENAL inteiro é entregue **sem nenhuma recriação de `nodes` nem de `links`**. O
+que parecia pedir tipo novo (o vocabulário do ledger para semana perfeita e recordes) é enum de
+domínio, não schema: `ledger.event_type` e `ledger.entity_kind` são `TEXT` sem CHECK **de
+propósito** (§3 do DATA_MODEL) — o vocabulário fechado vive no Rust (`EventType`,
+`LedgerEntityKind`), onde um valor novo é uma linha, não uma migração destrutiva. A promessa da
+§2 ("um tipo novo é rotina") aqui se cumpre **sem cobrar o preço** — porque nenhuma feature do
+ARSENAL introduz uma entidade nova; todas agregam, derivam ou integram sobre o que já existe.
+
+**A feature 1 em detalhe — reusar `contributes_to`, derivar como o contador de sub-desafio:**
+
+1. **O vínculo é `contributes_to`, hábito → contexto.** "Correr 100 dias" é uma `annual_goal`
+   quantitativa (ADR-0057); ligar o hábito "Correr" a ela é dizer *o hábito contribui seus dias
+   para a meta* — exatamente a semântica de `contributes_to` (ADR-0046), agora com um consumidor
+   novo (antes só metas de carreira → metas anuais). Direcional: `source` = o hábito, `target` = o
+   contexto (a meta, a matéria). Nenhum `link_type` novo; nenhuma recriação.
+
+2. **A contagem é DERIVADA, no molde do contador de sub-desafio (§5.6).** Quando uma `annual_goal`
+   tem um hábito ligado por `contributes_to`, o `current_value` efetivo é **computado na leitura** —
+   `COUNT(DISTINCT dia)` dos ticks `done` dos hábitos ligados, na janela do ANO da meta
+   (`{ano}-01-01`..`{ano}-12-31`) — nunca gravado. É a mesma filosofia do XP, da Saúde Financeira e
+   do próprio contador de milestone (`milestone_details`): o número é dos ticks, não de um campo. A
+   coluna `current_value` continua servindo às metas **sem** hábito ligado (o incremento à mão de
+   sempre). `DISTINCT dia` cobre com honestidade o caso de mais de um hábito ligado ("dias em que
+   cumpri algum dos hábitos"), sem regra especial na `LinkService` — que segue genérica.
+
+3. **Rastreado NÃO auto-conclui.** Como o contador de sub-desafio (que `set_milestone_done`
+   recusa: os ticks são donos do número, e a doneness é derivada da razão, não um status gravado),
+   uma meta rastreada mostra o progresso vivo mas **não vira `done` sozinha** — concluir segue um
+   ato do usuário ("Concluir"), preservando o significado do evento de conclusão (e da conquista de
+   meta anual). O ritmo (ADR-0057) e a barra já leem o valor efetivo; a diferença é só de onde vem
+   o número.
+
+4. **O heatmap é o de sempre, agora por ANO.** O tracker mostra o heatmap SVG do hábito
+   (`features/habits/Heatmap.tsx`, do M2) numa janela alinhada ao ano da meta — um comando novo
+   `habit_year_heatmap(habit_id, year)`, irmão de `habit_heatmap`, sem tabela nova. O componente
+   `HabitTracker` (anexar/desanexar hábito + heatmap) é **plugável em qualquer node**: entra na
+   Meta (com a contagem automática) e na Matéria (só exibição — "os dias que alimentam esta
+   matéria"). A **Esfera** é uma `area`, não um node, então `links` não a alcança; o tracker de uma
+   Esfera seria a união dos dos seus membros — deixado para v1.1 (nota honesta, sem node novo).
+
+**Consequência.** O ARSENAL abre pagando **zero** recriações — o levantamento de batch encontrou
+que nenhuma feature pede tipo novo, e isso É o resultado, registrado para não se recriar tabela
+por reflexo. A feature 1 fecha a metade profunda do REFINO (ADR-0057): a constância conta sozinha,
+o heatmap pluga em qualquer contexto, e o mecanismo é o `contributes_to` que já existia — a régua
+determinística de sempre, sem uma linha de migração.

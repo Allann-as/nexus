@@ -104,6 +104,17 @@ pub fn habit_heatmap(
     state.habits.heatmap(&id, days.unwrap_or(365))
 }
 
+/// O heatmap de um ano-calendário — o que o tracker plugável desenha alinhado ao
+/// ano da meta (ARSENAL, ADR-0058).
+#[tauri::command]
+pub fn habit_year_heatmap(
+    state: State<'_, AppState>,
+    id: String,
+    year: i64,
+) -> Result<Vec<HeatmapCell>> {
+    state.habits.year_heatmap(&id, year)
+}
+
 #[tauri::command]
 pub fn habit_weekday_stats(
     state: State<'_, AppState>,

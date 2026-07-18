@@ -407,6 +407,11 @@ export const habitsToday = () => call<HabitWithStats[]>("habits_today");
 export const habitHeatmap = (id: string, days = 365) =>
   call<HeatmapCell[]>("habit_heatmap", { id, days });
 
+/** O heatmap de um ano-calendário — o que o tracker plugável desenha alinhado ao
+ *  ano da meta (ARSENAL, ADR-0058). */
+export const habitYearHeatmap = (id: string, year: number) =>
+  call<HeatmapCell[]>("habit_year_heatmap", { id, year });
+
 export const habitWeekdayStats = (id: string, days = 180) =>
   call<WeekdayStat[]>("habit_weekday_stats", { id, days });
 
@@ -1689,6 +1694,10 @@ export interface AnnualGoal {
   unit: string | null;
   createdAt: number;
   progressRatio: number;
+  /** DERIVADA dos ticks quando há um hábito ligado por `contributes_to`
+   *  (ARSENAL, ADR-0058): dias distintos cumpridos na janela do ano. Presente ⇒
+   *  a meta é rastreada e o número vem dos ticks, não de `currentValue`. */
+  trackedCount: number | null;
 }
 
 export interface YearOverview {

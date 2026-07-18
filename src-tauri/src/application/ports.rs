@@ -1212,6 +1212,12 @@ pub struct AnnualGoal {
     pub current_value: f64,
     pub unit: Option<String>,
     pub created_at: i64,
+    /// A contagem DERIVADA dos ticks quando há um hábito ligado por
+    /// `contributes_to` (ARSENAL, ADR-0058): `COUNT(DISTINCT dia)` dos ticks
+    /// `done` dos hábitos ligados na janela do ano. `Some` = rastreada (o número
+    /// vem dos ticks, não da coluna `current_value`); `None` = sem hábito ligado
+    /// (o `current_value` manual de sempre manda). Nunca gravada.
+    pub tracked_count: Option<f64>,
 }
 
 pub trait AnnualGoalRepository: Send + Sync {

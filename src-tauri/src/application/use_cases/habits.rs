@@ -349,6 +349,45 @@ impl HabitService {
         Ok(cells)
     }
 
+    /// O heatmap de um ANO-CALENDÁRIO (ARSENAL, ADR-0058): células de
+    /// `{ano}-01-01` até `{ano}-12-31`, mas nunca além de hoje (o ano corrente
+    /// para no dia; o futuro não tem dias a mostrar). É o que o tracker plugável
+    /// desenha alinhado ao ano da meta — em vez da janela móvel de `heatmap`.
+    pub fn year_heatmap(&self, habit_id: &str, year: i64) -> Result<Vec<HeatmapCell>> {
+        let habit = self.habits.get(habit_id)?;
+        let today = parse_day(&self.clock.today_local())?;
+        let from = chrono::NaiveDate::from_ymd_opt(year as i32, 1, 1)
+            .ok_or_else(|| NexusError::Validation(format!("ano inválido: {year}")))?;
+        let year_end = chrono::NaiveDate::from_ymd_opt(year as i32, 12, 31).unwrap();
+        let to = year_end.min(today);
+
+        // Ano futuro (a meta de 2027 vista em 2026): nada a desenhar ainda.
+        if from > to {
+            return Ok(Vec::new());
+        }
+
+        let ticks: BTreeMap<String, Tick> = self
+            .habits
+            .ticks_in_range(habit_id, &format_day(from), &format_day(to))?
+            .into_iter()
+            .collect();
+
+        let mut cells = Vec::new();
+        let mut d = from;
+        while d <= to {
+            let key = format_day(d);
+            let tick = ticks.get(&key);
+            cells.push(HeatmapCell {
+                status: tick.map(|t| t.status),
+                value: tick.and_then(|t| t.value),
+                scheduled: habit.schedule.is_scheduled_on(d),
+                day: key,
+            });
+            d += chrono::Duration::days(1);
+        }
+        Ok(cells)
+    }
+
     /// Ofensores: taxa de falha por dia da semana.
     pub fn weekday_stats(&self, habit_id: &str, days: i64) -> Result<Vec<WeekdayStat>> {
         let today = parse_day(&self.clock.today_local())?;

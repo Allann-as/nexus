@@ -26,14 +26,37 @@ impl SqliteAnnualGoalRepository {
     }
 }
 
+// As duas últimas colunas são DERIVADAS na leitura (ARSENAL, ADR-0058), no molde
+// do contador de sub-desafio (§5.6): quando um hábito é ligado à meta por
+// `contributes_to`, o progresso vem dos ticks, não da coluna `current_value`.
+//   - `is_tracked` (0/1): existe algum hábito ligado a esta meta?
+//   - `tracked_days`: COUNT(DISTINCT dia) dos ticks `done` dos hábitos ligados,
+//     na janela do ANO da meta. É range scan na PK clusterizada de `habit_ticks`.
 const SELECT: &str = "
     SELECT n.id, n.title, n.area_id, n.status,
            a.year, a.goal_kind, a.metric_name, a.target_value, a.current_value, a.unit,
-           n.created_at
+           n.created_at,
+           EXISTS(
+             SELECT 1 FROM links l JOIN nodes hn ON hn.id = l.source_id
+              WHERE l.target_id = n.id AND l.link_type = 'contributes_to'
+                AND hn.kind = 'habit'
+           ) AS is_tracked,
+           (
+             SELECT COUNT(DISTINCT t.day)
+               FROM habit_ticks t
+               JOIN links l ON l.source_id = t.habit_id
+               JOIN nodes hn ON hn.id = l.source_id
+              WHERE l.target_id = n.id AND l.link_type = 'contributes_to'
+                AND hn.kind = 'habit' AND t.status = 'done'
+                AND t.day BETWEEN printf('%04d-01-01', a.year)
+                              AND printf('%04d-12-31', a.year)
+           ) AS tracked_days
       FROM annual_goal_details a
       JOIN nodes n ON n.id = a.node_id";
 
 fn map_goal(row: &Row) -> rusqlite::Result<AnnualGoal> {
+    let is_tracked: bool = row.get(11)?;
+    let tracked_days: i64 = row.get(12)?;
     Ok(AnnualGoal {
         id: row.get(0)?,
         title: row.get(1)?,
@@ -46,6 +69,7 @@ fn map_goal(row: &Row) -> rusqlite::Result<AnnualGoal> {
         current_value: row.get(8)?,
         unit: row.get(9)?,
         created_at: row.get(10)?,
+        tracked_count: is_tracked.then_some(tracked_days as f64),
     })
 }
 
@@ -198,10 +222,16 @@ mod tests {
     use crate::infrastructure::paths::Paths;
 
     fn fixture() -> (tempfile::TempDir, SqliteAnnualGoalRepository) {
+        let (dir, _db, repo) = fixture_with_db();
+        (dir, repo)
+    }
+
+    fn fixture_with_db() -> (tempfile::TempDir, Arc<Db>, SqliteAnnualGoalRepository) {
         let dir = tempfile::tempdir().unwrap();
         let paths = Paths::at(dir.path().to_path_buf()).unwrap();
         let db = Arc::new(Db::open(&paths).unwrap());
-        (dir, SqliteAnnualGoalRepository::new(db))
+        let repo = SqliteAnnualGoalRepository::new(Arc::clone(&db));
+        (dir, db, repo)
     }
 
     fn ev(id: &str, et: EventType) -> NewLedgerEvent {
@@ -295,6 +325,51 @@ mod tests {
         repo.set_status("g3", "archived", 3_000, &ev("g3", EventType::Archived))
             .unwrap();
         assert_eq!(repo.list_by_year(2027).unwrap().len(), 1, "arquivada some");
+    }
+
+    /// ADR-0058: um hábito ligado por `contributes_to` faz a contagem vir dos
+    /// ticks (DERIVADA), não da coluna `current_value`. `DISTINCT dia` e a janela
+    /// do ano são o contrato.
+    #[test]
+    fn a_linked_habit_makes_the_count_come_from_the_ticks() {
+        let (_d, db, repo) = fixture_with_db();
+        make(&repo, "g1", 2026, AnnualGoalKind::Quantitative, Some(100.0));
+
+        // Sem hábito ligado: não é rastreada; o número é o da coluna (0 aqui).
+        assert_eq!(repo.get("g1").unwrap().tracked_count, None);
+
+        // Cria o hábito, liga-o à meta e semeia ticks — dois `done` em 2026, um
+        // fora do ano, um `failed` (que não conta) e um dia repetido (DISTINCT).
+        db.with_write(|conn| {
+            conn.execute(
+                "INSERT INTO nodes (id, kind, title, status, created_at, updated_at)
+                 VALUES ('h1', 'habit', 'Correr', 'active', 1, 1)",
+                [],
+            )?;
+            conn.execute(
+                "INSERT INTO links (source_id, target_id, link_type, created_at)
+                 VALUES ('h1', 'g1', 'contributes_to', 1)",
+                [],
+            )?;
+            for (day, status) in [
+                ("2026-03-01", "done"),
+                ("2026-03-02", "done"),
+                ("2026-03-02", "done"), // PK (h1, dia) — mesmo dia, não duplica
+                ("2026-04-10", "failed"), // falhou: não conta
+                ("2025-12-31", "done"), // fora do ano da meta
+            ] {
+                conn.execute(
+                    "INSERT OR REPLACE INTO habit_ticks (habit_id, day, status, ts)
+                     VALUES ('h1', ?1, ?2, 1)",
+                    params![day, status],
+                )?;
+            }
+            Ok(())
+        })
+        .unwrap();
+
+        // Agora é rastreada: dois dias distintos `done` dentro de 2026.
+        assert_eq!(repo.get("g1").unwrap().tracked_count, Some(2.0));
     }
 
     #[test]
