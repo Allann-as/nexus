@@ -1409,3 +1409,66 @@ mas seu `link_type` era um CHECK fechado (`related/blocks/references/attached_to
 **Consequência.** As esferas deixam de ser ilhas: uma meta de carreira agora se
 amarra ao ano e aos estudos, com a relação visível e reversível dos dois lados. O
 mecanismo é genérico — qualquer par de nodes é linkável no futuro sem schema novo.
+
+## ADR-0047 — A sessão de estudo: um LOG que vale 10 XP, e as estatísticas que ela alimenta
+
+**Data:** 2026-07-18 · **Status:** aceito · **M4.6** · §2.7 (item 7) · **aplica o ADR-0027/0045**
+
+**Contexto.** O item 7 (Estudos) ativa a fundação que a `0013` deixou pronta
+(`subject_details`, `study_sessions` — ADR-0045): matérias com progresso agregado,
+o registro de sessões de estudo, e estatísticas de leitura e de estudo. Faltava
+decidir **quanto vale uma sessão** em XP, **onde ela mora** no ledger, e **como as
+estatísticas honram** a constituição (§2: determinístico, explicável, sem inventar).
+
+**Decisão.**
+
+1. **A sessão é um LOG, não um node** — como o aporte (ADR-0027) e o `habit_tick`.
+   Vive em `study_sessions`; registrá-la grava estado **e** o evento
+   `study_session_logged` (`entity_kind='study_session'`, o `entity_id` é o id da
+   linha) na MESMA transação. Ganha uma variante `LedgerEntityKind::StudySession` —
+   um fato sem node, exatamente o que o ADR-0027 previu ("um fato novo sem node
+   ganha uma variante, não um `Kind` emprestado").
+
+2. **Uma sessão vale `XP_STUDY_SESSION = 10`** — o tier do gesto diário (o mesmo do
+   `habit_done`). A sessão é o gesto atômico da Esfera Estudos, como o tick é o do
+   hábito: um ato de disciplina que soma pela repetição. O valor é **plano por
+   sessão, não por minuto** — uma sessão de 3 h não rende mais XP que três de 1 h, e
+   ninguém "sobe de nível" inflando os minutos. Como o XP é derivado e é a motivação
+   do próprio usuário, jogar com a contagem de sessões só engana a si mesmo; o valor
+   plano tira o incentivo de mentir na duração, que é o que envenenaria as médias.
+   O XP atribui à Esfera da **matéria** (ou do livro/competência ligados, por
+   `COALESCE`) — uma sessão de tópico livre sem vínculo conta só no XP geral.
+
+3. **As estatísticas são determinísticas, com a fórmula à mostra e omitidas sem
+   amostra** (o padrão dos insights, §2). Estudo: horas na semana (soma dos minutos
+   dos últimos 7 dias ÷ 60) com tendência vs. a semana anterior, constância (dias
+   distintos com sessão nos últimos 30) e melhores horários. Leitura: páginas/dia
+   (páginas dos livros terminados no ano ÷ dias decorridos) e tempo médio para
+   terminar (média de fim − início sobre os livros com as duas datas) — funções
+   puras do estado dos livros, **computadas, nunca gravadas** (a filosofia da Saúde
+   Financeira, ADR-0028). Sem dado → `None`, e a UI não desenha um zero inventado.
+
+4. **A hora do dia sai do `ts` convertido para o fuso LOCAL** — a única exceção ao
+   costume de nunca usar `strftime(..., 'localtime')`. As sessões guardam o `day`
+   local (como os ticks), mas o "melhor horário" precisa do TURNO, e a sessão não
+   grava o turno: o `ts` (epoch ms) é a única fonte da hora. `strftime('%H',
+   ts/1000, 'unixepoch', 'localtime')` dá o "às 21h" que o usuário viveu. É um stat
+   de leitura na máquina do usuário — o fuso é o dele, e a conversão é honesta.
+
+5. **A matéria (`subject`) reusa o padrão node**: título/Esfera/status no node,
+   satélite só com `category` e `target_minutes` (a meta em minutos). O progresso é
+   **computado** das sessões (horas, contagem, último dia, livros tocados, itens
+   vinculados por `links` — ADR-0046), nunca gravado. Trocar a meta é configuração
+   e **não** vai ao ledger (ADR-0023); criar a matéria é um fato e vai.
+
+6. **A revisão espaçada (SM-2) segue ADIADA** (ADR-0045). O item 7 entregou matérias,
+   sessões e as duas famílias de estatística sem ela — cabê-la agora incharia o
+   milestone. Quando (e se) for construída, é tabela nova sem recriação, com ADR
+   próprio. A decisão do ADR-0045 fica de pé: nada de SM-2 no M4.6.
+
+**Consequência.** A Esfera Estudos deixa de ser só a Biblioteca: as horas viram um
+número que se acumula, com ritmo, constância e horários — "um mini-jogo da minha
+vida" também no estudo, sem uma linha de estado derivado gravada. O XP tem uma
+fonte nova, coerente com a escala (tick=10 … livro=60), documentada em
+`domain::xp` e no DATA_MODEL. O `xp_by_area` ganhou um ramo; nada mais mudou na
+arquitetura de gamificação.

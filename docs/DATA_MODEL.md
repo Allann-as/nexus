@@ -390,6 +390,7 @@ existente prova, de novo, que CASCADE/rowid/rename estão sob controle.
   | Feito | Pontos |
   |---|---|
   | Hábito cumprido no dia | 10 |
+  | Sessão de estudo registrada | 10 |
   | Tarefa planejada concluída | 15 |
   | Checkpoint de meta | 20 |
   | Sub-desafio de meta concluído | 25 |
@@ -435,13 +436,13 @@ armadilhas do 12-step (CASCADE, rowid, rename) ganharam mais um teste.
   `entity_kind='skill'`, `entity_id`=node) gravado na MESMA transação que incrementa
   `level` (ADR-0037/0045). A trilha de evolução é a série desses eventos.
 - **`subject_details`** — a matéria: `category` e `target_minutes` (meta opcional em
-  minutos). O progresso é COMPUTADO (agrega sessões/livros/notas), nunca gravado.
-  Tabela criada na 0013; repo/comandos chegam no item 7.
+  minutos). O progresso é COMPUTADO (agrega sessões/livros/vínculos), nunca gravado.
+  Repo/comandos entregues no item 7 (ver §5.12).
 - **`study_sessions`** — o LOG das sessões (não um node, como `contributions`):
   `subject_id`/`book_id`/`skill_id` (todos opcionais, `ON DELETE SET NULL` — a hora
   estudada sobrevive ao apagamento do vínculo), `topic`, `minutes` (`CHECK >0`), `day`
-  e `ts`. Índices por `day` e por `subject_id` parcial. Tabela criada na 0013;
-  repo/comandos chegam no item 7.
+  e `ts`. Índices por `day` e por `subject_id` parcial. Repo/comandos entregues no
+  item 7 (ver §5.12).
 
 **XP ganha uma fonte nova** (a tabela de pontos, §5.9, e `domain::xp`): subir de nível
 numa competência vale **40 XP** (`XP_SKILL_LEVEL_UP`) — entre o sub-desafio (25) e o
@@ -461,6 +462,39 @@ remover e ler resolvido nos dois sentidos. O backlink aparece dos dois lados len
 a mesma linha — `outgoing` de um é `incoming` do outro. O comando de usuário só
 admite `related` e `contributes_to`; `references`/`attached_to` continuam exclusivos
 das notas/anexos (`NoteService`).
+
+## 5.12 Estudos aprofundado — sessões e estatísticas (item 7, M4.6)
+
+O item 7 ativa a fundação da 0013 sem nenhuma migration nova. **Nenhuma tabela
+nova** — `subject_details` e `study_sessions` já existiam. O que chegou é código:
+repositórios, o `StudyService`, comandos e a UI. Ver **ADR-0047**.
+
+- **A sessão de estudo é um LOG que vale XP.** `study_session_repo` grava a linha
+  em `study_sessions` E o evento `study_session_logged` (`entity_kind='study_session'`,
+  um fato sem node — `LedgerEntityKind::StudySession`, ADR-0027/0047) na mesma
+  transação. Vale **10 XP** (`XP_STUDY_SESSION`, o tier do gesto diário, §5.9),
+  plano por sessão para não se poder inflar por minutos, atribuído à Esfera da
+  matéria (ou do livro/competência ligados, por `COALESCE`) no `xp_by_area`.
+
+- **O progresso da matéria é computado.** `subject_progress` agrega as sessões:
+  minutos totais, contagem, último dia, livros distintos tocados, itens vinculados
+  por `links` e o progresso vs. `target_minutes`. Nada disso é gravado — é somado
+  ao ler (a filosofia do XP e da Saúde Financeira, ADR-0037/0028).
+
+- **Estatísticas de estudo** (`StudyService::study_stats`): horas na semana (soma
+  dos minutos dos últimos 7 dias ÷ 60) com tendência, constância (dias distintos
+  com sessão nos últimos 30) e melhores horários — a hora sai do `ts` convertido
+  para o fuso LOCAL (`strftime('%H', ts/1000, 'unixepoch', 'localtime')`), a única
+  exceção ao costume de não usar `localtime`, porque a sessão guarda o `day` mas
+  não o turno (ADR-0047 §4).
+
+- **Estatísticas de leitura** (`BookService::reading_stats`): páginas/dia (páginas
+  dos livros terminados no ano ÷ dias decorridos) e tempo médio para terminar
+  (média de fim − início sobre os livros com as duas datas) — funções puras do
+  estado dos livros, com a fórmula à mostra; omitidas sem amostra.
+
+- **Revisão espaçada (SM-2): adiada** (ADR-0045/0047). O item 7 fechou sem ela; se
+  vier, é tabela nova sem recriação, com ADR próprio.
 
 ## 6. Integridade e migrations
 
