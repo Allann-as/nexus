@@ -58,6 +58,24 @@ pub struct GamificationOverview {
     pub achievements: Vec<GalleryEntry>,
 }
 
+/// Uma linha da tabela de pontos — o feito e o que ele vale.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PointRow {
+    pub label: &'static str,
+    pub points: i64,
+}
+
+/// A referência da gamificação exibida em Configurações — transparência total
+/// (constituição §2): a tabela de pontos e a curva de nível, direto do domínio.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct XpReference {
+    pub points: Vec<PointRow>,
+    pub curve: Vec<xp::LevelStep>,
+    pub formula: String,
+}
+
 /// Uma conquista recém-desbloqueada, para a celebração da UI.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -81,6 +99,63 @@ impl GamificationService {
             fin_goal_done: xp::XP_FIN_GOAL_DONE as i64,
             challenge_done: xp::XP_CHALLENGE_DONE as i64,
             annual_goal_done: xp::XP_ANNUAL_GOAL_DONE as i64,
+        }
+    }
+
+    /// A tabela de pontos e a curva de nível, para a tela de Gamificação. Os
+    /// valores vêm dos MESMOS `const` de `domain::xp` que o `xp_by_area` usa —
+    /// uma fonte só, sem divergência entre o que a UI mostra e o que ela soma.
+    pub fn reference() -> XpReference {
+        let p = Self::points();
+        XpReference {
+            points: vec![
+                PointRow {
+                    label: "Hábito cumprido no dia",
+                    points: p.habit_done,
+                },
+                PointRow {
+                    label: "Sessão de estudo registrada",
+                    points: p.study_session,
+                },
+                PointRow {
+                    label: "Tarefa planejada concluída",
+                    points: p.task_done,
+                },
+                PointRow {
+                    label: "Checkpoint de meta",
+                    points: p.goal_checkpoint,
+                },
+                PointRow {
+                    label: "Sub-desafio de meta concluído",
+                    points: p.milestone_done,
+                },
+                PointRow {
+                    label: "Subir de nível numa competência",
+                    points: p.skill_level_up,
+                },
+                PointRow {
+                    label: "Livro terminado",
+                    points: p.book_finished,
+                },
+                PointRow {
+                    label: "Objetivo financeiro fechado",
+                    points: p.fin_goal_done,
+                },
+                PointRow {
+                    label: "Temporada vencida",
+                    points: p.challenge_done,
+                },
+                PointRow {
+                    label: "Meta anual concluída",
+                    points: p.annual_goal_done,
+                },
+            ],
+            curve: xp::level_curve(12),
+            formula: "XP por Esfera = soma dos pontos de tudo que você fez, agrupado pela \
+                      Esfera do item. Nível n custa 100·n^1.5 XP para ser alcançado; o piso \
+                      de cada nível é a soma acumulada dos custos até ele. Nada é gravado — \
+                      apagar um feito ajusta o XP na recomputação seguinte."
+                .to_string(),
         }
     }
 

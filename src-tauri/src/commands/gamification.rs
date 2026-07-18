@@ -2,7 +2,9 @@
 
 use tauri::State;
 
-use crate::application::use_cases::gamification::{GamificationOverview, Unlocked};
+use crate::application::use_cases::gamification::{
+    GamificationOverview, GamificationService, Unlocked, XpReference,
+};
 use crate::domain::errors::Result;
 use crate::state::AppState;
 
@@ -10,6 +12,13 @@ use crate::state::AppState;
 #[tauri::command]
 pub fn gamification_overview(state: State<'_, AppState>) -> Result<GamificationOverview> {
     state.gamification.overview()
+}
+
+/// A tabela de pontos e a curva de nível — a transparência das Configurações.
+/// Não toca o banco; é a referência do domínio.
+#[tauri::command]
+pub fn xp_reference(_state: State<'_, AppState>) -> XpReference {
+    GamificationService::reference()
 }
 
 /// Desbloqueia o que os contadores já satisfazem (idempotente) e devolve o que

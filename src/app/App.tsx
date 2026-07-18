@@ -17,7 +17,7 @@ import { GamificationScreen } from "../features/gamification/GamificationScreen"
 import { AnnualGoalsScreen } from "../features/annual-goals/AnnualGoalsScreen";
 import { NotesScreen } from "../features/notes/NotesScreen";
 import { TimelineScreen } from "../features/timeline/TimelineScreen";
-import { useUi, applyTheme } from "../stores/ui";
+import { useUi, applyTheme, applyDensity, applyReducedMotion } from "../stores/ui";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -76,7 +76,11 @@ function SphereRedirect() {
 
 export function App() {
   const theme = useUi((s) => s.theme);
+  const density = useUi((s) => s.density);
+  const reducedMotion = useUi((s) => s.reducedMotion);
   useEffect(() => applyTheme(theme), [theme]);
+  useEffect(() => applyDensity(density), [density]);
+  useEffect(() => applyReducedMotion(reducedMotion), [reducedMotion]);
 
   return (
     <QueryClientProvider client={queryClient}>

@@ -10,7 +10,9 @@
 
 param([switch]$Reseed, [switch]$NoSeed)
 
-$ErrorActionPreference = "Stop"
+# NÃO usar $ErrorActionPreference = "Stop": no PowerShell 5.1 ele trata o stderr
+# NORMAL de um comando nativo (o "Compiling ..." do cargo) como erro fatal e
+# aborta um build que está indo bem. Os passos que importam checam $LASTEXITCODE.
 $root = Join-Path $PSScriptRoot ".devdata"
 $env:NEXUS_DATA_DIR = $root
 

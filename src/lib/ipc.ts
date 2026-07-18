@@ -146,10 +146,40 @@ export interface SystemInfo {
   areaCount: number;
   ledgerCount: number;
   dataDir: string;
+  /** `true` quando o app roda com NEXUS_DATA_DIR (dados de teste, ADR-0048). */
+  isCustomDataDir: boolean;
   appVersion: string;
 }
 
 export const systemInfo = () => call<SystemInfo>("system_info");
+
+/** `PRAGMA quick_check` — "ok" se o banco está íntegro, ou a primeira linha do erro. */
+export const quickCheck = () => call<string>("quick_check");
+
+/** `VACUUM` — compacta o arquivo; devolve o tamanho (bytes) depois. */
+export const vacuumDb = () => call<number>("vacuum_db");
+
+/** Uma linha da tabela de pontos da gamificação. */
+export interface PointRow {
+  label: string;
+  points: number;
+}
+
+/** Um degrau da curva de nível. */
+export interface LevelStep {
+  level: number;
+  cost: number;
+  cumulative: number;
+}
+
+/** A referência da gamificação (tabela de pontos + curva) — transparência total. */
+export interface XpReference {
+  points: PointRow[];
+  curve: LevelStep[];
+  formula: string;
+}
+
+export const xpReference = () => call<XpReference>("xp_reference");
 
 /* ===== areas ===== */
 

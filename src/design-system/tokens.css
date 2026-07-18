@@ -321,3 +321,20 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* O mesmo desligamento, mas por escolha explícita nas Configurações — vale mesmo
+   com o SO em "movimento normal" (ver applyReducedMotion / useCountUp). */
+:root[data-reduced-motion="true"] *,
+:root[data-reduced-motion="true"] *::before,
+:root[data-reduced-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Densidade compacta: aperta as linhas de dados (Configurações, listas densas).
+   Uma preferência real e persistida — não um botão morto. */
+:root[data-density="compact"] {
+  --row-data: 26px;
+}

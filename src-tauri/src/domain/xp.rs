@@ -72,6 +72,29 @@ fn cumulative_for(level: u32) -> u64 {
     (2..=level).map(cost_to_reach).sum()
 }
 
+/// Um degrau da curva de nível — para a tela de Gamificação mostrar a curva
+/// inteira (transparência total: o usuário vê o custo de cada nível).
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LevelStep {
+    pub level: u32,
+    /// O custo, em XP, de subir do nível anterior para este (0 no nível 1).
+    pub cost: u64,
+    /// O XP TOTAL acumulado para SER deste nível (o piso).
+    pub cumulative: u64,
+}
+
+/// A curva do nível 1 até `up_to` — a fonte da tabela exibida em Configurações.
+pub fn level_curve(up_to: u32) -> Vec<LevelStep> {
+    (1..=up_to)
+        .map(|level| LevelStep {
+            level,
+            cost: cost_to_reach(level),
+            cumulative: cumulative_for(level),
+        })
+        .collect()
+}
+
 /// O nível e o progresso dentro dele, para um total de XP.
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]

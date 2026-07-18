@@ -61,6 +61,8 @@ pub fn run() {
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             commands::system::system_info,
+            commands::system::quick_check,
+            commands::system::vacuum_db,
             commands::areas::create_area,
             commands::areas::list_areas,
             commands::areas::get_area,
@@ -173,6 +175,7 @@ pub fn run() {
             commands::insights::recompute_insights,
             commands::gamification::gamification_overview,
             commands::gamification::sync_achievements,
+            commands::gamification::xp_reference,
             commands::challenges::create_challenge,
             commands::challenges::list_challenges,
             commands::challenges::increment_challenge,

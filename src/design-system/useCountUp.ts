@@ -25,6 +25,9 @@ function easeOutQuart(t: number): number {
 }
 
 function prefersReducedMotion(): boolean {
+  // O override manual das Configurações (data-reduced-motion) vale além do SO:
+  // quem forçou "reduzir movimento" vê o número pronto, não contando.
+  if (document.documentElement.dataset.reducedMotion === "true") return true;
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 }
 
