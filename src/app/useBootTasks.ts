@@ -14,7 +14,7 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { freezeDailyScores, syncAchievements, syncChallenges } from "../lib/ipc";
+import { autoBackup, freezeDailyScores, syncAchievements, syncChallenges } from "../lib/ipc";
 import { useToasts } from "../stores/toasts";
 
 export function useBootTasks() {
@@ -47,6 +47,20 @@ export function useBootTasks() {
         qc.invalidateQueries({ queryKey: ["score-history"] });
       } catch {
         // Boot best-effort: o BI atualiza na próxima abertura de tela.
+      }
+
+      // O auto-backup diário (M5): cria no máximo um snapshot por dia, na
+      // primeira abertura. Separado do try acima de propósito — uma falha do BI
+      // não pode cancelar o backup, e vice-versa. Silencioso quando não há nada a
+      // fazer; um toast sóbrio quando de fato guarda o dia.
+      try {
+        const made = await autoBackup();
+        if (made) {
+          push("success", "Backup do dia criado");
+          qc.invalidateQueries({ queryKey: ["backup-status"] });
+        }
+      } catch {
+        // Best-effort: a próxima abertura tenta de novo.
       }
     })();
   }, [qc, push]);

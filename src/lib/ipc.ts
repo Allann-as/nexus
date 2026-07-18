@@ -1687,3 +1687,49 @@ export const freezeDailyScores = () => call<number>("freeze_daily_scores");
 
 export const scoreHistory = (days: number) =>
   call<ScorePoint[]>("score_history", { days });
+
+/* ===== M5 — backup & restauro ===== */
+
+export interface BackupInfo {
+  name: string;
+  createdAtMs: number;
+  sizeBytes: number;
+}
+
+export interface BackupStatus {
+  /** O instante do backup mais recente, ou `null` se nunca houve um. */
+  lastBackupMs: number | null;
+  count: number;
+  enabled: boolean;
+  /** A UI mostra "protegido por senha" — a senha em si NUNCA volta do backend. */
+  hasPassword: boolean;
+  syncDir: string | null;
+}
+
+/** Faz um backup agora, com a config corrente (cifra e copia p/ sync se houver). */
+export const createBackup = () => call<BackupInfo>("create_backup");
+
+/** O auto-backup diário — chamado no boot. `null` quando hoje já tem um. */
+export const autoBackup = () => call<BackupInfo | null>("auto_backup");
+
+export const listBackups = () => call<BackupInfo[]>("list_backups");
+
+export const backupStatus = () => call<BackupStatus>("backup_status");
+
+/**
+ * Grava a config. `password`: `null` mantém a atual, `""` remove a cifra, um
+ * texto troca a senha (o backend nunca devolve a senha, então a UI não a reenvia
+ * sem intenção).
+ */
+export const setBackupConfig = (
+  enabled: boolean,
+  syncDir: string | null,
+  password: string | null,
+) => call<void>("set_backup_config", { enabled, syncDir, password });
+
+/**
+ * Marca um backup para restaurar no PRÓXIMO boot. Depois de chamar, a UI deve
+ * pedir para reiniciar o app — a troca do arquivo só acontece com o banco fechado.
+ */
+export const restoreBackup = (name: string, password: string | null) =>
+  call<void>("restore_backup", { name, password });
