@@ -64,8 +64,9 @@
   --aurora-alpha: 0.13;
   /* A geometria do astrolábio de fundo (ver .nx-page::before/::after). Tingida
      pela Esfera ativa; baixa o bastante para não competir com o texto, alta o
-     bastante para aparecer num screenshot a 100% (M5.5 §3.2). */
-  --astro-alpha: 0.07;
+     bastante para aparecer num screenshot a 100%. Subida no REFINO R3 (era 0.07):
+     a composição mais rica pede um pouco mais de presença. */
+  --astro-alpha: 0.09;
   /* O grão da camada de viewport (ver .nx-viewport-fx). Alto o
      bastante para dar casca ao fundo, baixo o bastante para sumir
      sobre o texto. */
@@ -114,8 +115,8 @@
   --aurora-alpha: 0.07;
   --grain-alpha: 0.04;
   /* Sobre branco a mesma geometria precisa de menos alfa — a linha fina escura
-     já contrasta muito mais do que sobre o navy. */
-  --astro-alpha: 0.05;
+     já contrasta muito mais do que sobre o navy. Subida no REFINO R3 (era 0.05). */
+  --astro-alpha: 0.065;
 
   color-scheme: light;
 }
