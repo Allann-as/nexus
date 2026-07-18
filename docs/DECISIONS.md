@@ -1598,3 +1598,38 @@ no artefato que protege; e o restauro é seguro por construção — ou devolve 
 que passou no quick_check, ou não toca no que já existe. O `%APPDATA%/Nexus` real
 segue intocado por qualquer verificação de dev (ADR-0048): tudo isto foi provado no
 banco de teste isolado.
+
+## ADR-0051 — Dois backups independentes: o CÓDIGO no GitHub, os DADOS no sistema do M5
+
+**Data:** 2026-07-18 · **Status:** aceito · **M5**
+
+**Contexto.** O usuário pediu o código protegido contra a perda da máquina, antes de
+seguir o M5. O NEXUS já tinha um sistema de backup — mas o do M5 (ADR-0050) protege
+os DADOS do usuário (o `nexus.db`), não o código-fonte. São dois artefatos com donos,
+ameaças e destinos diferentes, e confundi-los seria um erro: um zip cifrado do banco
+não recupera o repositório, e um clone do repositório não traz um único dia da vida
+registrada.
+
+**Decisão.**
+
+1. **O backup do CÓDIGO é o GitHub.** O repositório **privado** `Allann-as/nexus`
+   guarda toda a história e as tags de milestone. `git push --follow-tags` a cada fim
+   de milestone/tag é a regra permanente — a máquina pode morrer que a história do
+   projeto sobrevive na origem remota.
+
+2. **O backup dos DADOS é o sistema do M5** (ADR-0050): o zip do `nexus.db`, opcional-
+   mente cifrado, na pasta de sync. Ele protege a VIDA REGISTRADA, que nunca entra no
+   git.
+
+3. **Os dois são independentes por construção e nunca se cruzam.** O `.gitignore`
+   barra `.devdata/`, `src-tauri/target`, `dist`, `node_modules` e qualquer `.db` — o
+   repositório carrega SÓ código e docs (auditado: 301 arquivos rastreados, zero dado
+   real, zero banco). Reciprocamente, o backup do M5 carrega SÓ o banco, nunca o
+   código. Binários (instaladores) não vão para nenhum dos dois: moram em **GitHub
+   Releases** (M6), nunca commitados no git.
+
+**Consequência.** Perder a máquina é recuperável em duas etapas ortogonais: `git
+clone` traz o código, restaurar o zip do M5 traz os dados. Nenhum artefato mistura os
+dois domínios, e cada um tem a proteção certa para a sua ameaça — o código contra a
+perda de hardware, os dados contra a perda de hardware E contra o vazamento da cópia
+na nuvem (a cifra do ADR-0050).
