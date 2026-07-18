@@ -26,11 +26,12 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const BUTTON_VARIANTS: Record<string, string> = {
-  // O gradiente + glow do botão primário é o que o distingue à distância. O
-  // glow é estático e só a opacidade muda no hover: sombra animada em loop é
-  // justamente o que a §6 proíbe.
+  // O primário: gradiente índigo curto (accent → accent-deep) com uma borda de
+  // luz no topo e uma sombra de PROFUNDIDADE, não de neon (ADR-0055). O halo da
+  // cor é discreto (22%) — antes era 35% e lia como brilho estridente. Estático:
+  // só o brilho muda no hover; sombra animada em loop é o que a §6 proíbe.
   primary:
-    "bg-gradient-to-b from-[var(--accent)] to-[var(--accent-deep)] text-white border border-[color-mix(in_srgb,var(--accent-bright)_40%,transparent)] shadow-[0_2px_16px_color-mix(in_srgb,var(--accent)_35%,transparent)] hover:brightness-110",
+    "bg-gradient-to-b from-[var(--accent)] to-[var(--accent-deep)] text-white border border-[color-mix(in_srgb,var(--accent-bright)_28%,transparent)] shadow-[0_1px_2px_rgb(0_0_0/0.28),0_4px_14px_color-mix(in_srgb,var(--accent)_20%,transparent)] hover:brightness-[1.06]",
   secondary:
     "bg-[var(--bg-raised)] text-[var(--text-primary)] border border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] hover:border-[var(--border-glow)]",
   ghost:

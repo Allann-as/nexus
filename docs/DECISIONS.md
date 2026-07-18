@@ -1771,3 +1771,35 @@ produto não finge uma proteção que não tem.
 vida inteira, sem mentir sobre o que ela protege nem quebrar a longevidade do dado. Cifra
 de disco de verdade, se um dia for pedida, é outra decisão — e teria que resolver a chave,
 o backup e a exportação de propósito, não de brinde.
+
+## ADR-0055 — O accent é o índigo da marca, não o azul elétrico (REFINO PRIME+)
+
+**Contexto.** Dirigindo o app ao vivo, o usuário achou o azul primário "neon/vibrante
+estranho" — fora da identidade. O `--accent` vinha do M2.5 como `#4d8dff` (azul elétrico,
+alta saturação, matiz ~217°), enquanto a marca — o astrolábio — é um **índigo** (`#7C8CF8`
+e vizinhos, matiz ~231°). O primário e a marca não conversavam.
+
+**Decisão.** O `--accent` passa a ser o índigo da marca, calibrado para cada tema com a
+rampa indigo (bem afinada para escuro e claro):
+
+| Token | Escuro | Claro |
+|---|---|---|
+| `--accent` | `#6366f1` | `#4f46e5` |
+| `--accent-hover` | `#818cf8` | `#4338ca` |
+| `--accent-bright` | `#818cf8` | `#4338ca` |
+| `--accent-deep` | `#4338ca` | `#3730a3` |
+| `--accent-muted` | `#6366f11f` | `#4f46e514` |
+
+O `--glow-accent` segue o novo RGB. O botão **primário** troca o halo de cor estridente
+(sombra a 35% da cor) por uma sombra de **profundidade** (`0 1px 2px` preto + `0 4px 14px`
+da cor a 20%) e um brilho de hover contido (`1.06`, não `1.10`). Os quatro variantes ficam
+com o mesmo raio e padding, hierarquia clara: primário (gradiente índigo cheio), secundário
+(superfície + borda), ghost (texto), destrutivo (vermelho).
+
+O que NÃO muda: a cor de cada **Esfera** (`--sphere-*`) — são identidades próprias do
+usuário, semeadas no banco (migration 0005). Finanças continua no seu azul; o accent é o
+chrome, não a Esfera. Nenhum componente carrega hex de accent cru — todos leem o token, e o
+tema ECharts resolve o token em runtime, então gráficos seguem sozinhos.
+
+**Consequência.** O primário deixa de brigar com a marca e o app inteiro assenta num índigo
+sério nos dois temas. Como é um swap de token, a mudança é global e reversível numa linha.

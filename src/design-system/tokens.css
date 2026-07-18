@@ -40,11 +40,14 @@
   --text-secondary: #8fa0c2;
   --text-tertiary: #54637f;
 
-  --accent: #4d8dff; /* azul elétrico — a cor do NEXUS */
-  --accent-hover: #7eb2ff;
-  --accent-bright: #7eb2ff; /* linhas de gráfico, brilhos */
-  --accent-deep: #1e4fd8; /* gradientes */
-  --accent-muted: #4d8dff1f;
+  /* O índigo da marca (a rampa do NexusMark), não mais o azul elétrico do M2.5.
+     O anterior (#4d8dff) lia como neon fora da identidade; este é o mesmo matiz
+     do astrolábio, calibrado para primário sem estridência (ADR-0055). */
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --accent-bright: #818cf8; /* linhas de gráfico, brilhos */
+  --accent-deep: #4338ca; /* gradientes */
+  --accent-muted: #6366f11f;
 
   --success: #34d399;
   --warning: #fbbf24;
@@ -53,7 +56,7 @@
   --shadow-float: 0 16px 48px rgb(2 6 16 / 0.66);
   /* O glow de um card em hover. Estático: entra e sai por
      transition, nunca em loop. */
-  --glow-accent: 0 0 0 1px rgb(77 141 255 / 0.24), 0 8px 32px rgb(77 141 255 / 0.14);
+  --glow-accent: 0 0 0 1px rgb(99 102 241 / 0.24), 0 8px 32px rgb(99 102 241 / 0.14);
 
   /* Opacidades das camadas de fundo (ver .nx-page). Ficam aqui e
      não hardcoded porque o tema claro precisa de outras. */
@@ -93,18 +96,19 @@
   --text-secondary: #4a5876;
   --text-tertiary: #8592ad;
 
-  --accent: #2563eb;
-  --accent-hover: #1d4ed8;
-  --accent-bright: #1e4fd8;
-  --accent-deep: #1e3a8a;
-  --accent-muted: #2563eb14;
+  /* O índigo da marca no claro — indigo-600, legível sobre branco (ADR-0055). */
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-bright: #4338ca;
+  --accent-deep: #3730a3;
+  --accent-muted: #4f46e514;
 
   --success: #059669;
   --warning: #b45309;
   --danger: #e11d48;
 
   --shadow-float: 0 16px 48px rgb(15 23 42 / 0.14);
-  --glow-accent: 0 0 0 1px rgb(37 99 235 / 0.18), 0 8px 28px rgb(37 99 235 / 0.1);
+  --glow-accent: 0 0 0 1px rgb(79 70 229 / 0.18), 0 8px 28px rgb(79 70 229 / 0.1);
 
   --dot-alpha: 0.05;
   --aurora-alpha: 0.07;
