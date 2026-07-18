@@ -211,12 +211,18 @@ function AccumulatedArea({ monthly }: { monthly: FinanceOverview["monthly"] }) {
   return <Chart option={option} height={150} className="min-w-[280px]" />;
 }
 
-/** O donut de alocação — cada classe uma fatia, legenda com rótulo. */
+/** O donut de alocação — cada classe uma fatia, o saldo total no centro. */
 function AllocationDonut({ buckets }: { buckets: Bucket[] }) {
+  const total = useMemo(() => buckets.reduce((s, b) => s + b.cents, 0), [buckets]);
+
   const option = useMemo<echarts.EChartsCoreOption>(
     () => ({
+      // O tooltip segue o cursor NA HORA: sem os 400ms de transição padrão, o
+      // hover responde como nativo (REFINO R2). É desenho do ECharts, não React —
+      // nada re-renderiza no mousemove.
       tooltip: {
         trigger: "item",
+        transitionDuration: 0,
         valueFormatter: (v: number) => formatMoney(v),
       },
       legend: {
@@ -225,13 +231,22 @@ function AllocationDonut({ buckets }: { buckets: Bucket[] }) {
         icon: "circle",
         textStyle: { fontSize: 11 },
       },
+      // O realce de fatia entra rápido e curto — o delay que se sentia vinha da
+      // animação de emphasis longa.
+      animationDurationUpdate: 140,
+      animationEasingUpdate: "cubicOut",
       series: [
         {
           type: "pie",
-          radius: ["52%", "72%"],
+          radius: ["58%", "76%"],
           center: ["50%", "42%"],
           avoidLabelOverlap: true,
           label: { show: false },
+          emphasis: {
+            scale: true,
+            scaleSize: 6,
+            itemStyle: { shadowBlur: 0 },
+          },
           data: buckets.map((b) => ({
             name: b.label,
             value: b.cents,
@@ -243,7 +258,27 @@ function AllocationDonut({ buckets }: { buckets: Bucket[] }) {
     [buckets],
   );
 
-  return <Chart option={option} height={240} />;
+  // O centro da rosca deixa de ser espaço morto: o patrimônio total, em mono,
+  // com o rótulo discreto abaixo. HTML sobreposto (não texto do ECharts) para
+  // ler os tokens do tema e a fonte mono direto. `pointer-events: none` deixa o
+  // hover das fatias passar por baixo.
+  return (
+    <div className="relative">
+      <Chart option={option} height={240} />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 flex flex-col items-center"
+        style={{ top: "42%", transform: "translateY(-50%)" }}
+      >
+        <span className="tabular text-[19px] leading-none font-semibold tracking-[-0.02em] text-[var(--text-primary)]">
+          {formatMoneyShort(total)}
+        </span>
+        <span className="mt-1 text-[9px] font-medium tracking-[0.12em] text-[var(--text-tertiary)] uppercase">
+          investido
+        </span>
+      </div>
+    </div>
+  );
 }
 
 /** Uma barra horizontal por banco — seis retângulos, HTML puro (ADR-0018). */
