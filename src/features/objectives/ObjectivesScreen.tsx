@@ -26,6 +26,7 @@ import {
   type FinGoalCard,
 } from "../../lib/ipc";
 import { PageContainer, PageHeader, cx } from "../../design-system/primitives";
+import { StatTile } from "../../design-system/cards";
 import { formatMoneyShort } from "../../lib/format";
 import { SphereIcon } from "../hub/SphereIcon";
 import { annualPace } from "./pace";
@@ -128,11 +129,54 @@ export function ObjectivesScreen() {
     return (areas.data ?? []).filter((a) => ids.has(a.id));
   }, [cards, areas.data]);
 
+  // O RESUMO DO TOPO (C4): o que antes faltava. Total perseguido, o progresso
+  // GERAL (média das frações) num anel, e quantos estão no ritmo. Derivado dos
+  // mesmos cards — zero query nova.
+  const summary = useMemo(() => {
+    const n = cards.length;
+    const avg = n ? cards.reduce((s, c) => s + c.ratio, 0) / n : 0;
+    const done = cards.filter((c) => c.ratio >= 1).length;
+    const onTrack = cards.filter((c) => c.pace?.onTrack).length;
+    return { n, avg, done, onTrack };
+  }, [cards]);
+
+  // Agrupa por TIPO quando o filtro é "Todos" — metas e caixinhas em blocos, com
+  // respiro entre eles (C4). Com um tipo selecionado, é um grid só.
+  const groups = useMemo(() => {
+    if (type !== "all") return [{ label: null as string | null, items: filtered }];
+    return [
+      { label: "Metas anuais", items: filtered.filter((c) => c.type === "meta") },
+      { label: "Caixinhas", items: filtered.filter((c) => c.type === "caixinha") },
+    ].filter((g) => g.items.length > 0);
+  }, [type, filtered]);
+
   return (
     <div className="nx-page nx-enter h-full overflow-y-auto">
       <PageHeader title="Objetivos" subtitle="Tudo que você persegue — dinheiro, constância, marcos — num lugar só" />
 
       <PageContainer className="pb-16">
+        {/* o resumo do topo — o que faltava (C4) */}
+        {cards.length > 0 && (
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <StatTile icon={Target} label="Objetivos ativos" value={summary.n} tone="accent" />
+            <StatTile
+              icon={TrendingUp}
+              label="Progresso geral"
+              value={Math.round(summary.avg * 100)}
+              unit="%"
+              ring={summary.avg}
+              tone="accent"
+            />
+            <StatTile
+              icon={Activity}
+              label="No ritmo"
+              value={summary.onTrack}
+              hint={`${summary.done} ${summary.done === 1 ? "concluído" : "concluídos"}`}
+              tone="success"
+            />
+          </div>
+        )}
+
         {/* filtros: tipo + Esfera */}
         <div className="flex flex-wrap items-center gap-2">
           {TYPE_FILTERS.map((f) => (
@@ -164,9 +208,24 @@ export function ObjectivesScreen() {
             </p>
           </div>
         ) : (
-          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((c) => (
-              <ObjectiveCard key={c.id} card={c} area={c.areaId ? areaMap.get(c.areaId) : undefined} />
+          <div className="mt-6 flex flex-col gap-7">
+            {groups.map((g, gi) => (
+              <div key={g.label ?? gi}>
+                {g.label && (
+                  <h2 className="mb-3 text-[10px] font-semibold tracking-[0.12em] text-[var(--text-tertiary)] uppercase">
+                    {g.label} · {g.items.length}
+                  </h2>
+                )}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {g.items.map((c) => (
+                    <ObjectiveCard
+                      key={c.id}
+                      card={c}
+                      area={c.areaId ? areaMap.get(c.areaId) : undefined}
+                    />
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         )}
@@ -202,7 +261,14 @@ function ObjectiveCard({
           >
             <Icon size={16} style={{ color: "var(--sphere)" }} />
           </span>
-          <h3 className="truncate text-[14px] font-semibold text-[var(--text-primary)]">{card.title}</h3>
+          <div className="min-w-0">
+            <h3 className="truncate text-[14px] font-semibold text-[var(--text-primary)]">
+              {card.title}
+            </h3>
+            <span className="text-[10px] font-medium tracking-[0.08em] text-[var(--text-tertiary)] uppercase">
+              {card.type === "caixinha" ? "Caixinha" : "Meta anual"}
+            </span>
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {card.tracked && (
