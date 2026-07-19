@@ -107,6 +107,8 @@ pub fn run() {
             commands::period_stats::period_comparison,
             commands::horizon::horizon,
             commands::records::personal_records,
+            commands::retrospective::annual_retrospective,
+            commands::retrospective::export_retrospective,
             commands::habits::habit_weekday_stats,
             commands::habits::set_habit_schedule,
             commands::tasks::create_task,

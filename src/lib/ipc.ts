@@ -508,6 +508,44 @@ export interface HorizonItem {
 export const horizon = (days?: number) =>
   call<HorizonItem[]>("horizon", { days: days ?? null });
 
+// --- Retrospectiva anual (ARSENAL) ---
+
+export interface RetroHighlight {
+  kind: "achievement" | "record" | string;
+  title: string;
+  day: string;
+}
+
+export interface Retrospective {
+  year: number;
+  studyMinutes: number;
+  focusMinutes: number;
+  contributionCents: number;
+  tasksCompleted: number;
+  scoreAvg: number | null;
+  scoreBest: number | null;
+  perfectWeeks: number;
+  achievements: number;
+  records: number;
+  booksFinished: number;
+  challengesWon: number;
+  annualGoalsDone: number;
+  highlights: RetroHighlight[];
+}
+
+export interface RetroFile {
+  name: string;
+  path: string;
+}
+
+/** O ano num quadro — totais, score, semanas perfeitas e destaques. */
+export const annualRetrospective = (year: number) =>
+  call<Retrospective>("annual_retrospective", { year });
+
+/** Gera o arquivo Markdown da retrospectiva (e poda os antigos). */
+export const exportRetrospective = (year: number) =>
+  call<RetroFile>("export_retrospective", { year });
+
 export const habitWeekdayStats = (id: string, days = 180) =>
   call<WeekdayStat[]>("habit_weekday_stats", { id, days });
 

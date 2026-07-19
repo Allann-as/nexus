@@ -29,6 +29,7 @@ use crate::application::use_cases::{
     perfect_weeks::PerfectWeekService,
     period_stats::PeriodStatsService,
     records::RecordsService,
+    retrospective::RetrospectiveService,
     score_history::ScoreHistoryService,
     spheres::SphereService,
     studies::StudyService,
@@ -53,10 +54,10 @@ use crate::infrastructure::repositories::{
     insight_repo::SqliteInsightRepository, ledger_repo::SqliteLedgerRepository,
     link_repo::SqliteLinkRepository, node_repo::SqliteNodeRepository,
     note_repo::SqliteNoteRepository, period_repo::SqlitePeriodStatsRepository,
-    records_repo::SqliteRecordsRepository, skill_repo::SqliteSkillRepository,
-    sphere_repo::SqliteSphereRepository, study_session_repo::SqliteStudySessionRepository,
-    subject_repo::SqliteSubjectRepository, task_repo::SqliteTaskRepository,
-    timeline_repo::SqliteTimelineRepository,
+    records_repo::SqliteRecordsRepository, retrospective_repo::SqliteRetrospectiveRepository,
+    skill_repo::SqliteSkillRepository, sphere_repo::SqliteSphereRepository,
+    study_session_repo::SqliteStudySessionRepository, subject_repo::SqliteSubjectRepository,
+    task_repo::SqliteTaskRepository, timeline_repo::SqliteTimelineRepository,
 };
 use crate::infrastructure::security::SecurityService;
 
@@ -87,6 +88,7 @@ pub struct AppState {
     pub records: RecordsService,
     pub period_stats: PeriodStatsService,
     pub horizon: HorizonService,
+    pub retrospective: RetrospectiveService,
     pub challenges: ChallengeService,
     pub annual_goals: AnnualGoalService,
     pub score_history: ScoreHistoryService,
@@ -285,6 +287,17 @@ impl AppState {
             clock: clock.clone(),
         };
 
+        // A Retrospectiva anual (ARSENAL): o ano num quadro + um arquivo Markdown
+        // gerado, podado a 2 anos (o dado-fonte é eterno). ADR-0064.
+        let retrospective = RetrospectiveService {
+            period: Arc::new(SqlitePeriodStatsRepository::new(db.clone())),
+            retro: Arc::new(SqliteRetrospectiveRepository::new(db.clone())),
+            insights: Arc::new(SqliteInsightRepository::new(db.clone())),
+            ledger: ledger.clone(),
+            clock: clock.clone(),
+            paths: paths.clone(),
+        };
+
         // As temporadas/desafios (§2.2): nodes 'challenge' com placar computado.
         let challenges = ChallengeService {
             challenges: Arc::new(SqliteChallengeRepository::new(db.clone())),
@@ -362,6 +375,7 @@ impl AppState {
             records,
             period_stats,
             horizon,
+            retrospective,
             challenges,
             annual_goals,
             score_history,

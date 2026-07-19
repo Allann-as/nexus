@@ -97,6 +97,15 @@ pub fn total_from_series(series: Vec<HabitSeries>, today: NaiveDate) -> u32 {
         .count() as u32
 }
 
+/// As semanas perfeitas cuja segunda cai num ANO — para a retrospectiva (ADR-0064).
+pub fn year_total_from_series(series: Vec<HabitSeries>, year: i64, today: NaiveDate) -> u32 {
+    let prepared = prepare(series);
+    all_statuses(&prepared, today)
+        .into_iter()
+        .filter(|(ws, s)| ws.year() as i64 == year && *s == WeekStatus::Perfect)
+        .count() as u32
+}
+
 /// Um hábito preparado para o domínio: agenda + os dias cumpridos (como `Ticks`
 /// só de `Done`, que é tudo que a semana perfeita observa) + o primeiro tick.
 struct Prepared {

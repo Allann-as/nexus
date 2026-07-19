@@ -1734,3 +1734,32 @@ pub trait HorizonRepository: Send + Sync {
     /// a este node por `links`, nos dois sentidos.
     fn open_linked_task_count(&self, node_id: &str) -> Result<i64>;
 }
+
+/// As contagens de um ANO para a retrospectiva (ARSENAL) — fatos do ledger no
+/// intervalo. Ver ADR-0064.
+#[derive(Debug, Clone, Default)]
+pub struct YearCounts {
+    pub achievements: i64,
+    pub records: i64,
+    pub books_finished: i64,
+    pub challenges_won: i64,
+    pub annual_goals_done: i64,
+}
+
+/// Um destaque do ano — uma conquista ou recorde, com o título da época.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Highlight {
+    /// "achievement" | "record".
+    pub kind: String,
+    pub title: String,
+    pub day: String,
+}
+
+pub trait RetrospectiveRepository: Send + Sync {
+    /// As contagens de fatos do ano ('YYYY-MM-DD' de `from`..`to`).
+    fn year_counts(&self, from_day: &str, to_day: &str) -> Result<YearCounts>;
+
+    /// Os destaques (conquistas + recordes) do ano, do mais antigo ao mais recente.
+    fn year_highlights(&self, from_day: &str, to_day: &str, limit: i64) -> Result<Vec<Highlight>>;
+}

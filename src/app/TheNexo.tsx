@@ -33,6 +33,7 @@ import {
   CalendarRange,
   Grid3x3,
   Medal,
+  ScrollText,
   FileText,
   History,
   Inbox,
@@ -141,6 +142,7 @@ export function TheNexo({ open, onClose }: { open: boolean; onClose: () => void 
           { id: "/records", label: "Recordes", icon: Medal, path: "/records", jumpKey: "k" },
           { id: "/year-pixels", label: "Ano em Pixels", icon: Grid3x3, path: "/year-pixels", jumpKey: "x" },
           { id: "/compare", label: "Comparativo", icon: ArrowLeftRight, path: "/compare", jumpKey: "v" },
+          { id: "/retrospective", label: "Retrospectiva", icon: ScrollText, path: "/retrospective", jumpKey: "y" },
           {
             id: "/review",
             label: "Revisão Semanal",

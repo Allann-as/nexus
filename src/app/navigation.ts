@@ -30,6 +30,7 @@ import {
   LayoutGrid,
   Medal,
   Repeat,
+  ScrollText,
   Sparkles,
   Target,
   Timer,
@@ -94,6 +95,7 @@ export const SECONDARY_ROUTES: NavItem[] = [
   { path: "/records", label: "Recordes", icon: Medal, jumpKey: "k" },
   { path: "/year-pixels", label: "Ano em Pixels", icon: Grid3x3, jumpKey: "x" },
   { path: "/compare", label: "Comparativo", icon: ArrowLeftRight, jumpKey: "v" },
+  { path: "/retrospective", label: "Retrospectiva", icon: ScrollText, jumpKey: "y" },
 ];
 
 /** Tudo que o chord `G+<tecla>` alcança. */

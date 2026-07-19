@@ -15,6 +15,9 @@ pub struct Paths {
     pub media: PathBuf,
     pub backups: PathBuf,
     pub exports: PathBuf,
+    /// As retrospectivas anuais geradas (ARSENAL) — arquivos podados como backups
+    /// (retenção de 2 anos); o dado-fonte é eterno. Ver ADR-0064.
+    pub retrospectives: PathBuf,
     pub logs: PathBuf,
 }
 
@@ -50,6 +53,7 @@ impl Paths {
             media: root.join("media"),
             backups: root.join("backups"),
             exports: root.join("exports"),
+            retrospectives: root.join("retrospectives"),
             logs: root.join("logs"),
             root,
         };
@@ -63,6 +67,7 @@ impl Paths {
             &self.media,
             &self.backups,
             &self.exports,
+            &self.retrospectives,
             &self.logs,
         ] {
             std::fs::create_dir_all(dir).map_err(|e| {

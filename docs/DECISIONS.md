@@ -2099,3 +2099,33 @@ uma entidade nova:
 **Consequência.** O Hub ganha o "o que vem" entre o "hoje" e o "neste dia", com as pendências reais
 puxadas dos `links` — tudo agregando o que já existe, dentro do ARSENAL de zero recriações
 (ADR-0058).
+
+## ADR-0064 — Retrospectiva: um quadro DERIVADO + um arquivo regenerável podado a 2 anos
+
+**Contexto (ARSENAL, feature 7).** Uma retrospectiva anual: "página visual séria + export. Arquivos
+gerados: retenção de 2 anos, podados como backups; o dado-fonte é eterno." Duas partes — a TELA e o
+ARQUIVO — e a pergunta de retenção.
+
+**Decisão.**
+
+1. **A tela é 100% DERIVADA.** Nada de retrospectiva é gravado: os totais do ano vêm da mesma soma
+   de intervalo do comparativo (`PeriodStatsRepository`, ADR-0062, aplicada a Jan1..Dez31 ou até
+   hoje no ano corrente), o score do ledger `nexus_score`, as semanas perfeitas do
+   `domain::perfect_week`, e as contagens/destaques (conquistas, recordes, livros, temporadas, metas)
+   de um punhado de `COUNT`s sobre o ledger por `day` (indexado). Um ano fechado é um retrato
+   imutável do que já aconteceu; recomputá-lo dá sempre a mesma coisa.
+
+2. **O arquivo é uma CONVENIÊNCIA regenerável, não a fonte.** `export` gera um Markdown legível
+   (`retrospectiva-YYYY.md`) num diretório novo `retrospectives/` — para guardar, imprimir, mandar a
+   si mesmo. Ele NÃO é o dado: some amanhã e `export` o regenera idêntico do estado. Por isso pode
+   ser podado sem dó, como um backup.
+
+3. **Retenção de 2 anos, o dado-fonte eterno.** `prune` mantém o ano corrente e os dois anteriores
+   (`year >= hoje.ano − 2`) e apaga os mais velhos — a mesma filosofia dos backups (ADR-0051): o
+   arquivo derivado tem prazo, o ledger não. Markdown (e não JSON) porque a retrospectiva é para o
+   HUMANO ler daqui a 20 anos, não para uma máquina reimportar — o formato eterno da constituição.
+
+**Consequência.** Um "ano em review" sério na tela e um arquivo para a estante, sem tabela nova, sem
+migração — dentro do ARSENAL de zero recriações (ADR-0058). O único artefato de disco novo é o
+diretório `retrospectives/`, irmão de `backups/` e `exports/`, com a mesma promessa: regenerável,
+podável, e nunca a fonte da verdade.
