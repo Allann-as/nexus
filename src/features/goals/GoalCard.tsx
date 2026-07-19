@@ -19,7 +19,7 @@ import { Check, GripVertical, Info, Plus, Repeat, Target, TrendingUp } from "luc
 
 import { Checkbox } from "../../design-system/Checkbox";
 import { CountUp } from "../../design-system/cards";
-import { ProgressBar } from "../../design-system/charts";
+import { ProgressBar, ProgressRing, Sparkline } from "../../design-system/charts";
 import { Button, cx } from "../../design-system/primitives";
 import { metricDecimals } from "../../lib/format";
 import type { GoalWithProgress, MilestoneView, ProgressSource } from "../../lib/ipc";
@@ -44,6 +44,18 @@ export function GoalCard({
 }) {
   const [formula, setFormula] = useState(false);
   const done = goal.milestones.filter((m) => m.ratio >= 1).length;
+
+  // A série viva dos checkpoints, normalizada 0..1 do começo ao alvo (C5). O sinal
+  // do span já cuida da direção: 82→72 tem span negativo, então medir 72 dá 1. O
+  // ponto 0 do começo abre a linha, para um único checkpoint já desenhar a subida.
+  const norm = (v: number) => {
+    const span = goal.targetValue - goal.startValue;
+    return span === 0 ? 0 : Math.max(0, Math.min(1, (v - goal.startValue) / span));
+  };
+  const series = [
+    0,
+    ...[...goal.checkpoints].sort((a, b) => a.notedAt - b.notedAt).map((c) => norm(c.value)),
+  ];
 
   return (
     <article
@@ -75,35 +87,44 @@ export function GoalCard({
           <SourceToggle source={goal.progressSource} onChange={onSetSource} />
         </header>
 
-        {/* ===== o dado é o herói ===== */}
-        <div className="mb-2 flex items-baseline gap-2">
-          <span className="tabular text-[34px] leading-none font-semibold text-[var(--text-primary)]">
-            <CountUp
-              to={goal.currentValue ?? goal.startValue}
-              decimals={metricDecimals(goal.currentValue ?? goal.startValue)}
-            />
-          </span>
-          <span className="tabular text-[15px] text-[var(--text-tertiary)]">
-            / {goal.targetValue} {goal.unit}
-          </span>
-          <span className="tabular ml-auto text-[15px] font-semibold text-[var(--sphere)]">
-            <CountUp to={Math.round(goal.progress.ratio * 100)} suffix="%" />
-          </span>
+        {/* ===== o dado é o herói: número grande à esquerda, anel à direita ===== */}
+        <div className="mb-3 flex items-center justify-between gap-4">
+          <div className="flex items-baseline gap-2">
+            <span className="tabular text-[34px] leading-none font-semibold text-[var(--text-primary)]">
+              <CountUp
+                to={goal.currentValue ?? goal.startValue}
+                decimals={metricDecimals(goal.currentValue ?? goal.startValue)}
+              />
+            </span>
+            <span className="tabular text-[15px] text-[var(--text-tertiary)]">
+              / {goal.targetValue} {goal.unit}
+            </span>
+          </div>
+          <ProgressRing value={goal.progress.ratio} size={64} thickness={6} color="var(--sphere)">
+            <span className="tabular text-[13px] font-semibold text-[var(--text-primary)]">
+              {Math.round(goal.progress.ratio * 100)}%
+            </span>
+          </ProgressRing>
         </div>
 
-        {/* A barra grossa com glow: é ela que se vê do outro lado da sala. */}
-        <div className="relative">
-          <ProgressBar value={goal.progress.ratio} height={12} />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 rounded-full"
-            style={{
-              boxShadow: `0 0 16px color-mix(in srgb, var(--sphere) ${Math.round(
-                goal.progress.ratio * 45,
-              )}%, transparent)`,
-            }}
-          />
-        </div>
+        {/* A trajetória: a série dos checkpoints como sparkline (C5). Sem medições,
+            cai na barra grossa com glow — sempre há um elemento vivo. */}
+        {goal.checkpoints.length >= 1 ? (
+          <Sparkline data={series} color="var(--sphere)" width={420} height={44} className="w-full" />
+        ) : (
+          <div className="relative">
+            <ProgressBar value={goal.progress.ratio} height={12} />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 rounded-full"
+              style={{
+                boxShadow: `0 0 16px color-mix(in srgb, var(--sphere) ${Math.round(
+                  goal.progress.ratio * 45,
+                )}%, transparent)`,
+              }}
+            />
+          </div>
+        )}
 
         {/* ===== a projeção, com a fórmula a um clique ===== */}
         <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-secondary)]">
