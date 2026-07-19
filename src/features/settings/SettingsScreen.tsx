@@ -51,6 +51,8 @@ import {
   quickCheck,
   rebuildSearchIndex,
   restoreBackup,
+  resetToZero,
+  restartApp,
   setBackupConfig,
   setPin,
   systemInfo,
@@ -316,7 +318,78 @@ function DataSection() {
       <RestoreCard />
 
       <ExportCard />
+
+      {/* "Começar do zero" (v1.1): a vida real limpa, com o seguro do backup. */}
+      <ResetCard />
     </div>
+  );
+}
+
+/**
+ * "Começar do zero": apaga TODOS os dados e recria o app vazio. Um backup completo
+ * é feito ANTES (na pasta backups/), então nada se perde de verdade; PIN e
+ * preferências ficam. A confirmação forte (digitar "ZERAR") é o pedágio contra o
+ * clique sem querer. Ao confirmar, o app reinicia vazio (aplica no boot).
+ */
+function ResetCard() {
+  const pushError = useToasts((s) => s.pushError);
+  const [confirm, setConfirm] = useState("");
+  const [done, setDone] = useState<BackupInfo | null>(null);
+
+  const reset = useMutation({
+    mutationFn: resetToZero,
+    onSuccess: (info) => {
+      setDone(info);
+      // Um instante para o usuário ver que o backup foi feito, e então reinicia
+      // — é o boot que apaga o banco e recria vazio.
+      window.setTimeout(() => void restartApp(), 1400);
+    },
+    onError: pushError,
+  });
+
+  const armed = confirm.trim().toUpperCase() === "ZERAR";
+
+  return (
+    <SettingCard
+      title="Começar do zero"
+      hint="Apaga TODOS os seus dados e recria o app vazio — para começar a vida real limpa. Um backup completo é feito ANTES, guardado em backups/, então nada é perdido: dá para restaurar em Backup & Dados. O PIN e as preferências ficam."
+    >
+      {done ? (
+        <div className="rounded-[var(--radius-md)] border border-[var(--success)] bg-[color-mix(in_srgb,var(--success)_8%,transparent)] px-4 py-3">
+          <p className="text-[12.5px] text-[var(--text-primary)]">
+            Backup{" "}
+            <span data-selectable className="font-mono font-semibold">
+              {done.name}
+            </span>{" "}
+            criado em backups/. Reiniciando vazio…
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="rounded-[var(--radius-md)] border border-[var(--danger)] bg-[color-mix(in_srgb,var(--danger)_8%,transparent)] px-4 py-3 text-[12.5px] leading-[18px] text-[var(--text-secondary)]">
+            Isto zera hábitos, metas, aportes, notas — tudo. O backup automático em{" "}
+            <span className="font-mono text-[var(--text-primary)]">backups/</span> é o seu seguro:
+            restaurável depois em Backup & Dados.
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder='Digite ZERAR para confirmar'
+              aria-label="Confirmação"
+              className="h-9 flex-1 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-3 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--danger)] placeholder:text-[var(--text-tertiary)]"
+            />
+            <Button
+              variant="danger"
+              disabled={!armed || reset.isPending}
+              onClick={() => reset.mutate()}
+            >
+              {reset.isPending ? "Zerando…" : "Começar do zero"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </SettingCard>
   );
 }
 

@@ -49,6 +49,15 @@ pub fn run() {
         Err(e) => tracing::error!(error = %e, "restauro pendente falhou; mantendo o banco atual"),
     }
 
+    // Um ZERAMENTO pendente ("Começar do zero", v1.1) também é aplicado antes de
+    // abrir o banco: apaga o `nexus.db`, e o `Db::open` abaixo recria vazio. O
+    // backup já foi feito quando o marcador nasceu (commands::backup::reset_to_zero).
+    match infrastructure::backup::apply_pending_reset(&paths) {
+        Ok(true) => tracing::info!("zeramento pendente aplicado no boot; banco recriado vazio"),
+        Ok(false) => {}
+        Err(e) => tracing::error!(error = %e, "zeramento pendente falhou; mantendo o banco atual"),
+    }
+
     let db = match Db::open(&paths) {
         Ok(db) => db,
         Err(e) => {
@@ -262,6 +271,8 @@ pub fn run() {
             commands::backup::backup_status,
             commands::backup::set_backup_config,
             commands::backup::restore_backup,
+            commands::backup::reset_to_zero,
+            commands::backup::restart_app,
             commands::backup::export_data,
             commands::weekly_review::weekly_review_state,
             commands::weekly_review::save_weekly_review_progress,

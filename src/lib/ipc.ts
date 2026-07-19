@@ -1954,6 +1954,17 @@ export const setBackupConfig = (
 export const restoreBackup = (name: string, password: string | null) =>
   call<void>("restore_backup", { name, password });
 
+/**
+ * "Começar do zero" (v1.1): faz um backup completo AGORA (na pasta backups/) e
+ * marca o zeramento para o próximo boot, que recria o banco vazio. PIN e
+ * preferências sobrevivem. Devolve o backup criado — o seguro do arrependimento.
+ * Chame `restartApp` em seguida para aplicar.
+ */
+export const resetToZero = () => call<BackupInfo>("reset_to_zero");
+
+/** Reinicia o app (aplica um restauro/zeramento pendente). Não resolve: o processo relança. */
+export const restartApp = () => call<void>("restart_app");
+
 export interface ExportInfo {
   /** A pasta criada (caminho absoluto). */
   dir: string;

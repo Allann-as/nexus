@@ -8,7 +8,7 @@
 use tauri::State;
 
 use crate::domain::errors::Result;
-use crate::infrastructure::backup::{stage_restore, BackupInfo, BackupStatus};
+use crate::infrastructure::backup::{stage_reset, stage_restore, BackupInfo, BackupStatus};
 use crate::infrastructure::export::ExportInfo;
 use crate::state::AppState;
 
@@ -75,6 +75,26 @@ pub fn restore_backup(
     password: Option<String>,
 ) -> Result<()> {
     stage_restore(&state.paths, &name, password)
+}
+
+/// "Começar do zero" (v1.1 D1): faz um backup COMPLETO agora (com a config
+/// corrente, na pasta `backups/`) e MARCA o zeramento para o próximo boot, que
+/// recria um banco vazio antes de abrir. PIN e preferências ficam fora do banco e
+/// sobrevivem. Devolve o backup criado para a UI dizer onde ele ficou — o seguro
+/// contra o arrependimento. A UI então chama `restart_app` para aplicar.
+#[tauri::command]
+pub fn reset_to_zero(state: State<'_, AppState>) -> Result<BackupInfo> {
+    let info = state.backups.create_configured()?;
+    stage_reset(&state.paths)?;
+    Ok(info)
+}
+
+/// Reinicia o app — é o que faz o boot seguinte aplicar o restauro/zeramento
+/// pendente (o banco só troca com nenhuma conexão segurando o arquivo). Não
+/// retorna: `restart()` relança o processo.
+#[tauri::command]
+pub fn restart_app(app: tauri::AppHandle) {
+    app.restart();
 }
 
 /// Exportação humana: escreve a pasta `exports/nexus-export-AAAA-MM-DD/` com um

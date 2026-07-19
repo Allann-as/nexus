@@ -2237,3 +2237,38 @@ isolada" —, então a elevação foi NELAS, não tela a tela.
 **Consequência.** Botão, diálogo, stat-card, fundo e higiene mudam em UM lugar cada e propagam para o
 app inteiro. Verificado ao vivo: botão com profundidade real, modais limpas nos dois temas, fundo com
 os anéis de profundidade visíveis a 100%.
+
+---
+
+## ADR-0068 — "Começar do zero": o zeramento é STAGED-NO-BOOT, no molde do restauro, e só solta o marcador quando o banco de fato saiu
+
+**Data:** 2026-07-19 · **Status:** aceito · **v1.1 (D1)** · **no molde do ADR-0050 (restauro)**
+
+**Contexto.** O usuário quer começar a vida real do zero num app que já tem dados de teste. Precisa de
+um "Começar do zero" que apague TUDO — mas sem risco: um backup completo antes, e o PIN e as
+preferências preservados.
+
+**Decisão.** Reusar o mecanismo do restauro (ADR-0050), não inventar outro. O `nexus.db` está ABERTO e
+travado enquanto o app roda, então nada pode apagá-lo ao vivo — como no restauro, o trabalho é
+STAGED e aplicado no BOOT, antes de o banco abrir:
+
+1. `reset_to_zero` (comando): faz um backup COMPLETO agora (`create_configured`, na pasta `backups/`)
+   e escreve o marcador `.pending-reset`. Devolve o backup criado — o seguro do arrependimento, com o
+   nome mostrado na UI. Depois a UI chama `restart_app` (`AppHandle::restart`), que relança o processo.
+2. No boot, `apply_pending_reset` (antes do `Db::open`, ao lado do `apply_pending_restore`) apaga o
+   `nexus.db` e os sidecars do WAL; o `Db::open` seguinte recria VAZIO (migrations do zero, as 5
+   Esferas semeadas). PIN (`security.json`) e preferências (`backup-config.json`) vivem FORA do banco
+   e não são tocados — zerar os dados não é esquecer quem é o dono.
+
+**A robustez que o teste ao vivo exigiu.** Numa corrida de reinicialização no Windows, o processo
+anterior pode largar o handle do arquivo um instante DEPOIS de sair, e o `remove` do banco falha em
+silêncio. Se o marcador fosse consumido ali, um zeramento seria "aplicado" sem ter apagado nada.
+Então `apply_pending_reset` só solta o marcador quando o banco DE FATO saiu (`!paths.db.exists()`);
+senão, mantém o marcador e o próximo boot — sem ninguém segurando o arquivo — refaz e conclui. O
+backup já está feito desde que o marcador nasceu, então repetir é seguro. Coberto por teste
+(`a_staged_reset_recreates_an_empty_db_on_the_next_boot`): stage → apply → banco vazio com as 5
+Esferas do sistema, marcador consumido, segundo boot não repete.
+
+**Consequência.** "Começar do zero" (Configurações → Backup & Dados) com confirmação forte (digitar
+"ZERAR") faz o backup, reinicia e recria o app vazio, sem perder nada de verdade nem esquecer o PIN.
+Verificado ao vivo o backup e a UI; o zeramento em si é provado pelo teste de boot.

@@ -367,6 +367,50 @@ fn pending_path(paths: &Paths) -> PathBuf {
     paths.root.join(".pending-restore.json")
 }
 
+fn reset_marker_path(paths: &Paths) -> PathBuf {
+    paths.root.join(".pending-reset")
+}
+
+/// Marca um ZERAMENTO ("Começar do zero", v1.1 D1) para o próximo boot: apaga o
+/// banco vivo antes de abrir, e o `Db::open` recria um banco VAZIO (migrations do
+/// zero, as 5 Esferas do sistema semeadas). Como o restauro, não pode acontecer
+/// com o banco aberto — daí o marcador aplicado no boot.
+///
+/// PIN e preferências vivem em arquivos SEPARADOS na raiz de dados
+/// (`security.json`, `backup-config.json`, `settings.json`) e NÃO são tocados:
+/// zerar os dados não é esquecer quem é o dono nem as escolhas dele.
+pub fn stage_reset(paths: &Paths) -> Result<()> {
+    fs::write(reset_marker_path(paths), b"1").map_err(io_err)
+}
+
+/// Aplica um zeramento pendente, se houver, ANTES de o banco abrir. Remove o
+/// `nexus.db` e seus sidecars do WAL; o boot recria tudo vazio. O marcador some
+/// SEMPRE, para um zeramento não entrar em loop a cada boot.
+pub fn apply_pending_reset(paths: &Paths) -> Result<bool> {
+    let marker = reset_marker_path(paths);
+    if !marker.exists() {
+        return Ok(false);
+    }
+    remove_if_exists(&paths.db);
+    remove_if_exists(&paths.db.with_extension("db-wal"));
+    remove_if_exists(&paths.db.with_extension("db-shm"));
+
+    // Só consome o marcador quando o banco DE FATO saiu. Numa corrida de
+    // reinicialização no Windows, o processo anterior pode largar o handle do
+    // arquivo um instante DEPOIS de sair, e o `remove` falha em silêncio — se
+    // apagássemos o marcador aqui, um zeramento seria "consumido" sem ter zerado
+    // nada. Mantendo o marcador, o próximo boot (com ninguém segurando o arquivo)
+    // refaz e conclui. O backup já está feito desde que o marcador nasceu, então
+    // repetir a tentativa é seguro.
+    if paths.db.exists() {
+        return Err(NexusError::Storage(
+            "o banco seguia travado no zeramento; refeito no próximo boot".into(),
+        ));
+    }
+    let _ = fs::remove_file(&marker);
+    Ok(true)
+}
+
 fn config_path(paths: &Paths) -> PathBuf {
     paths.root.join("backup-config.json")
 }
@@ -568,5 +612,48 @@ mod tests {
 
         // Um segundo boot não repete nada (marcador já foi embora).
         assert!(!apply_pending_restore(&paths).unwrap());
+    }
+
+    #[test]
+    fn a_staged_reset_recreates_an_empty_db_on_the_next_boot() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::at(dir.path().to_path_buf()).unwrap();
+
+        // Um banco com dados do usuário, depois fechado.
+        {
+            let db = open(&paths); // insere a área 'a1' e o node 'n1'
+            drop(db);
+        }
+
+        stage_reset(&paths).unwrap();
+        assert!(
+            apply_pending_reset(&paths).unwrap(),
+            "o zeramento pendente foi aplicado"
+        );
+        assert!(
+            !reset_marker_path(&paths).exists(),
+            "o marcador some depois de aplicado"
+        );
+
+        // "Boot": o banco recria VAZIO (migrations), sem os dados do usuário.
+        let db = Db::open(&paths).unwrap();
+        let nodes: i64 = db
+            .with_read(|c| Ok(c.query_row("SELECT COUNT(*) FROM nodes", [], |r| r.get(0))?))
+            .unwrap();
+        assert_eq!(nodes, 0, "os nodes do usuário sumiram");
+        // As 5 Esferas do sistema renascem (semeadas na migration 0005).
+        let system: i64 = db
+            .with_read(|c| {
+                Ok(
+                    c.query_row("SELECT COUNT(*) FROM areas WHERE is_system = 1", [], |r| {
+                        r.get(0)
+                    })?,
+                )
+            })
+            .unwrap();
+        assert_eq!(system, 5, "as Esferas do sistema voltam vazias");
+
+        // Um segundo boot não repete o zeramento (marcador já foi embora).
+        assert!(!apply_pending_reset(&paths).unwrap());
     }
 }
