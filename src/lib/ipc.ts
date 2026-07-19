@@ -470,6 +470,28 @@ export interface ScoreCell {
 export const yearInPixels = (year: number) =>
   call<ScoreCell[]>("year_in_pixels", { year });
 
+// --- Comparativo de períodos (ARSENAL) ---
+
+export interface PeriodStats {
+  studyMinutes: number;
+  focusMinutes: number;
+  contributionCents: number;
+  tasksCompleted: number;
+  scoreAvg: number | null;
+}
+
+export interface Comparison {
+  mode: "month" | "year" | string;
+  current: PeriodStats;
+  previous: PeriodStats;
+  currentLabel: string;
+  previousLabel: string;
+}
+
+/** Mês-até-a-data vs mês anterior, ou ano-até-a-data vs ano anterior. */
+export const periodComparison = (mode: "month" | "year") =>
+  call<Comparison>("period_comparison", { mode });
+
 export const habitWeekdayStats = (id: string, days = 180) =>
   call<WeekdayStat[]>("habit_weekday_stats", { id, days });
 

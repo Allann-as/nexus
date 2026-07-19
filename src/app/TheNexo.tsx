@@ -28,6 +28,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Calendar,
   CalendarCheck,
+  ArrowLeftRight,
   CalendarHeart,
   CalendarRange,
   Grid3x3,
@@ -139,6 +140,7 @@ export function TheNexo({ open, onClose }: { open: boolean; onClose: () => void 
           { id: "/perfect-weeks", label: "Semana Perfeita", icon: CalendarHeart, path: "/perfect-weeks", jumpKey: "w" },
           { id: "/records", label: "Recordes", icon: Medal, path: "/records", jumpKey: "k" },
           { id: "/year-pixels", label: "Ano em Pixels", icon: Grid3x3, path: "/year-pixels", jumpKey: "x" },
+          { id: "/compare", label: "Comparativo", icon: ArrowLeftRight, path: "/compare", jumpKey: "v" },
           {
             id: "/review",
             label: "Revisão Semanal",

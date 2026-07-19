@@ -2038,3 +2038,32 @@ o cômputo apenas para PINTAR, com honestidade (`frozen` por célula).
 
 **Consequência.** O ano em pixels abre denso e correto, em SVG puro (~365 rects, ADR-0018), sem
 tabela, sem escrita, sem migração — coerente com o ARSENAL de zero recriações (ADR-0058).
+
+## ADR-0062 — Comparativo: ATÉ-A-DATA, e por soma de intervalo direto (não rollup)
+
+**Contexto (ARSENAL, feature 5).** Comparar este mês/ano com o anterior em cinco métricas (estudo,
+foco, aportes, tarefas, score médio). O mandato sugere "ler rollups (anos fechados custam zero)".
+Duas decisões: o RECORTE (mês cheio vs mês pela metade?) e a FONTE (rollups ou query direta?).
+
+**Decisão.**
+
+1. **Comparação ATÉ-A-DATA.** Este mês *até hoje* contra o MESMO trecho do mês passado (1º ao mesmo
+   dia-do-mês, com clamp quando o mês anterior é mais curto — 31/03 vs 28/02); e ano-até-a-data
+   contra o mesmo trecho do ano anterior (29/02 cai para 28/02). Um mês cheio contra um pela metade
+   inflaria a seta e mentiria o ritmo. O recorte é puro e testado (5 testes de fronteira).
+
+2. **Soma de intervalo DIRETA, não rollup.** O comparativo cruza sempre DOIS períodos ADJACENTES —
+   no máximo dois anos de linhas, um universo LIMITADO, diferente do feed da Timeline (ilimitado, e
+   por isso rollado, ADR-0034). As quatro somas (estudo, foco, aportes, tarefas) saem de UMA query
+   com quatro subselects, todos por intervalo de `day`/`happened_on` — colunas indexadas, custo
+   proporcional ao período pedido, não à história. O score médio lê os `nexus_score` do intervalo e
+   parseia o payload (o padrão do `ScoreHistoryService`/`RecordsService`). **Desvio consciente do
+   "ler rollups":** estender `timeline_rollups` com métricas novas (via o `metric` de texto livre,
+   sem migração) foi considerado, mas o ganho num recorte de dois períodos é marginal e o `freeze`
+   ganharia responsabilidade e risco; a query direta indexada já é barata e obviamente correta. O
+   caminho de rollup fica disponível (o `metric` é texto livre) se algum dia o perfil pedir.
+
+**Consequência.** Cinco métricas lado a lado com a variação vs. o mesmo ponto do período anterior,
+por queries indexadas simples, sem tocar o schema — dentro do orçamento de "zero recriações" do
+ARSENAL (ADR-0058) e da honestidade de performance da constituição (§5): a query é barata *de fato*,
+não por reflexo de rollup.

@@ -19,6 +19,7 @@ import { ObjectivesScreen } from "../features/objectives/ObjectivesScreen";
 import { PerfectWeeksScreen } from "../features/perfect-weeks/PerfectWeeksScreen";
 import { RecordsScreen } from "../features/records/RecordsScreen";
 import { YearPixelsScreen } from "../features/year-pixels/YearPixelsScreen";
+import { CompareScreen } from "../features/compare/CompareScreen";
 import { NotesScreen } from "../features/notes/NotesScreen";
 import { TimelineScreen } from "../features/timeline/TimelineScreen";
 import { FocusScreen } from "../features/focus/FocusScreen";
@@ -78,6 +79,7 @@ const router = createHashRouter([
       { path: "perfect-weeks", element: <PerfectWeeksScreen /> },
       { path: "records", element: <RecordsScreen /> },
       { path: "year-pixels", element: <YearPixelsScreen /> },
+      { path: "compare", element: <CompareScreen /> },
       { path: "settings", element: <SettingsScreen /> },
     ],
   },

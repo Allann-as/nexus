@@ -17,6 +17,7 @@
  */
 
 import {
+  ArrowLeftRight,
   CalendarCheck,
   CalendarHeart,
   CalendarRange,
@@ -92,6 +93,7 @@ export const SECONDARY_ROUTES: NavItem[] = [
   { path: "/perfect-weeks", label: "Semana Perfeita", icon: CalendarHeart, jumpKey: "w" },
   { path: "/records", label: "Recordes", icon: Medal, jumpKey: "k" },
   { path: "/year-pixels", label: "Ano em Pixels", icon: Grid3x3, jumpKey: "x" },
+  { path: "/compare", label: "Comparativo", icon: ArrowLeftRight, jumpKey: "v" },
 ];
 
 /** Tudo que o chord `G+<tecla>` alcança. */

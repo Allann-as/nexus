@@ -1712,3 +1712,18 @@ pub trait RecordsRepository: Send + Sync {
     /// O melhor mês de foco (mais DIAS distintos com um bloco concluído).
     fn best_focus_days_month(&self) -> Result<Option<BestHit>>;
 }
+
+/// Os agregados de um período para o COMPARATIVO (ARSENAL) — somas por intervalo
+/// de dias, direto das tabelas indexadas por `day`/`happened_on`. Ver ADR-0062.
+#[derive(Debug, Clone, Default)]
+pub struct RawPeriodStats {
+    pub study_minutes: i64,
+    pub focus_minutes: i64,
+    pub contribution_cents: i64,
+    pub tasks_completed: i64,
+}
+
+pub trait PeriodStatsRepository: Send + Sync {
+    /// Os agregados de `[from_day, to_day]` (inclusive) — uma query, quatro somas.
+    fn range_stats(&self, from_day: &str, to_day: &str) -> Result<RawPeriodStats>;
+}

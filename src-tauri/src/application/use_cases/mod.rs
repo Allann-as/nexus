@@ -18,6 +18,7 @@ pub mod links;
 pub mod nodes;
 pub mod notes;
 pub mod perfect_weeks;
+pub mod period_stats;
 pub mod records;
 pub mod score_history;
 pub mod spheres;
