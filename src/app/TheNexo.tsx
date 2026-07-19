@@ -242,7 +242,7 @@ export function TheNexo({ open, onClose }: { open: boolean; onClose: () => void 
         aria-label="O Nexo"
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={onKeyDown}
-        className="nx-enter relative z-10 my-auto flex max-h-[92vh] w-[760px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-strong)] bg-[var(--bg-surface)] shadow-[var(--shadow-float)]"
+        className="nx-enter relative z-10 my-auto flex max-h-[92vh] w-[760px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-strong)] bg-[var(--bg-surface)] shadow-[inset_0_1px_0_color-mix(in_srgb,#fff_8%,transparent),var(--shadow-float)]"
       >
         {/* ===== 1. O MAPA RADIAL ===== */}
         <RadialMap
@@ -423,7 +423,7 @@ function RadialMap({
                   transitionDelay: `${i * 28}ms`,
                 } as React.CSSProperties
               }
-              className="group absolute flex flex-col items-center gap-1"
+              className="group absolute flex flex-col items-center gap-1.5"
             >
               <span className="relative grid place-items-center">
                 <ProgressRing value={ratio} size={52} thickness={3}>
@@ -444,7 +444,7 @@ function RadialMap({
                   </span>
                 )}
               </span>
-              <span className="max-w-[84px] truncate text-[10px] font-medium text-[var(--text-secondary)]">
+              <span className="max-w-[96px] truncate text-[11px] font-medium tracking-[0.005em] text-[var(--text-secondary)] transition-colors group-hover:text-[var(--text-primary)]">
                 {s.name}
               </span>
             </button>
