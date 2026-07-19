@@ -122,11 +122,14 @@ export function MonthView({
 
       {groups.map((group) => (
         <section key={group.day}>
-          <header className="mb-1.5 flex items-baseline gap-2">
+          {/* A régua de dias mais marcada (C9): um tique do accent abre cada dia,
+              e a contagem vira um chip — o olho encontra os cortes de dia de longe. */}
+          <header className="mb-2 flex items-center gap-2">
+            <span aria-hidden className="h-3.5 w-[3px] shrink-0 rounded-full bg-[var(--accent)]" />
             <h3 className="text-[13px] font-semibold text-[var(--text-primary)] capitalize">
               {dayHeading(group.day)}
             </h3>
-            <span className="tabular text-[11px] text-[var(--text-tertiary)]">
+            <span className="tabular rounded-full bg-[var(--bg-raised)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)]">
               {group.entries.length}
             </span>
           </header>
