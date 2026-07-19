@@ -11,6 +11,7 @@ pub mod focus_session_repo;
 pub mod gamification_repo;
 pub mod goal_repo;
 pub mod habit_repo;
+pub mod horizon_repo;
 pub mod insight_repo;
 pub mod ledger_repo;
 pub mod link_repo;

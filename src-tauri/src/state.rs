@@ -21,6 +21,7 @@ use crate::application::use_cases::{
     gamification::GamificationService,
     goals::GoalService,
     habits::HabitService,
+    horizon::HorizonService,
     insights::{InsightService, InsightWorker},
     links::LinkService,
     nodes::NodeService,
@@ -48,13 +49,14 @@ use crate::infrastructure::repositories::{
     contribution_repo::SqliteContributionRepository, event_repo::SqliteEventRepository,
     fin_goal_repo::SqliteFinGoalRepository, focus_session_repo::SqliteFocusSessionRepository,
     gamification_repo::SqliteGamificationRepository, goal_repo::SqliteGoalRepository,
-    habit_repo::SqliteHabitRepository, insight_repo::SqliteInsightRepository,
-    ledger_repo::SqliteLedgerRepository, link_repo::SqliteLinkRepository,
-    node_repo::SqliteNodeRepository, note_repo::SqliteNoteRepository,
-    period_repo::SqlitePeriodStatsRepository, records_repo::SqliteRecordsRepository,
-    skill_repo::SqliteSkillRepository, sphere_repo::SqliteSphereRepository,
-    study_session_repo::SqliteStudySessionRepository, subject_repo::SqliteSubjectRepository,
-    task_repo::SqliteTaskRepository, timeline_repo::SqliteTimelineRepository,
+    habit_repo::SqliteHabitRepository, horizon_repo::SqliteHorizonRepository,
+    insight_repo::SqliteInsightRepository, ledger_repo::SqliteLedgerRepository,
+    link_repo::SqliteLinkRepository, node_repo::SqliteNodeRepository,
+    note_repo::SqliteNoteRepository, period_repo::SqlitePeriodStatsRepository,
+    records_repo::SqliteRecordsRepository, skill_repo::SqliteSkillRepository,
+    sphere_repo::SqliteSphereRepository, study_session_repo::SqliteStudySessionRepository,
+    subject_repo::SqliteSubjectRepository, task_repo::SqliteTaskRepository,
+    timeline_repo::SqliteTimelineRepository,
 };
 use crate::infrastructure::security::SecurityService;
 
@@ -84,6 +86,7 @@ pub struct AppState {
     pub perfect_weeks: PerfectWeekService,
     pub records: RecordsService,
     pub period_stats: PeriodStatsService,
+    pub horizon: HorizonService,
     pub challenges: ChallengeService,
     pub annual_goals: AnnualGoalService,
     pub score_history: ScoreHistoryService,
@@ -273,6 +276,15 @@ impl AppState {
             clock: clock.clone(),
         };
 
+        // O Horizonte (ARSENAL): os próximos marcos (eventos + temporadas) com
+        // D-dias e as pendências ligadas por `links` (ADR-0063).
+        let horizon = HorizonService {
+            events: Arc::new(SqliteEventRepository::new(db.clone())),
+            challenges: Arc::new(SqliteChallengeRepository::new(db.clone())),
+            horizon: Arc::new(SqliteHorizonRepository::new(db.clone())),
+            clock: clock.clone(),
+        };
+
         // As temporadas/desafios (§2.2): nodes 'challenge' com placar computado.
         let challenges = ChallengeService {
             challenges: Arc::new(SqliteChallengeRepository::new(db.clone())),
@@ -349,6 +361,7 @@ impl AppState {
             perfect_weeks,
             records,
             period_stats,
+            horizon,
             challenges,
             annual_goals,
             score_history,

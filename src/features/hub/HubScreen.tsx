@@ -32,6 +32,7 @@ import { Gauge, Sparkline } from "../../design-system/charts";
 import { ScoreDetail } from "./ScoreDetail";
 import { SphereCard } from "./SphereCard";
 import { TodayStrip } from "./TodayStrip";
+import { HorizonBand } from "./HorizonBand";
 import { OnThisDay } from "../timeline/OnThisDay";
 
 export function HubScreen() {
@@ -272,6 +273,9 @@ export function HubScreen() {
           <SectionLabel>Hoje</SectionLabel>
           <TodayStrip data={today.data} isPending={today.isPending} />
         </section>
+
+        {/* ===== horizonte (só aparece quando há próximos marcos) ===== */}
+        <HorizonBand />
 
         {/* ===== neste dia (só aparece quando há passado) ===== */}
         <OnThisDay />

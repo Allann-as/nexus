@@ -2067,3 +2067,35 @@ Duas decisões: o RECORTE (mês cheio vs mês pela metade?) e a FONTE (rollups o
 por queries indexadas simples, sem tocar o schema — dentro do orçamento de "zero recriações" do
 ARSENAL (ADR-0058) e da honestidade de performance da constituição (§5): a query é barata *de fato*,
 não por reflexo de rollup.
+
+## ADR-0063 — Horizonte: uma agregação de marcos DATADOS, com as pendências vindas dos `links`
+
+**Contexto (ARSENAL, feature 6).** Uma faixa no Hub com os "próximos marcos — D-dias + pendências
+ligadas via `links`" ("Viagem · 12 dias · 2 tarefas abertas"). O que É um marco, e de onde vêm as
+pendências?
+
+**Decisão.** O Horizonte é uma **superfície de agregação read-only** (o espírito do ADR-0057), não
+uma entidade nova:
+
+1. **Marco = coisa DATADA que já existe.** Dois tipos entram na janela (90 dias): a ocorrência mais
+   próxima de cada EVENTO do calendário (uma linha por evento, não por ocorrência — um recorrente
+   não vira dez marcos) e as TEMPORADAS ainda ativas que TERMINAM na janela. Ambos são nodes com
+   data; nenhum tipo novo, nenhuma tabela. Caberia estender a fontes futuras (caixinha com prazo,
+   meta com data) sem mudar o formato.
+
+2. **As pendências vêm dos `links`, dos dois lados.** "2 tarefas abertas" = `COUNT` de nodes
+   `kind='task' AND status='active'` ligados ao marco por `links` (origem OU destino) — uma query
+   só (`HorizonRepository::open_linked_task_count`). É o consumidor de `links` que faltava para o
+   Hub: o marco não "possui" as tarefas, elas só apontam para ele (`related`), e a faixa conta o que
+   ainda falta fechar antes da data.
+
+3. **D-dias no espaço de DIA local**, não de milissegundo: `(dia_do_marco − hoje)` em dias, com o
+   `dia` já local ('YYYY-MM-DD') tanto da ocorrência quanto do `ends_on` da temporada — sem
+   `localtime`, coerente com o resto do app.
+
+4. **Só aparece quando há horizonte.** A faixa some do Hub quando não há marco à frente — como o
+   "Neste dia" some sem passado. O Hub não mostra uma seção vazia.
+
+**Consequência.** O Hub ganha o "o que vem" entre o "hoje" e o "neste dia", com as pendências reais
+puxadas dos `links` — tudo agregando o que já existe, dentro do ARSENAL de zero recriações
+(ADR-0058).

@@ -105,6 +105,7 @@ pub fn run() {
             commands::habits::habit_year_heatmap,
             commands::perfect_weeks::perfect_week_view,
             commands::period_stats::period_comparison,
+            commands::horizon::horizon,
             commands::records::personal_records,
             commands::habits::habit_weekday_stats,
             commands::habits::set_habit_schedule,

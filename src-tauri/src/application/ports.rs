@@ -1727,3 +1727,10 @@ pub trait PeriodStatsRepository: Send + Sync {
     /// Os agregados de `[from_day, to_day]` (inclusive) — uma query, quatro somas.
     fn range_stats(&self, from_day: &str, to_day: &str) -> Result<RawPeriodStats>;
 }
+
+/// A leitura do HORIZONTE (ARSENAL): as pendências ligadas a um marco. Ver ADR-0063.
+pub trait HorizonRepository: Send + Sync {
+    /// Quantas TAREFAS em aberto (`kind='task'`, `status='active'`) estão ligadas
+    /// a este node por `links`, nos dois sentidos.
+    fn open_linked_task_count(&self, node_id: &str) -> Result<i64>;
+}

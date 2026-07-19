@@ -17,6 +17,7 @@ pub mod focus;
 pub mod gamification;
 pub mod goals;
 pub mod habits;
+pub mod horizon;
 pub mod insights;
 pub mod links;
 pub mod nodes;

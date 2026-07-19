@@ -492,6 +492,22 @@ export interface Comparison {
 export const periodComparison = (mode: "month" | "year") =>
   call<Comparison>("period_comparison", { mode });
 
+// --- Horizonte (ARSENAL) ---
+
+export interface HorizonItem {
+  id: string;
+  title: string;
+  kind: "event" | "challenge" | string;
+  areaId: string | null;
+  day: string;
+  daysUntil: number;
+  openTasks: number;
+}
+
+/** Os próximos marcos (eventos + temporadas) com D-dias e pendências ligadas. */
+export const horizon = (days?: number) =>
+  call<HorizonItem[]>("horizon", { days: days ?? null });
+
 export const habitWeekdayStats = (id: string, days = 180) =>
   call<WeekdayStat[]>("habit_weekday_stats", { id, days });
 
