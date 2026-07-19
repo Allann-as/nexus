@@ -1,17 +1,16 @@
 # NEXUS — Arquitetura
 
 > Documento vivo. Atualize-o no mesmo commit que muda a estrutura.
-> Estado atual: **M5.5 + REFINO PRIME+ concluídos**. O PRIME entregou o sistema
-> de layout, a geometria do astrolábio nos fundos, o menu O NEXO, empty states
-> próprios e a tela de bloqueio por PIN; o REFINO (veredito do usuário ao vivo)
-> subiu o degrau: accent índigo da marca + sistema de botões (ADR-0055), fundos
-> mais ricos, o NEXO como mapa radial completo, donut fluido com saldo no centro,
-> exclusão de aporte + extrato redesenhado (ADR-0056), a tela de bloqueio de "OK"
-> a "UAU", e o hub **Objetivos** de qualquer natureza com o ritmo de constância
-> (ADR-0057). O M5 (Confiança) e o código no GitHub (ADR-0051) já estavam.
-> Próximo: M5.6 — ARSENAL (tracker plugável com contagem automática, semana
-> perfeita, recordes, ano em pixels, comparativos, horizonte, retrospectiva,
-> bandeja) e então M6 — a entrega da v1.0.0.
+> Estado atual: **M5.6 ARSENAL concluído**. O PRIME+ (M5.5) entregou o layout, a
+> geometria do astrolábio, o NEXO, empty states, a tela de PIN e o REFINO (accent
+> índigo, ADR-0055; exclusão de aporte, ADR-0056; hub Objetivos + ritmo, ADR-0057).
+> O ARSENAL somou oito features, **todas agregando o que já existe — ZERO
+> recriações de schema** (o levantamento de batch do ADR-0058): o tracker plugável
+> com contagem automática da constância (ADR-0058), a semana perfeita (ADR-0059),
+> os recordes pessoais (ADR-0060), o ano em pixels (ADR-0061), o comparativo de
+> períodos (ADR-0062), o Horizonte no Hub (ADR-0063), a retrospectiva anual
+> (ADR-0064) e a bandeja + atalho global (ADR-0065).
+> Próximo: M6 — a entrega da v1.0.0 (instalador, manual, Release).
 
 ## 1. O que o NEXUS é
 
@@ -121,7 +120,7 @@ logs/      rotação diária
 | **M4.6** | Aurora 2.0: hambúrguer, marca astrolábio, nav por Esfera, Carreira/Estudos, Configurações-hub, fundo em camadas, Hub-painel, isolamento de dev | ✅ **concluído** |
 | **M5** | Auto-backup + restauro, exportação humana, Revisão Semanal, Modo Foco, orçamentos provados a 5 anos, GitHub | ✅ **concluído** |
 | **M5.5** | PRIME: sistema de layout, fundos geométricos, o menu O NEXO, empty states, bloqueio por PIN | ✅ **concluído** |
-| M5.6 | ARSENAL: tracker plugável, semana perfeita, recordes, ano em pixels, comparativos, horizonte, retrospectiva, bandeja | ⬜ |
+| **M5.6** | ARSENAL: tracker plugável, semana perfeita, recordes, ano em pixels, comparativos, horizonte, retrospectiva, bandeja | ✅ **concluído** |
 | M6 | Ícone, instalador, manual, entrega da v1.0.0 | ⬜ |
 
 ### O que o M0 entrega de verdade
@@ -290,6 +289,38 @@ logs/      rotação diária
   `security.json` fora do banco (sobrevive a restauro, lido no boot). PIN de
   fábrica `242807`; `LockScreen` no design da marca; `Ctrl+L` bloqueia; trocar e
   desligar exigem o atual. Backup/restauração independem do PIN.
+
+### O que o M5.6 (ARSENAL) entrega de verdade
+
+Oito features, **zero recriações de schema** — o levantamento de batch (ADR-0058)
+achou que nenhuma pede `kind`/`link_type` novo; o vocabulário do ledger que faltava
+(recordes) é enum Rust, não migração (`event_type`/`entity_kind` são `TEXT` sem CHECK).
+
+- **Tracker plugável + constância automática** (ADR-0058): ligar um hábito a uma
+  meta anual por `contributes_to` faz a contagem vir dos ticks (DERIVADA, como o
+  contador de sub-desafio), com o heatmap do ano; o `HabitTracker` pluga em qualquer
+  node (Meta, Matéria). Comando `habit_year_heatmap`.
+- **Semana perfeita** (ADR-0059): `domain::perfect_week` puro (11 testes) — 100% do
+  agendado cumprido, sem abono, semana de segunda; calendário anual + sequência +
+  conquistas 4/12/26. DERIVADA, não congelada.
+- **Recordes pessoais** (ADR-0060): 5 PRs do estado; o VALOR é derivado, o MOMENTO de
+  bater é congelado (`record_broken`), com o anterior no payload e a Timeline marcando
+  o dia. O primeiro de cada tipo é marco silencioso.
+- **Ano em pixels** (ADR-0061): 365 células pelo Nexus Score, SVG puro; o congelado
+  manda, o resto computa a mesma fórmula (sem gravar).
+- **Comparativo** (ADR-0062): mês/ano ATÉ-A-DATA vs o anterior, 5 métricas por soma de
+  intervalo indexado (não rollup — dois períodos adjacentes é universo limitado).
+- **Horizonte** (ADR-0063): faixa do Hub com os próximos marcos (eventos + temporadas),
+  D-dias e as pendências ligadas por `links` — o consumidor de `links` que faltava.
+- **Retrospectiva** (ADR-0064): o ano num quadro DERIVADO + um Markdown regenerável em
+  `retrospectives/`, podado a 2 anos (o dado-fonte é eterno).
+- **Bandeja** (ADR-0065): tray + `Ctrl+Shift+N` global (no Rust; a webview segue
+  `core:default`) + fechar-para-a-bandeja (pref. num `settings.json` fora do banco). O
+  mini-painel É o Hub — uma webview só (o orçamento de RSS importa).
+
+As telas de análise novas moram no **NEXO** (grupo Análise) e nos chords `G+<tecla>`
+(`w` semana perfeita, `k` recordes, `x` pixels, `v` comparativo, `y` retrospectiva) —
+não lotam a rail, que segue só com o que atravessa a vida inteira.
 
 ### Medições reais (build `tauri build`, release)
 
