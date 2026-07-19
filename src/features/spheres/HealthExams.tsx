@@ -7,14 +7,20 @@
  *
  * O alerta de < 7 dias é o ponto: um exame perdido é uma consulta remarcada em
  * três meses. O que está perto acende.
+ *
+ * A criação é INLINE (A5): antes só dava para marcar um exame indo até o
+ * Calendário — a seção que os LISTA não os criava, e o usuário ficava sem o gesto
+ * óbvio. Agora um "+ Adicionar exame" abre um formulário curto aqui mesmo, no
+ * padrão das outras seções, e grava o mesmo evento `category='exame'`.
  */
 
-import { useQuery } from "@tanstack/react-query";
-import { CalendarClock, MapPin } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarClock, MapPin, Plus } from "lucide-react";
 
-import { Button, EmptyState, cx } from "../../design-system/primitives";
-import { eventsByCategory, type Occurrence } from "../../lib/ipc";
+import { Button, Card, EmptyState, cx } from "../../design-system/primitives";
+import { createEvent, eventsByCategory, type Occurrence } from "../../lib/ipc";
+import { useToasts } from "../../stores/toasts";
 import { fromDay, toDay } from "../calendar/grid";
 
 /** Dias até um exame, a partir de hoje (dia local, não milissegundos). */
@@ -24,8 +30,8 @@ function daysUntil(day: string): number {
   return Math.round((target.getTime() - today.getTime()) / 86_400_000);
 }
 
-export function HealthExams() {
-  const navigate = useNavigate();
+export function HealthExams({ areaId }: { areaId: string }) {
+  const [creating, setCreating] = useState(false);
   const { data: exams = [], isLoading } = useQuery({
     queryKey: ["events", "category", "exame"],
     queryFn: () => eventsByCategory("exame", 40),
@@ -35,16 +41,16 @@ export function HealthExams() {
     return <div className="h-64 animate-pulse rounded-[var(--radius-lg)] bg-[var(--bg-surface)]" />;
   }
 
-  if (exams.length === 0) {
+  if (exams.length === 0 && !creating) {
     return (
       <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--border-subtle)] py-16">
         <EmptyState
           icon={CalendarClock}
           title="Nenhum exame agendado"
-          hint="Marque um exame ou consulta no Calendário com a categoria 'exame' e ele aparece aqui, com alerta quando estiver perto."
+          hint="Um exame ou consulta com hora e lugar. Marque um aqui e ele aparece com alerta quando estiver perto — e também no seu Calendário."
           action={
-            <Button variant="secondary" size="sm" onClick={() => navigate("/calendar")}>
-              Abrir o Calendário
+            <Button variant="primary" size="sm" icon={Plus} onClick={() => setCreating(true)}>
+              Adicionar exame
             </Button>
           }
         />
@@ -53,11 +59,145 @@ export function HealthExams() {
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      {exams.map((e) => (
-        <ExamRow key={`${e.eventId}@${e.startsAt}`} exam={e} days={daysUntil(e.day)} />
-      ))}
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between px-1">
+        <span className="text-[12px] text-[var(--text-tertiary)]">
+          {exams.length} {exams.length === 1 ? "exame agendado" : "exames agendados"}
+        </span>
+        {!creating && (
+          <Button variant="secondary" size="sm" icon={Plus} onClick={() => setCreating(true)}>
+            Adicionar exame
+          </Button>
+        )}
+      </div>
+
+      {creating && <ExamForm areaId={areaId} onDone={() => setCreating(false)} />}
+
+      <div className="flex flex-col gap-2">
+        {exams.map((e) => (
+          <ExamRow key={`${e.eventId}@${e.startsAt}`} exam={e} days={daysUntil(e.day)} />
+        ))}
+      </div>
     </div>
+  );
+}
+
+/**
+ * O formulário inline de um exame. Curto por princípio: título, dia, hora e (só se
+ * houver) o lugar. A duração não se pergunta — um exame dura o que durar; guarda-se
+ * uma hora para o bloco ter tamanho no calendário, e o alerta olha só o dia.
+ */
+function ExamForm({ areaId, onDone }: { areaId: string; onDone: () => void }) {
+  const qc = useQueryClient();
+  const pushError = useToasts((s) => s.pushError);
+  const push = useToasts((s) => s.push);
+
+  const [title, setTitle] = useState("");
+  const [day, setDay] = useState(toDay(new Date()));
+  const [time, setTime] = useState("08:00");
+  const [location, setLocation] = useState("");
+
+  const valid = title.trim().length > 0 && day.length === 10 && /^\d{2}:\d{2}$/.test(time);
+
+  const create = useMutation({
+    mutationFn: () => {
+      // Dia local + hora → epoch ms. `T${time}:00` sem sufixo de fuso = hora local,
+      // que é o que o usuário digitou.
+      const startsAt = new Date(`${day}T${time}:00`).getTime();
+      return createEvent({
+        title: title.trim(),
+        areaId,
+        startsAt,
+        endsAt: startsAt + 3_600_000,
+        location: location.trim() || null,
+        category: "exame",
+      });
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["events"] });
+      push("success", "Exame agendado");
+      onDone();
+    },
+    onError: pushError,
+  });
+
+  const submit = () => {
+    if (!valid || create.isPending) return;
+    create.mutate();
+  };
+
+  return (
+    <Card className="p-4">
+      <input
+        autoFocus
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit();
+          if (e.key === "Escape") onDone();
+        }}
+        placeholder="Exame de sangue, consulta com o cardiologista…"
+        className="w-full bg-transparent text-[14px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
+      />
+
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        <Field label="Dia">
+          <input
+            type="date"
+            value={day}
+            onChange={(e) => setDay(e.target.value)}
+            className="tabular w-full rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-2 py-1.5 text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--sphere)]"
+          />
+        </Field>
+        <Field label="Hora">
+          <input
+            type="time"
+            value={time}
+            onChange={(e) => setTime(e.target.value)}
+            className="tabular w-full rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-2 py-1.5 text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--sphere)]"
+          />
+        </Field>
+        <Field label="Local (opcional)">
+          <input
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit();
+            }}
+            placeholder="Laboratório"
+            className="w-full rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-2 py-1.5 text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--sphere)] placeholder:text-[var(--text-tertiary)]"
+          />
+        </Field>
+      </div>
+
+      <div className="mt-4 flex items-center justify-end gap-2">
+        {!title.trim() && (
+          <span className="mr-auto text-[11px] text-[var(--text-tertiary)]">
+            Dê um nome ao exame para agendar
+          </span>
+        )}
+        <Button size="sm" variant="ghost" onClick={onDone}>
+          Cancelar
+        </Button>
+        <Button
+          size="sm"
+          variant="primary"
+          onClick={submit}
+          disabled={!valid || create.isPending}
+        >
+          {create.isPending ? "Agendando…" : "Agendar exame"}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[10px] text-[var(--text-tertiary)]">{label}</span>
+      {children}
+    </label>
   );
 }
 

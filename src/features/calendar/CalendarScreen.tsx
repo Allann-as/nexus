@@ -19,7 +19,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 
 import { isChordPending } from "../../app/useKeyboard";
-import { CountUp, GlassPanel } from "../../design-system/cards";
+import { CountUp } from "../../design-system/cards";
+import { Modal } from "../../design-system/Modal";
 import { Button, Kbd, cx } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
 import {
@@ -464,12 +465,8 @@ function DayOverflow({
   onClose: () => void;
 }) {
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-50 grid place-items-center bg-[color-mix(in_srgb,black_45%,transparent)] p-4"
-    >
-      <GlassPanel className="w-full max-w-sm">
-        <div onClick={(e) => e.stopPropagation()} className="p-4">
+    <Modal onClose={onClose} size="sm">
+      <div className="p-4">
           <header className="mb-3 flex items-center gap-2">
             <CalendarDays size={14} className="text-[var(--text-tertiary)]" />
             <h3 className="text-[13px] font-semibold text-[var(--text-primary)]">
@@ -502,8 +499,7 @@ function DayOverflow({
               </button>
             ))}
           </div>
-        </div>
-      </GlassPanel>
-    </div>
+      </div>
+    </Modal>
   );
 }

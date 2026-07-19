@@ -6,10 +6,10 @@
  * estrelas, a frase, e o botão que conclui.
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { X } from "lucide-react";
 
-import { GlassPanel } from "../../design-system/cards";
+import { Modal } from "../../design-system/Modal";
 import { Button } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
 import { finishBook, type Book } from "../../lib/ipc";
@@ -31,17 +31,6 @@ export function FinishBookModal({
   const [review, setReview] = useState("");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   const submit = async () => {
     if (saving) return;
     setSaving(true);
@@ -61,12 +50,8 @@ export function FinishBookModal({
   };
 
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-[60] grid place-items-center bg-[color-mix(in_srgb,black_55%,transparent)] p-4"
-    >
-      <GlassPanel className="w-full max-w-md">
-        <div onClick={(e) => e.stopPropagation()} className="p-5">
+    <Modal onClose={onClose}>
+      <div className="p-5">
           <header className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">
@@ -109,8 +94,7 @@ export function FinishBookModal({
               </Button>
             </div>
           </div>
-        </div>
-      </GlassPanel>
-    </div>
+      </div>
+    </Modal>
   );
 }

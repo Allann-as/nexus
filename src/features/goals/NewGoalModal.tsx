@@ -11,9 +11,9 @@
  */
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { Target } from "lucide-react";
 
-import { GlassPanel } from "../../design-system/cards";
+import { Modal, ModalHeader } from "../../design-system/Modal";
 import { Button, cx } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
 import { createGoal, type Area } from "../../lib/ipc";
@@ -72,16 +72,14 @@ export function NewGoalModal({
   };
 
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-50 grid place-items-center bg-[color-mix(in_srgb,black_55%,transparent)] p-4"
-    >
-      <GlassPanel className="w-full max-w-md">
-        <div onClick={(e) => e.stopPropagation()} className="p-5">
-          <header className="mb-4 flex items-center justify-between">
-            <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">Nova meta</h2>
-            <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label="Fechar" />
-          </header>
+    <Modal onClose={onClose}>
+      <div className="p-5">
+          <ModalHeader
+            icon={Target}
+            title="Nova meta"
+            subtitle="Uma métrica, um começo honesto e um alvo"
+            onClose={onClose}
+          />
 
           <div className="flex flex-col gap-3">
             <Input autoFocus value={title} onChange={setTitle} placeholder="Perder 10 kg" label="Meta" />
@@ -125,8 +123,7 @@ export function NewGoalModal({
             </div>
           </div>
         </div>
-      </GlassPanel>
-    </div>
+    </Modal>
   );
 }
 

@@ -101,6 +101,30 @@ export function App() {
   useEffect(() => applyDensity(density), [density]);
   useEffect(() => applyReducedMotion(reducedMotion), [reducedMotion]);
 
+  // A6 — higiene de segundo plano. O navegador só pausa animações com a janela
+  // MINIMIZADA (document.hidden); atrás do trabalho pesado ela segue visível e
+  // sem foco, e o compositor gira o astrolábio e corre as listras à toa. Marca
+  // `data-window-idle` quando a janela perde o foco ou some; o CSS congela só as
+  // animações em loop (`.nx-loop`), nunca as transições de gesto (tokens.css).
+  useEffect(() => {
+    const root = document.documentElement;
+    const setIdle = (idle: boolean) => {
+      root.dataset.windowIdle = idle ? "true" : "false";
+    };
+    const onVisibility = () => setIdle(document.hidden);
+    const onBlur = () => setIdle(true);
+    const onFocus = () => setIdle(false);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    setIdle(document.hidden);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />

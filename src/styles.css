@@ -126,6 +126,22 @@
         color-mix(in srgb, var(--accent-deep) calc(var(--aurora-alpha) * 55%), transparent),
         transparent 72%
       ),
+      /* B4 — o SEGUNDO PLANO de profundidade: dois anéis GRANDES e desfocados, um
+         subindo do canto inferior esquerdo, outro descendo do topo. Bandas soltas
+         num radial (transparente → cor fininha → transparente) desenham o aro sem
+         custo — nada anima, é o mesmo preço de um gradiente parado. */
+      radial-gradient(
+        1200px 1200px at 10% 116%,
+        transparent 45%,
+        color-mix(in srgb, var(--sphere) 7%, transparent) 49%,
+        transparent 54%
+      ),
+      radial-gradient(
+        1000px 1000px at 96% -16%,
+        transparent 52%,
+        color-mix(in srgb, var(--accent-bright) 6%, transparent) 56%,
+        transparent 61%
+      ),
       radial-gradient(
         circle,
         rgb(255 255 255 / var(--dot-alpha)) 1px,
@@ -134,9 +150,11 @@
     background-size:
       100% 100%,
       100% 100%,
+      100% 100%,
+      100% 100%,
       26px 26px;
-    background-repeat: no-repeat, no-repeat, repeat;
-    background-attachment: local, local, local;
+    background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, repeat;
+    background-attachment: local, local, local, local, local;
   }
 
   /* O dot grid do tema claro precisa ser escuro sobre branco —
@@ -152,6 +170,18 @@
         700px 380px at 5% 0%,
         color-mix(in srgb, var(--accent-deep) calc(var(--aurora-alpha) * 55%), transparent),
         transparent 72%
+      ),
+      radial-gradient(
+        1200px 1200px at 10% 116%,
+        transparent 45%,
+        color-mix(in srgb, var(--sphere) 8%, transparent) 49%,
+        transparent 54%
+      ),
+      radial-gradient(
+        1000px 1000px at 96% -16%,
+        transparent 52%,
+        color-mix(in srgb, var(--accent-deep) 7%, transparent) 56%,
+        transparent 61%
       ),
       radial-gradient(circle, rgb(12 20 36 / var(--dot-alpha)) 1px, transparent 1px);
   }
@@ -292,5 +322,51 @@
     backdrop-filter: blur(16px);
     border: 1px solid var(--border-subtle);
     box-shadow: var(--shadow-float);
+  }
+
+  /* ============================================================
+     O OVERLAY DAS MODAIS (ADR-0066)
+     ------------------------------------------------------------
+     A modal vive num portal no `document.body`, FORA do `.nx-page`
+     isolado — é o que devolve o `backdrop-filter` do `.nx-glass` (o
+     quadrado preto morria de fome de backdrop dentro da isolação).
+     O scrim escurece a cena; o painel entra com um fade + escala
+     curtos. Ambos só opacity/transform, e o bloco global de
+     reduced-motion os congela. */
+  .nx-modal-scrim {
+    background: color-mix(in srgb, var(--bg-void) 62%, transparent);
+    animation: nexus-scrim-in var(--dur-fast) var(--ease) both;
+  }
+
+  .nx-modal-panel {
+    animation: nexus-modal-in var(--dur-base) var(--ease-out-quart) both;
+    /* B2 — a casca de um diálogo maduro, um grau acima do `.nx-glass` genérico:
+       um FIO DE LUZ no topo (o inset branco que lê como a quina iluminada de um
+       painel), uma borda mais definida e a sombra flutuante do tema por baixo.
+       Propaga para TODA modal por construção — elas herdam esta casca. */
+    border-color: var(--border-strong);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent),
+      var(--shadow-float);
+  }
+
+  @keyframes nexus-scrim-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes nexus-modal-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
   }
 }

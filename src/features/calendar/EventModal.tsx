@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Repeat, Trash2, X } from "lucide-react";
 
-import { GlassPanel } from "../../design-system/cards";
+import { Modal } from "../../design-system/Modal";
 import { Button, Kbd, cx } from "../../design-system/primitives";
 import { SphereIcon } from "../hub/SphereIcon";
 import type { Area, Occurrence, Recurrence } from "../../lib/ipc";
@@ -79,19 +79,6 @@ export function EventModal({
     }
   }, [draft]);
 
-  // Escape fecha, e o listener é do modal: um `onKeyDown` no wrapper só ouviria
-  // o que tem foco dentro dele, e o usuário pode ter clicado no fundo.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   if (!draft && !existing) return null;
 
   // "A terceira terça do mês" (ADR-0024): a semana e o dia-da-semana saem da
@@ -113,15 +100,8 @@ export function EventModal({
   };
 
   return (
-    <div
-      // O fundo escuro é um `div` com `onClick`, e não um `<dialog>`: o
-      // `showModal()` põe o elemento na top-layer, acima do backdrop-filter do
-      // GlassPanel — e o vidro pararia de mostrar o que está atrás dele.
-      onClick={onClose}
-      className="fixed inset-0 z-50 grid place-items-center bg-[color-mix(in_srgb,black_55%,transparent)] p-4"
-    >
-      <GlassPanel className="w-full max-w-md">
-        <div onClick={(e) => e.stopPropagation()} className="p-5">
+    <Modal onClose={onClose}>
+      <div className="p-5">
           <header className="mb-4 flex items-start justify-between gap-3">
             <div>
               <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">
@@ -217,9 +197,8 @@ export function EventModal({
           ) : (
             existing && <ExistingEvent existing={existing} onDelete={onDelete} onCancelOccurrence={onCancelOccurrence} />
           )}
-        </div>
-      </GlassPanel>
-    </div>
+      </div>
+    </Modal>
   );
 }
 

@@ -211,7 +211,7 @@ function SphereContent({
   if (sphere.template === "health") {
     if (tab === "checkpoints") return <HealthCheckpoints areaId={sphere.id} />;
     if (tab === "training") return <HealthTraining areaId={sphere.id} colour={sphere.color} />;
-    if (tab === "exams") return <HealthExams />;
+    if (tab === "exams") return <HealthExams areaId={sphere.id} />;
     return <HealthDashboard sphere={sphere} card={card} />;
   }
 

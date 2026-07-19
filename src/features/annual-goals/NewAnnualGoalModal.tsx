@@ -8,7 +8,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 
 import { createAnnualGoal, type AnnualGoalKind, type Area } from "../../lib/ipc";
-import { GlassPanel } from "../../design-system/cards";
+import { Modal } from "../../design-system/Modal";
 import { Button, cx } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
 
@@ -34,10 +34,7 @@ export function NewAnnualGoalModal({
 
   useEffect(() => {
     inputRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, []);
 
   const create = useMutation({
     mutationFn: () =>
@@ -67,8 +64,8 @@ export function NewAnnualGoalModal({
   const activeAreas = areas.filter((a) => a.archivedAt === null);
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4">
-      <GlassPanel className="w-full max-w-md p-5">
+    <Modal onClose={onClose}>
+      <div className="p-5">
         <div className="flex items-center justify-between">
           <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">
             Nova meta para {year}
@@ -149,8 +146,8 @@ export function NewAnnualGoalModal({
             Criar meta
           </Button>
         </div>
-      </GlassPanel>
-    </div>
+      </div>
+    </Modal>
   );
 }
 

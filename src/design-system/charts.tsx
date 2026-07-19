@@ -318,7 +318,7 @@ export function ProgressBar({
       aria-valuemax={100}
     >
       <div
-        className="h-full rounded-full"
+        className="nx-loop h-full rounded-full"
         style={{
           width: `${animated * 100}%`,
           background: `linear-gradient(90deg, color-mix(in srgb, ${color} 55%, transparent), ${color})`,

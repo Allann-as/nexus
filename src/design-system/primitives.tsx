@@ -26,18 +26,34 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const BUTTON_VARIANTS: Record<string, string> = {
-  // O primário: gradiente índigo curto (accent → accent-deep) com uma borda de
-  // luz no topo e uma sombra de PROFUNDIDADE, não de neon (ADR-0055). O halo da
-  // cor é discreto (22%) — antes era 35% e lia como brilho estridente. Estático:
-  // só o brilho muda no hover; sombra animada em loop é o que a §6 proíbe.
+  // O primário — redesenho definitivo do B1 (ADR-0067). O pill chapado morreu: a
+  // profundidade de um app maduro vem de QUATRO coisas empilhadas, todas estáticas:
+  //   1. gradiente vertical de 3 paradas — o TOPO clareia com um toque de branco
+  //      (color-mix, não `--accent-hover`, que no tema claro é mais ESCURO e
+  //      inverteria a luz), o miolo é o accent, a base afunda no accent-deep;
+  //   2. uma borda de LUZ no topo por `inset 0 1px` branco — o fio que o olho lê
+  //      como a quina iluminada de uma tecla;
+  //   3. uma sombra curta PARA BAIXO (preto + halo da cor) — profundidade, não neon;
+  //   4. gestos: hover ELEVA 1px e adensa a sombra; active AFUNDA (o press real).
+  // A sombra entra na transição — é gesto do usuário, não loop (o que a §6 proíbe).
   primary:
-    "bg-gradient-to-b from-[var(--accent)] to-[var(--accent-deep)] text-white border border-[color-mix(in_srgb,var(--accent-bright)_28%,transparent)] shadow-[0_1px_2px_rgb(0_0_0/0.28),0_4px_14px_color-mix(in_srgb,var(--accent)_20%,transparent)] hover:brightness-[1.06]",
+    "text-white border border-[color-mix(in_srgb,var(--accent-deep)_65%,#000)] " +
+    "bg-[linear-gradient(180deg,color-mix(in_srgb,var(--accent)_86%,#fff),var(--accent)_46%,var(--accent-deep))] " +
+    "shadow-[inset_0_1px_0_color-mix(in_srgb,#fff_24%,transparent),0_1px_2px_rgb(0_0_0/0.30),0_3px_10px_color-mix(in_srgb,var(--accent)_26%,transparent)] " +
+    "hover:-translate-y-px hover:brightness-[1.04] " +
+    "hover:shadow-[inset_0_1px_0_color-mix(in_srgb,#fff_30%,transparent),0_3px_6px_rgb(0_0_0/0.32),0_7px_20px_color-mix(in_srgb,var(--accent)_34%,transparent)] " +
+    "active:translate-y-px active:brightness-95",
+  // Secundária/ghost/destrutiva na MESMA família: a luz no topo e a elevação no
+  // hover repetem o gesto do primário, uma oitava abaixo.
   secondary:
-    "bg-[var(--bg-raised)] text-[var(--text-primary)] border border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] hover:border-[var(--border-glow)]",
+    "bg-[var(--bg-raised)] text-[var(--text-primary)] border border-[var(--border-subtle)] " +
+    "shadow-[inset_0_1px_0_color-mix(in_srgb,#fff_6%,transparent),0_1px_2px_rgb(0_0_0/0.16)] " +
+    "hover:-translate-y-px hover:bg-[var(--bg-hover)] hover:border-[var(--border-glow)] active:translate-y-px",
   ghost:
     "bg-transparent text-[var(--text-secondary)] border border-transparent hover:bg-[var(--bg-raised)] hover:text-[var(--text-primary)]",
   danger:
-    "bg-transparent text-[var(--danger)] border border-[var(--border-subtle)] hover:bg-[color-mix(in_srgb,var(--danger)_12%,transparent)] hover:border-[var(--danger)]",
+    "bg-transparent text-[var(--danger)] border border-[var(--border-subtle)] " +
+    "hover:-translate-y-px hover:bg-[color-mix(in_srgb,var(--danger)_12%,transparent)] hover:border-[var(--danger)] active:translate-y-px",
 };
 
 export function Button({
@@ -53,8 +69,8 @@ export function Button({
       {...rest}
       className={cx(
         "inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] font-medium select-none",
-        "transition-[background-color,border-color,color,transform] duration-[var(--dur-fast)] ease-[var(--ease)]",
-        "active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none",
+        "transition-[background-color,border-color,color,transform,box-shadow,filter] duration-[var(--dur-fast)] ease-[var(--ease)]",
+        "disabled:opacity-40 disabled:pointer-events-none",
         size === "sm" ? "h-7 px-2.5 text-[12px]" : "h-9 px-3.5 text-[13px]",
         BUTTON_VARIANTS[variant],
         className,

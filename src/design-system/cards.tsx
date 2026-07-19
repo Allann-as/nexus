@@ -16,6 +16,7 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 
 import { cx } from "./primitives";
 import { useCountUp } from "./useCountUp";
+import { ProgressRing, Sparkline } from "./charts";
 
 /* ===== HeroCard ===== */
 
@@ -183,6 +184,102 @@ function Delta({ value, suffix = "" }: { value: number; suffix?: string }) {
       {Math.abs(value)}
       {suffix}
     </span>
+  );
+}
+
+/* ===== StatTile — o "stat-card vivo" (B3) ===== */
+
+/**
+ * O componente que mata a esparsidão das telas do ARSENAL (B3). Um `StatCard` é
+ * número + rótulo + (talvez) delta; um `StatTile` é isso MAIS um elemento VIVO
+ * OBRIGATÓRIO — anel, sparkline ou barra de tendência. Três caixas com um número
+ * cada numa página vazia foi o que o usuário chamou de "péssimo design"; aqui cada
+ * número carrega a própria história visual.
+ *
+ * A escolha do vivo, nesta ordem de precedência: `ring` (uma fração 0..1 vira um
+ * anel de progresso), senão `spark` (uma série 0..1 vira sparkline). O `delta`
+ * (seta + variação) acompanha qualquer um. Se NÃO há dado para o vivo, ele some —
+ * o Sparkline já degrada para um traço tracejado em vez de inventar uma linha.
+ */
+export function StatTile({
+  icon: Icon,
+  label,
+  value,
+  unit,
+  hint,
+  tone = "sphere",
+  spark,
+  ring,
+  delta,
+  onClick,
+}: {
+  icon?: LucideIcon;
+  label: string;
+  value: ReactNode;
+  unit?: string;
+  hint?: ReactNode;
+  tone?: "sphere" | "accent" | "success" | "warning" | "danger";
+  /** A série viva (0..1, antigo→recente). Vira sparkline no rodapé do tile. */
+  spark?: number[];
+  /** Uma fração 0..1. Vira o anel de progresso à direita — tem precedência sobre spark. */
+  ring?: number;
+  delta?: { value: number; suffix?: string };
+  onClick?: () => void;
+}) {
+  const color = TONE_VAR[tone];
+  const Tag = onClick ? "button" : "div";
+
+  return (
+    <Tag
+      onClick={onClick}
+      className={cx(
+        "group flex flex-col rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 text-left",
+        "transition-[transform,border-color,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease)]",
+        onClick && "cursor-pointer hover:-translate-y-0.5 hover:border-[var(--border-glow)] hover:shadow-[var(--glow-accent)]",
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            {Icon && (
+              <span
+                className="grid size-6 shrink-0 place-items-center rounded-[var(--radius-sm)]"
+                style={{ background: `color-mix(in srgb, ${color} 14%, transparent)` }}
+              >
+                <Icon size={13} strokeWidth={2} style={{ color }} />
+              </span>
+            )}
+            <span className="truncate text-[10px] font-semibold tracking-[0.12em] text-[var(--text-tertiary)] uppercase">
+              {label}
+            </span>
+          </div>
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="tabular text-[28px] leading-[32px] font-bold tracking-[-0.02em] text-[var(--text-primary)]">
+              {value}
+            </span>
+            {unit && <span className="text-[13px] text-[var(--text-secondary)]">{unit}</span>}
+            {delta != null && <span className="ml-0.5"><Delta {...delta} /></span>}
+          </div>
+          {hint && (
+            <p className="mt-1 text-[11px] leading-[16px] text-[var(--text-tertiary)]">{hint}</p>
+          )}
+        </div>
+
+        {ring != null && (
+          <ProgressRing value={ring} size={54} thickness={5} color={color}>
+            <span className="tabular text-[12px] font-semibold text-[var(--text-primary)]">
+              {Math.round(Math.max(0, Math.min(1, ring)) * 100)}%
+            </span>
+          </ProgressRing>
+        )}
+      </div>
+
+      {/* A sparkline só entra quando não há anel — dois vivos no mesmo tile
+          competem. Full-width por `w-full` sobre o viewBox. */}
+      {ring == null && spark && (
+        <Sparkline data={spark} color={color} width={280} height={34} className="mt-3 w-full" />
+      )}
+    </Tag>
   );
 }
 

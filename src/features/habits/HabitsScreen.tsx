@@ -303,8 +303,22 @@ function CreateForm({ onDone }: { onDone: () => void }) {
     onError: pushError,
   });
 
+  // O botão só depende do NOME (o resto tem padrão ou é opcional) — mas um
+  // "weekdays" sem nenhum dia marcado é rejeitado pelo backend, então guarda-se
+  // isso aqui em vez de deixar o clique virar um toast de erro. E o motivo de o
+  // botão estar travado passa a ser DITO (A4): o placeholder "2/L/07:30" dos
+  // opcionais fazia o formulário parecer preenchido, e o botão morto sem nome
+  // lia como quebrado.
+  const missingDays = kind === "weekdays" && days.length === 0;
+  const canSave = title.trim().length > 0 && !missingDays && !create.isPending;
+  const blockedReason = !title.trim()
+    ? "Dê um nome ao hábito para criar"
+    : missingDays
+      ? "Escolha ao menos um dia da semana"
+      : null;
+
   const submit = () => {
-    if (!title.trim() || create.isPending) return;
+    if (!canSave) return;
     create.mutate();
   };
 
@@ -407,7 +421,17 @@ function CreateForm({ onDone }: { onDone: () => void }) {
         </Field>
       </div>
 
-      <div className="mt-4 flex justify-end gap-2">
+      <div className="mt-4 flex items-center justify-end gap-2">
+        {blockedReason && (
+          <span
+            className={cx(
+              "mr-auto text-[11px]",
+              missingDays ? "text-[var(--warning)]" : "text-[var(--text-tertiary)]",
+            )}
+          >
+            {blockedReason}
+          </span>
+        )}
         <Button size="sm" variant="ghost" onClick={onDone}>
           Cancelar
         </Button>
@@ -415,7 +439,8 @@ function CreateForm({ onDone }: { onDone: () => void }) {
           size="sm"
           variant="primary"
           onClick={submit}
-          disabled={!title.trim() || create.isPending}
+          disabled={!canSave}
+          title={blockedReason ?? undefined}
         >
           {create.isPending ? "Criando…" : "Criar hábito"}
         </Button>

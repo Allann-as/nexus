@@ -2166,3 +2166,74 @@ WebView2, sem alargar a allowlist da webview, e sem tabela nova — só um `sett
 banco. O `Ctrl+Shift+N` do M0 ganha alcance global reusando o mesmo gesto. Verificação: o binário
 COMPILA e empacota; o comportamento de bandeja em si (clicar, minimizar) é validado na máquina do
 usuário no M6, como toda a UI (a automação de SO do ADR-0012 não observa a bandeja).
+
+---
+
+## ADR-0066 — O quadrado preto atrás das modais era o `backdrop-filter` faminto de backdrop; a cura é um portal
+
+**Data:** 2026-07-19 · **Status:** aceito · **v1.1 (JOGO DA VIDA)** · **causa-raiz, não spot-fix**
+
+**Contexto.** Um QUADRADO PRETO aparecia atrás de "Nova meta", "Nova caixinha" e das telas de
+Estudos, nos DOIS temas. O ADR-0055/R4 já tinha caçado um preto (o `color-scheme` do input de data),
+mas esse era outro — e o usuário desconfiou, com razão, de que os consertos pontuais não alcançavam
+a causa: "há um componente compartilhado quebrado".
+
+**A causa-raiz.** Toda modal era, cada uma, um `fixed inset-0` embrulhando um `GlassPanel`, e
+renderizava INLINE, dentro do `.nx-page` da tela. O `.nx-page` cria um contexto de empilhamento
+ISOLADO (`isolation: isolate`, para prender a geometria do astrolábio em `z-index:-1`). O
+`backdrop-filter: blur(16px)` do `.nx-glass`, preso a esse "backdrop root" isolado, não tinha o
+conteúdo da página para amostrar — e o blur de um backdrop vazio, no WebView2, é PRETO. Era imune a
+spot-fix porque a causa estava na ÁRVORE (onde a modal renderiza), não no CSS de cada modal. Prova
+por contraste: as modais que NÃO usavam `GlassPanel` (bg chapado) nunca tiveram o quadrado.
+
+**Decisão.** Um `<Modal>` compartilhado (`design-system/Modal.tsx`) que sai da árvore da página por
+um `createPortal` para o `document.body`. Fora do `.nx-page`, o `backdrop-filter` volta a amostrar a
+aplicação real e o blur volta a ser blur. Um componente, e o app inteiro para de ter o bug — a modal
+que usa este overlay não pode reintroduzi-lo. As 15 modais de formulário migraram para ele; o Esc, o
+clique-no-backdrop e o scroll-lock passam a morar no `Modal`, não em cada tela.
+
+**Consequência.** Verificado ao vivo (dirigida ADR-0012), nos DOIS temas: painel limpo, sem quadrado
+preto. `--sphere` não atravessa o portal (o body está fora do `.nx-page`), então a modal aberta de
+dentro de uma Esfera recebe `sphereColor` para seguir tingida — sem ele, cai no índigo da marca.
+
+---
+
+## ADR-0067 — O passe de design system da v1.1: botão com profundidade, casca de diálogo, stat-card vivo e fundo com presença
+
+**Data:** 2026-07-19 · **Status:** aceito · **v1.1 (JOGO DA VIDA)** · **supersede parte do ADR-0055**
+
+**Contexto.** O veredito do usuário sobre a v1.0.0 instalada: "ótimas ideias e um péssimo design". As
+peças compartilhadas eram a alavanca — "cada hora em componente compartilhado vale por dez em tela
+isolada" —, então a elevação foi NELAS, não tela a tela.
+
+**Decisão.**
+
+1. **O botão primário (B1).** O pill chapado do ADR-0055 morreu. A profundidade de app maduro vem de
+   quatro coisas ESTÁTICAS empilhadas: gradiente vertical de 3 paradas (o topo clareia com um toque
+   de branco por `color-mix` — não `--accent-hover`, que no claro é mais ESCURO e inverteria a luz),
+   um fio de luz no topo (`inset 0 1px` branco), uma sombra curta para baixo (preto + halo da cor), e
+   os gestos: hover ELEVA 1px e adensa a sombra, active AFUNDA. Secundária/ghost/destrutiva na mesma
+   família. A sombra entra na transição — é gesto, não loop (a §6 proíbe loop).
+
+2. **A casca de diálogo (B2).** O `.nx-modal-panel` ganha um fio de luz no topo (`inset` branco), uma
+   borda mais definida e a sombra flutuante do tema; raio `xl`. Um `<ModalHeader>` opt-in traz o chip
+   do ícone da ação + hierarquia. Herdado por TODA modal do ADR-0066.
+
+3. **O `StatTile` — o "stat-card vivo" (B3).** Número mono grande + rótulo + um elemento VIVO
+   obrigatório (anel `ring`, senão sparkline `spark`), porque três caixas com um número cada numa
+   página vazia foi o que o usuário chamou de esparso. O vivo some quando não há dado (o Sparkline já
+   degrada para um traço tracejado).
+
+4. **O fundo com presença (B4).** `--astro-alpha`/`--aurora-alpha` sobem um degrau, e o `.nx-page`
+   ganha um SEGUNDO PLANO de profundidade: dois anéis GRANDES e desfocados (bandas soltas num radial),
+   um subindo do canto inferior esquerdo, outro do topo. Continua estático, custo de um gradiente
+   parado. O tema claro replica as 5 camadas para o `background-size` seguir alinhado.
+
+5. **Higiene de segundo plano (A6).** Não há polls (React Query sem `refetchInterval`); o custo ocioso
+   era animação em loop com a janela VISÍVEL e sem foco (o navegador só pausa com `document.hidden`).
+   Um listener em `App` marca `data-window-idle`, e o CSS congela só as animações `.nx-loop` — nunca
+   as transições de gesto nem as entradas one-shot.
+
+**Consequência.** Botão, diálogo, stat-card, fundo e higiene mudam em UM lugar cada e propagam para o
+app inteiro. Verificado ao vivo: botão com profundidade real, modais limpas nos dois temas, fundo com
+os anéis de profundidade visíveis a 100%.

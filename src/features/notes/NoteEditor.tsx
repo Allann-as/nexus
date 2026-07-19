@@ -442,7 +442,7 @@ function SaveState({ status }: { status: "saved" | "saving" }) {
     return (
       <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-[var(--text-tertiary)]">
         <span
-          className="size-1.5 rounded-full bg-[var(--accent)]"
+          className="nx-loop size-1.5 rounded-full bg-[var(--accent)]"
           style={{ animation: "nexus-pulse 900ms var(--ease) infinite" }}
         />
         salvando…

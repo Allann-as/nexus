@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 
-import { GlassPanel } from "../../design-system/cards";
+import { Modal } from "../../design-system/Modal";
 import { Button, cx } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
 import { createBook } from "../../lib/ipc";
@@ -37,15 +37,7 @@ export function NewBookModal({
 
   useEffect(() => {
     input.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, []);
 
   const valid = title.trim().length > 0;
 
@@ -71,12 +63,8 @@ export function NewBookModal({
   };
 
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-50 grid place-items-center bg-[color-mix(in_srgb,black_55%,transparent)] p-4"
-    >
-      <GlassPanel className="w-full max-w-md">
-        <div onClick={(e) => e.stopPropagation()} className="p-5">
+    <Modal onClose={onClose}>
+      <div className="p-5">
           <header className="mb-4 flex items-center justify-between">
             <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">Novo livro</h2>
             <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label="Fechar" />
@@ -160,9 +148,8 @@ export function NewBookModal({
               </Button>
             </div>
           </div>
-        </div>
-      </GlassPanel>
-    </div>
+      </div>
+    </Modal>
   );
 }
 

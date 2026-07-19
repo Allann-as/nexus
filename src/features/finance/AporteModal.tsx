@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Minus, Plus, X } from "lucide-react";
 
-import { GlassPanel } from "../../design-system/cards";
+import { Modal } from "../../design-system/Modal";
 import { Button, cx } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
 import { toDay } from "../calendar/grid";
@@ -67,15 +67,7 @@ export function AporteModal({
 
   useEffect(() => {
     input.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, []);
 
   const cents = parseToCents(amount);
   const valid = cents !== null && accountId !== null;
@@ -100,12 +92,8 @@ export function AporteModal({
   };
 
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-50 grid place-items-center bg-[color-mix(in_srgb,black_55%,transparent)] p-4"
-    >
-      <GlassPanel className="w-full max-w-md">
-        <div onClick={(e) => e.stopPropagation()} className="p-5">
+    <Modal onClose={onClose}>
+      <div className="p-5">
           <header className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-0.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-base)] p-0.5">
               <ModeButton active={!isResgate} onClick={() => setIsResgate(false)} icon={Plus}>
@@ -170,9 +158,8 @@ export function AporteModal({
               </Button>
             </div>
           </div>
-        </div>
-      </GlassPanel>
-    </div>
+      </div>
+    </Modal>
   );
 }
 

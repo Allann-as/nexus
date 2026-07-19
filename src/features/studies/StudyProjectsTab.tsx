@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderKanban, Plus, X } from "lucide-react";
 
-import { GlassPanel } from "../../design-system/cards";
+import { Modal } from "../../design-system/Modal";
 import { Button, EmptyState } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
 import { createNode, listNodes } from "../../lib/ipc";
@@ -125,15 +125,7 @@ function NewProjectModal({
 
   useEffect(() => {
     input.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, []);
 
   const submit = async () => {
     if (!title.trim() || saving) return;
@@ -150,12 +142,8 @@ function NewProjectModal({
   };
 
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-50 grid place-items-center bg-[color-mix(in_srgb,black_55%,transparent)] p-4"
-    >
-      <GlassPanel className="w-full max-w-md">
-        <div onClick={(e) => e.stopPropagation()} className="p-5">
+    <Modal onClose={onClose}>
+      <div className="p-5">
           <header className="mb-4 flex items-center justify-between">
             <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">
               Novo projeto · {label}
@@ -183,8 +171,7 @@ function NewProjectModal({
               </Button>
             </div>
           </div>
-        </div>
-      </GlassPanel>
-    </div>
+      </div>
+    </Modal>
   );
 }

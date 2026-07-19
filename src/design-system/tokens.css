@@ -60,13 +60,13 @@
 
   /* Opacidades das camadas de fundo (ver .nx-page). Ficam aqui e
      não hardcoded porque o tema claro precisa de outras. */
-  --dot-alpha: 0.035;
-  --aurora-alpha: 0.13;
+  --dot-alpha: 0.04;
+  --aurora-alpha: 0.16;
   /* A geometria do astrolábio de fundo (ver .nx-page::before/::after). Tingida
      pela Esfera ativa; baixa o bastante para não competir com o texto, alta o
      bastante para aparecer num screenshot a 100%. Subida no REFINO R3 (era 0.07):
      a composição mais rica pede um pouco mais de presença. */
-  --astro-alpha: 0.09;
+  --astro-alpha: 0.12;
   /* O grão da camada de viewport (ver .nx-viewport-fx). Alto o
      bastante para dar casca ao fundo, baixo o bastante para sumir
      sobre o texto. */
@@ -111,12 +111,12 @@
   --shadow-float: 0 16px 48px rgb(15 23 42 / 0.14);
   --glow-accent: 0 0 0 1px rgb(79 70 229 / 0.18), 0 8px 28px rgb(79 70 229 / 0.1);
 
-  --dot-alpha: 0.05;
-  --aurora-alpha: 0.07;
+  --dot-alpha: 0.055;
+  --aurora-alpha: 0.09;
   --grain-alpha: 0.04;
   /* Sobre branco a mesma geometria precisa de menos alfa — a linha fina escura
-     já contrasta muito mais do que sobre o navy. Subida no REFINO R3 (era 0.05). */
-  --astro-alpha: 0.065;
+     já contrasta muito mais do que sobre o navy. Subida no B4 (era 0.065). */
+  --astro-alpha: 0.085;
 
   color-scheme: light;
 }
@@ -386,4 +386,15 @@
    Uma preferência real e persistida — não um botão morto. */
 :root[data-density="compact"] {
   --row-data: 26px;
+}
+
+/* --- A6: higiene de segundo plano ------------------------------
+   Com a janela MINIMIZADA o navegador já pausa tudo (document.hidden). Mas no
+   desktop a janela pode seguir VISÍVEL e sem foco — atrás do trabalho pesado —, e
+   aí o compositor continua girando o astrolábio e correndo as listras à toa. Um
+   listener em App põe `data-window-idle` quando a janela perde o foco/some, e só
+   as animações EM LOOP marcadas `nx-loop` congelam. As transições de gesto e as
+   entradas one-shot ficam de fora — nada trava invisível. */
+:root[data-window-idle="true"] .nx-loop {
+  animation-play-state: paused !important;
 }

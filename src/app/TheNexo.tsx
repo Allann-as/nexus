@@ -324,10 +324,15 @@ function RadialMap({
   onHub: () => void;
 }) {
   const W = 760;
-  const H = 320;
+  // H/cy0/R dão HEADROOM ao anel do topo: a Esfera de i=0 fica em (cx0, cy0−R), e
+  // como cada Esfera é uma coluna [anel → rótulo] centrada nesse ponto, o TOPO do
+  // anel cai em ~(cy0−R−26). Antes (cy0=150, R=112) isso dava y≈12 e o anel cortava
+  // na borda superior do overlay (A3). Descido e com o raio de leve encolhido, o
+  // anel do topo ganha folga sem tocar a base — tudo continua dentro do overflow.
+  const H = 340;
   const cx0 = W / 2;
-  const cy0 = 150;
-  const R = 112;
+  const cy0 = 166;
+  const R = 108;
   const n = spheres.length;
 
   // Posição de cada Esfera no círculo: começa no topo (−90°) e distribui igual.
