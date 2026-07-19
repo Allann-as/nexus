@@ -11,8 +11,9 @@ use std::sync::Arc;
 use serde::Serialize;
 
 use crate::application::ports::{
-    Clock, GamificationRepository, HabitRepository, LedgerRepository, XpPoints,
+    Clock, GamificationRepository, HabitRepository, InsightRepository, LedgerRepository, XpPoints,
 };
+use crate::application::use_cases::perfect_weeks;
 use crate::domain::achievements::{self, Achievement, AchievementStats, Tier};
 use crate::domain::errors::Result;
 use crate::domain::ledger::{EventType, LedgerEntityKind, NewLedgerEvent};
@@ -24,6 +25,8 @@ pub struct GamificationService {
     pub gami: Arc<dyn GamificationRepository>,
     pub habits: Arc<dyn HabitRepository>,
     pub ledger: Arc<dyn LedgerRepository>,
+    /// As séries de hábito ativas — a matéria das semanas perfeitas (ARSENAL).
+    pub insights: Arc<dyn InsightRepository>,
     pub clock: Arc<dyn Clock>,
 }
 
@@ -283,7 +286,17 @@ impl GamificationService {
             contribution_month_streak: self.contribution_month_streak()?,
             challenges_completed: counts.challenges_completed.max(0) as u32,
             annual_goals_completed: counts.annual_goals_completed.max(0) as u32,
+            perfect_weeks: self.perfect_weeks()?,
         })
+    }
+
+    /// O total de semanas perfeitas — DERIVADO das séries, como o streak.
+    fn perfect_weeks(&self) -> Result<u32> {
+        let today = parse_day(&self.clock.today_local())?;
+        Ok(perfect_weeks::total_from_series(
+            self.insights.active_habit_series()?,
+            today,
+        ))
     }
 
     /// O maior recorde de streak entre os hábitos ativos — reusa `domain::streak`,

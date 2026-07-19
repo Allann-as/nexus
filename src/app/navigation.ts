@@ -18,6 +18,7 @@
 
 import {
   CalendarCheck,
+  CalendarHeart,
   CalendarRange,
   Calendar,
   FileText,
@@ -84,6 +85,9 @@ export const SECONDARY_ROUTES: NavItem[] = [
   { path: "/habits", label: "Hábitos", icon: Repeat, jumpKey: "b" },
   { path: "/goals", label: "Metas", icon: Target, jumpKey: "m" },
   { path: "/projects", label: "Projetos", icon: FolderKanban, jumpKey: "p" },
+  // As telas de análise do ARSENAL: alcançáveis por G+<tecla> e pela paleta, mas
+  // descobertas mesmo é pelo NEXO (não lotam a rail).
+  { path: "/perfect-weeks", label: "Semana Perfeita", icon: CalendarHeart, jumpKey: "w" },
 ];
 
 /** Tudo que o chord `G+<tecla>` alcança. */

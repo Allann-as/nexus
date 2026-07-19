@@ -35,6 +35,8 @@ pub enum Metric {
     ChallengesCompleted,
     /// Metas anuais concluídas.
     AnnualGoalsCompleted,
+    /// Semanas perfeitas (100% do agendado cumprido) em toda a história.
+    PerfectWeeks,
 }
 
 /// Os contadores do usuário — a entrada do crivo. Tudo vem de query; nada é
@@ -49,6 +51,7 @@ pub struct AchievementStats {
     pub contribution_month_streak: u32,
     pub challenges_completed: u32,
     pub annual_goals_completed: u32,
+    pub perfect_weeks: u32,
 }
 
 impl AchievementStats {
@@ -62,6 +65,7 @@ impl AchievementStats {
             Metric::ContributionMonthStreak => self.contribution_month_streak,
             Metric::ChallengesCompleted => self.challenges_completed,
             Metric::AnnualGoalsCompleted => self.annual_goals_completed,
+            Metric::PerfectWeeks => self.perfect_weeks,
         }
     }
 }
@@ -279,6 +283,34 @@ pub fn catalog() -> Vec<Achievement> {
             Gold,
             AnnualGoalsCompleted,
             1
+        ),
+        // --- Semanas perfeitas (ARSENAL) ---
+        ach!(
+            "perfect_week_4",
+            "Quatro semanas perfeitas",
+            "Quatro semanas com 100% do agendado cumprido.",
+            "calendar-heart",
+            Bronze,
+            PerfectWeeks,
+            4
+        ),
+        ach!(
+            "perfect_week_12",
+            "Doze semanas perfeitas",
+            "Doze semanas sem deixar nada agendado por fazer.",
+            "calendar-heart",
+            Silver,
+            PerfectWeeks,
+            12
+        ),
+        ach!(
+            "perfect_week_26",
+            "Meio ano impecável",
+            "Vinte e seis semanas perfeitas.",
+            "calendar-heart",
+            Gold,
+            PerfectWeeks,
+            26
         ),
     ]
 }

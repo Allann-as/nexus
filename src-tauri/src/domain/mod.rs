@@ -14,6 +14,7 @@ pub mod errors;
 pub mod financial_health;
 pub mod ledger;
 pub mod ordering;
+pub mod perfect_week;
 pub mod projection;
 pub mod recurrence;
 pub mod savings;

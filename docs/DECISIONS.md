@@ -1931,3 +1931,41 @@ que nenhuma feature pede tipo novo, e isso É o resultado, registrado para não 
 por reflexo. A feature 1 fecha a metade profunda do REFINO (ADR-0057): a constância conta sozinha,
 o heatmap pluga em qualquer contexto, e o mecanismo é o `contributes_to` que já existia — a régua
 determinística de sempre, sem uma linha de migração.
+
+## ADR-0059 — Semana perfeita: DERIVADA (não congelada), semana de segunda, sem abono
+
+**Contexto (ARSENAL, feature 2).** "Semana perfeita" = a semana em que 100% do que estava agendado
+foi cumprido. Ela precisa de um calendário anual, sequência atual e recorde, e três conquistas
+(4/12/26). Duas perguntas de projeto não têm resposta óbvia: **onde mora o fato** (congelado no
+ledger, como a Revisão Semanal e o Score, ou derivado dos ticks?) e **o que exatamente conta**.
+
+**Decisão.**
+
+1. **DERIVADA, nunca congelada.** Ao contrário da Revisão Semanal (um RITUAL que o usuário fecha) e
+   do Nexus Score (comportamental, o que você viu na época), a semana perfeita é uma **propriedade
+   dos ticks** — e ticks se corrigem (desmarcar um `done`). Um evento `perfect_week` congelado no
+   ledger viraria mentira no instante em que o usuário desfizesse um tick daquela semana. Então ela
+   é computada na leitura (`domain::perfect_week`, puro e testado), como o streak, o XP e a Saúde
+   Financeira. O total alimenta as conquistas pelo mesmo caminho derivado de sempre
+   (`AchievementStats`), e o desbloqueio — esse sim — é o evento idempotente no ledger (ADR-0038).
+
+2. **A semana é de SEGUNDA a domingo** (`week_start`, a mesma da Revisão Semanal e do streak
+   semanal), não de domingo como as colunas do heatmap. A pergunta "a semana foi perfeita?" é a
+   mesma que a Revisão faz; usar a outra borda partiria o conceito em dois.
+
+3. **Sem abono, e cada agenda no seu idioma.** Só `done` conta: `skipped` NÃO abona (pular é não
+   cumprir), `failed` e um dia agendado sem tick quebram. Um hábito **por-dia** (Daily/Weekdays)
+   exige todo dia agendado cumprido; um **por-semana** (`TimesPerWeek n`) exige `n` `done` na semana
+   — a mesma unidade do streak semanal, não "todo dia" (senão um "3x/semana" nunca faria uma semana
+   perfeita). Antes do primeiro tick o hábito **não existe** para a semana (como o dia não agendado
+   do streak), e uma semana sem hábito aplicável é **neutra** (nem perfeita, nem quebrada) — não
+   zera a sequência.
+
+4. **Só semanas ENCERRADAS entram.** A semana corrente fica de fora até terminar (`complete_weeks`)
+   — uma semana só pode ser julgada perfeita quando o domingo passa. Isso evita o "quebrou na
+   terça" que o streak resolve com carência; aqui a carência é simplesmente não julgar a semana viva.
+
+**Consequência.** O calendário anual, a sequência e o recorde saem de uma função pura (11 testes de
+domínio), sem tabela nem migração — coerente com o ARSENAL pagar zero recriações (ADR-0058).
+Arquivar um hábito recomputa o passado (as séries são só as ativas, como o streak): limite honesto,
+o mesmo dos outros derivados, aceito para a v1.

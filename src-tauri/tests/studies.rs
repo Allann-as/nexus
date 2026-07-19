@@ -16,8 +16,8 @@ use nexus_lib::infrastructure::paths::Paths;
 use nexus_lib::infrastructure::repositories::{
     area_repo::SqliteAreaRepository, book_repo::SqliteBookRepository,
     gamification_repo::SqliteGamificationRepository, habit_repo::SqliteHabitRepository,
-    ledger_repo::SqliteLedgerRepository, study_session_repo::SqliteStudySessionRepository,
-    subject_repo::SqliteSubjectRepository,
+    insight_repo::SqliteInsightRepository, ledger_repo::SqliteLedgerRepository,
+    study_session_repo::SqliteStudySessionRepository, subject_repo::SqliteSubjectRepository,
 };
 
 struct Studies {
@@ -56,6 +56,7 @@ fn setup() -> Studies {
             gami: Arc::new(SqliteGamificationRepository::new(db.clone())),
             habits: habit_repo,
             ledger,
+            insights: Arc::new(SqliteInsightRepository::new(db.clone())),
             clock,
         },
         _dir: dir,

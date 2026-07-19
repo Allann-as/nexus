@@ -25,6 +25,7 @@ use crate::application::use_cases::{
     links::LinkService,
     nodes::NodeService,
     notes::NoteService,
+    perfect_weeks::PerfectWeekService,
     score_history::ScoreHistoryService,
     spheres::SphereService,
     studies::StudyService,
@@ -77,6 +78,7 @@ pub struct AppState {
     pub insights: Arc<InsightService>,
     pub insights_worker: InsightWorker,
     pub gamification: GamificationService,
+    pub perfect_weeks: PerfectWeekService,
     pub challenges: ChallengeService,
     pub annual_goals: AnnualGoalService,
     pub score_history: ScoreHistoryService,
@@ -238,6 +240,14 @@ impl AppState {
             gami: Arc::new(SqliteGamificationRepository::new(db.clone())),
             habits: habit_repo.clone(),
             ledger: ledger.clone(),
+            insights: Arc::new(SqliteInsightRepository::new(db.clone())),
+            clock: clock.clone(),
+        };
+
+        // Semana perfeita (ARSENAL): o calendário e a sequência, DERIVADOS das
+        // séries de hábito — nada gravado.
+        let perfect_weeks = PerfectWeekService {
+            insights: Arc::new(SqliteInsightRepository::new(db.clone())),
             clock: clock.clone(),
         };
 
@@ -314,6 +324,7 @@ impl AppState {
             insights,
             insights_worker,
             gamification,
+            perfect_weeks,
             challenges,
             annual_goals,
             score_history,

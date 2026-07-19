@@ -412,6 +412,32 @@ export const habitHeatmap = (id: string, days = 365) =>
 export const habitYearHeatmap = (id: string, year: number) =>
   call<HeatmapCell[]>("habit_year_heatmap", { id, year });
 
+// --- Semana perfeita (ARSENAL) ---
+
+export type PerfectWeekStatus = "empty" | "perfect" | "broken";
+
+export interface PerfectWeekCell {
+  weekStart: string;
+  status: PerfectWeekStatus;
+}
+
+export interface PerfectStreak {
+  current: number;
+  record: number;
+  total: number;
+}
+
+export interface PerfectWeekView {
+  year: number;
+  weeks: PerfectWeekCell[];
+  streak: PerfectStreak;
+  totalYear: number;
+}
+
+/** O calendário anual das semanas perfeitas + a sequência (atual/recorde/total). */
+export const perfectWeekView = (year: number) =>
+  call<PerfectWeekView>("perfect_week_view", { year });
+
 export const habitWeekdayStats = (id: string, days = 180) =>
   call<WeekdayStat[]>("habit_weekday_stats", { id, days });
 

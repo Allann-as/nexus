@@ -68,6 +68,7 @@ fn setup() -> Life {
             gami: Arc::new(SqliteGamificationRepository::new(db.clone())),
             habits: habit_repo,
             ledger,
+            insights: Arc::new(SqliteInsightRepository::new(db.clone())),
             clock: clock.clone(),
         },
         annual: AnnualGoalService {

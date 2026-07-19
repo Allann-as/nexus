@@ -103,6 +103,7 @@ pub fn run() {
             commands::habits::habits_today,
             commands::habits::habit_heatmap,
             commands::habits::habit_year_heatmap,
+            commands::perfect_weeks::perfect_week_view,
             commands::habits::habit_weekday_stats,
             commands::habits::set_habit_schedule,
             commands::tasks::create_task,
