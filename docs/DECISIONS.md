@@ -1969,3 +1969,42 @@ ledger, como a Revisão Semanal e o Score, ou derivado dos ticks?) e **o que exa
 domínio), sem tabela nem migração — coerente com o ARSENAL pagar zero recriações (ADR-0058).
 Arquivar um hábito recomputa o passado (as séries são só as ativas, como o streak): limite honesto,
 o mesmo dos outros derivados, aceito para a v1.
+
+## ADR-0060 — Recordes: VALOR derivado, MOMENTO congelado; e o primeiro é marco silencioso
+
+**Contexto (ARSENAL, feature 3).** Recordes pessoais (maior sequência, melhor semana de estudo,
+melhor mês de aportes, melhor score semanal, mais dias de foco num mês). O mandato pede: "quebrar
+recorde = evento no ledger + Timeline + reconhecimento na UI mostrando o recorde anterior." Ao
+contrário da semana perfeita (ADR-0059), aqui o mandato **exige** um fato no ledger. Duas questões:
+o valor do recorde é derivado ou gravado? E como não poluir a Timeline no primeiro cálculo sobre um
+histórico inteiro?
+
+**Decisão.**
+
+1. **VALOR derivado, MOMENTO congelado.** O valor do recorde é sempre o MÁXIMO histórico computado
+   do estado (SQL de agregação + `domain::streak` + os scores do ledger) — nunca uma coluna. Mas o
+   INSTANTE em que a régua sobe é um fato da vida, e esse é congelado: `record_broken`
+   (`entity_kind='personal_record'`, `entity_id`=a chave do recorde), com o valor novo e o anterior
+   no payload. A última linha de cada chave é o recorde vigente. Isso reconcilia as duas naturezas:
+   o placar é sempre verdade viva (recomputa se um tick some), e a Timeline guarda a quebra no dia
+   em que aconteceu. É o mesmo casamento do XP (derivado) com a conquista (evento) do ADR-0037/0038.
+
+2. **`sync_and_list` é leitura-e-escrita, idempotente.** Como `sync_achievements` e o `freeze` do
+   score: computa os máximos, compara com o último gravado por chave, apenda só o que superou.
+   Rodar de novo sem novidade não grava nada — a comparação `atual > gravado` é a idempotência.
+
+3. **O primeiro recorde de cada tipo é um MARCO SILENCIOSO.** Ao rodar pela primeira vez sobre um
+   histórico já cheio, cada recorde "cai" hoje — mas ele não foi batido hoje, só reconhecido. Então
+   o primeiro de cada chave é gravado (o baseline, para a comparação futura ter contra o que medir)
+   **sem** `isNew` — a UI não comemora, e o evento leva o `day` do PERÍODO recordista (a semana/mês
+   que o alcançou), não "hoje", para a Timeline o desenhar no tempo certo. Só uma superação de um
+   recorde que JÁ existia comemora (`isNew=true`, com o valor anterior à mostra). Testado.
+
+4. **A Timeline mostra o período, não o número cru.** O payload carrega valor e anterior, mas sem o
+   FORMATO (dinheiro? horas?), que é da tela. Então a linha da Timeline diz o rótulo + o período
+   ("Melhor semana de estudo — semana de 06/07"); o número formatado vive na tela de Recordes.
+
+**Consequência.** Cinco recordes reais, auto-detectados, com o reconhecimento honesto do mandato,
+sem tabela nova (o ledger já admite fatos sem node desde o ADR-0027; `event_type`/`entity_kind` são
+`TEXT` sem CHECK, então as variantes novas são enum Rust — ADR-0058). O limite: recordes cujo valor
+depende de hábitos ativos recomputam se um hábito é arquivado — o mesmo limite derivado de sempre.

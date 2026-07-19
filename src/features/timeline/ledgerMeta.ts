@@ -23,6 +23,7 @@ import {
   CircleSlash,
   Coins,
   FolderInput,
+  Medal,
   PencilLine,
   PiggyBank,
   Plus,
@@ -62,6 +63,7 @@ export const KIND_LABEL: Record<string, string> = {
   book: "Livro",
   contribution: "Aporte",
   career_milestone: "Marco",
+  personal_record: "Recorde",
 };
 
 const ASSET_CLASS_LABEL: Record<string, string> = {
@@ -93,6 +95,7 @@ const EVENT_META: Record<string, LedgerMeta> = {
     tint: "var(--success)",
     label: "Revisão",
   },
+  record_broken: { icon: Medal, tint: "var(--warning)", label: "Recorde" },
 };
 
 /** Parser defensivo: um payload ilegível nunca derruba uma linha do feed. */
@@ -198,6 +201,12 @@ export function detail(entry: LedgerEntry): string | null {
   if (entry.eventType === "goal_checkpoint") {
     const value = asNumber(p.value);
     if (value != null) return `mediu ${value}`;
+  }
+
+  // O recorde traz o período que o alcançou ("semana de 06/07"); o número
+  // formatado (dinheiro, horas) vive na tela de Recordes, não aqui.
+  if (entry.entityKind === "personal_record") {
+    return asString(p.context);
   }
 
   return asString(p.note);

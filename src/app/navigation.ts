@@ -26,6 +26,7 @@ import {
   History,
   Inbox,
   LayoutGrid,
+  Medal,
   Repeat,
   Sparkles,
   Target,
@@ -88,6 +89,7 @@ export const SECONDARY_ROUTES: NavItem[] = [
   // As telas de análise do ARSENAL: alcançáveis por G+<tecla> e pela paleta, mas
   // descobertas mesmo é pelo NEXO (não lotam a rail).
   { path: "/perfect-weeks", label: "Semana Perfeita", icon: CalendarHeart, jumpKey: "w" },
+  { path: "/records", label: "Recordes", icon: Medal, jumpKey: "k" },
 ];
 
 /** Tudo que o chord `G+<tecla>` alcança. */

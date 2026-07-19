@@ -17,6 +17,7 @@ import { GamificationScreen } from "../features/gamification/GamificationScreen"
 import { AnnualGoalsScreen } from "../features/annual-goals/AnnualGoalsScreen";
 import { ObjectivesScreen } from "../features/objectives/ObjectivesScreen";
 import { PerfectWeeksScreen } from "../features/perfect-weeks/PerfectWeeksScreen";
+import { RecordsScreen } from "../features/records/RecordsScreen";
 import { NotesScreen } from "../features/notes/NotesScreen";
 import { TimelineScreen } from "../features/timeline/TimelineScreen";
 import { FocusScreen } from "../features/focus/FocusScreen";
@@ -74,6 +75,7 @@ const router = createHashRouter([
       { path: "annual-goals", element: <AnnualGoalsScreen /> },
       { path: "objectives", element: <ObjectivesScreen /> },
       { path: "perfect-weeks", element: <PerfectWeeksScreen /> },
+      { path: "records", element: <RecordsScreen /> },
       { path: "settings", element: <SettingsScreen /> },
     ],
   },

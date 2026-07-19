@@ -1690,3 +1690,25 @@ pub trait GamificationRepository: Send + Sync {
     /// "meses seguidos investindo".
     fn contribution_months(&self) -> Result<Vec<String>>;
 }
+
+/// Um recorde bruto lido do estado: o valor e um dia representativo do período
+/// que o alcançou (a semana/mês recordista). O serviço formata o rótulo.
+#[derive(Debug, Clone)]
+pub struct BestHit {
+    pub value: f64,
+    pub sample_day: String,
+}
+
+/// As leituras dos recordes pessoais (ARSENAL) — máximos históricos por período,
+/// do pool `query_only`. Nada é gravado aqui; o serviço decide o que virou fato
+/// no ledger. Ver ADR-0060.
+pub trait RecordsRepository: Send + Sync {
+    /// A melhor semana de estudo (soma de minutos numa semana-calendário).
+    fn best_study_week_minutes(&self) -> Result<Option<BestHit>>;
+
+    /// O melhor mês de aportes (maior soma líquida positiva de `amount_cents`).
+    fn best_contribution_month_cents(&self) -> Result<Option<BestHit>>;
+
+    /// O melhor mês de foco (mais DIAS distintos com um bloco concluído).
+    fn best_focus_days_month(&self) -> Result<Option<BestHit>>;
+}

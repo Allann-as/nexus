@@ -22,6 +22,7 @@ pub mod links;
 pub mod nodes;
 pub mod notes;
 pub mod perfect_weeks;
+pub mod records;
 pub mod score;
 pub mod search;
 pub mod security;

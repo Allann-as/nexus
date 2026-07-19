@@ -438,6 +438,24 @@ export interface PerfectWeekView {
 export const perfectWeekView = (year: number) =>
   call<PerfectWeekView>("perfect_week_view", { year });
 
+// --- Recordes pessoais (ARSENAL) ---
+
+export type RecordFormat = "int" | "days" | "hours" | "money";
+
+export interface PersonalRecord {
+  key: string;
+  label: string;
+  value: number;
+  format: RecordFormat;
+  context: string | null;
+  previous: number | null;
+  isNew: boolean;
+  setOn: string | null;
+}
+
+/** Sincroniza (apenda no ledger o que subiu) e devolve os recordes pessoais. */
+export const personalRecords = () => call<PersonalRecord[]>("personal_records");
+
 export const habitWeekdayStats = (id: string, days = 180) =>
   call<WeekdayStat[]>("habit_weekday_stats", { id, days });
 

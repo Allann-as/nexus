@@ -47,6 +47,11 @@ pub enum EventType {
     /// `focus_sessions` (um LOG, não um node — como a sessão de estudo). Só um
     /// bloco COMPLETO vira este fato — abandonar o timer não loga nada. Vale XP.
     FocusSessionLogged,
+    /// Um recorde pessoal batido (ARSENAL). `entity_id` é a CHAVE do recorde
+    /// (`habit_streak`, `study_week`, …); o payload traz o novo valor e o
+    /// anterior. A série destes eventos por chave É a história daquele recorde.
+    /// Ver ADR-0060.
+    RecordBroken,
 }
 
 impl EventType {
@@ -72,6 +77,7 @@ impl EventType {
             EventType::SkillLevelUp => "skill_level_up",
             EventType::StudySessionLogged => "study_session_logged",
             EventType::FocusSessionLogged => "focus_session_logged",
+            EventType::RecordBroken => "record_broken",
         }
     }
 }
@@ -113,6 +119,9 @@ pub enum LedgerEntityKind {
     /// `focus_sessions`, não em `nodes` (como a sessão de estudo). O `entity_id` é
     /// o id da linha de foco. Ver o ADR do Modo Foco.
     FocusSession,
+    /// Um recorde pessoal (ARSENAL). Um fato sem node: o `entity_id` é a chave do
+    /// recorde, e a última linha daquela chave é o recorde vigente. Ver ADR-0060.
+    PersonalRecord,
     /// Uma Revisão Semanal concluída (M5) — um RITUAL, não um node. O `entity_id`
     /// é a segunda-feira daquela semana ('YYYY-MM-DD'): um review por semana, e é
     /// por ele que se sabe que a semana já foi revisada (idempotência). O evento só
@@ -131,6 +140,7 @@ impl LedgerEntityKind {
             LedgerEntityKind::StudySession => "study_session",
             LedgerEntityKind::FocusSession => "focus_session",
             LedgerEntityKind::WeeklyReview => "weekly_review",
+            LedgerEntityKind::PersonalRecord => "personal_record",
         }
     }
 }

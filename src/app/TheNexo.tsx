@@ -30,6 +30,7 @@ import {
   CalendarCheck,
   CalendarHeart,
   CalendarRange,
+  Medal,
   FileText,
   History,
   Inbox,
@@ -135,6 +136,7 @@ export function TheNexo({ open, onClose }: { open: boolean; onClose: () => void 
           { id: "/game", label: "Conquistas", icon: Trophy, path: "/game", jumpKey: "q" },
           { id: "/annual-goals", label: "Metas Anuais", icon: CalendarRange, path: "/annual-goals", jumpKey: "a" },
           { id: "/perfect-weeks", label: "Semana Perfeita", icon: CalendarHeart, path: "/perfect-weeks", jumpKey: "w" },
+          { id: "/records", label: "Recordes", icon: Medal, path: "/records", jumpKey: "k" },
           {
             id: "/review",
             label: "Revisão Semanal",

@@ -16,6 +16,7 @@ pub mod ledger_repo;
 pub mod link_repo;
 pub mod node_repo;
 pub mod note_repo;
+pub mod records_repo;
 pub mod skill_repo;
 pub mod sphere_repo;
 pub mod study_session_repo;

@@ -26,6 +26,7 @@ use crate::application::use_cases::{
     nodes::NodeService,
     notes::NoteService,
     perfect_weeks::PerfectWeekService,
+    records::RecordsService,
     score_history::ScoreHistoryService,
     spheres::SphereService,
     studies::StudyService,
@@ -49,9 +50,10 @@ use crate::infrastructure::repositories::{
     habit_repo::SqliteHabitRepository, insight_repo::SqliteInsightRepository,
     ledger_repo::SqliteLedgerRepository, link_repo::SqliteLinkRepository,
     node_repo::SqliteNodeRepository, note_repo::SqliteNoteRepository,
-    skill_repo::SqliteSkillRepository, sphere_repo::SqliteSphereRepository,
-    study_session_repo::SqliteStudySessionRepository, subject_repo::SqliteSubjectRepository,
-    task_repo::SqliteTaskRepository, timeline_repo::SqliteTimelineRepository,
+    records_repo::SqliteRecordsRepository, skill_repo::SqliteSkillRepository,
+    sphere_repo::SqliteSphereRepository, study_session_repo::SqliteStudySessionRepository,
+    subject_repo::SqliteSubjectRepository, task_repo::SqliteTaskRepository,
+    timeline_repo::SqliteTimelineRepository,
 };
 use crate::infrastructure::security::SecurityService;
 
@@ -79,6 +81,7 @@ pub struct AppState {
     pub insights_worker: InsightWorker,
     pub gamification: GamificationService,
     pub perfect_weeks: PerfectWeekService,
+    pub records: RecordsService,
     pub challenges: ChallengeService,
     pub annual_goals: AnnualGoalService,
     pub score_history: ScoreHistoryService,
@@ -251,6 +254,15 @@ impl AppState {
             clock: clock.clone(),
         };
 
+        // Recordes pessoais (ARSENAL): máximos DERIVADOS do estado, e o momento em
+        // que a régua sobe congelado no ledger (ADR-0060).
+        let records = RecordsService {
+            records: Arc::new(SqliteRecordsRepository::new(db.clone())),
+            habits: habit_repo.clone(),
+            ledger: ledger.clone(),
+            clock: clock.clone(),
+        };
+
         // As temporadas/desafios (§2.2): nodes 'challenge' com placar computado.
         let challenges = ChallengeService {
             challenges: Arc::new(SqliteChallengeRepository::new(db.clone())),
@@ -325,6 +337,7 @@ impl AppState {
             insights_worker,
             gamification,
             perfect_weeks,
+            records,
             challenges,
             annual_goals,
             score_history,
