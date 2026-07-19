@@ -2129,3 +2129,40 @@ ARQUIVO — e a pergunta de retenção.
 migração — dentro do ARSENAL de zero recriações (ADR-0058). O único artefato de disco novo é o
 diretório `retrospectives/`, irmão de `backups/` e `exports/`, com a mesma promessa: regenerável,
 podável, e nunca a fonte da verdade.
+
+## ADR-0065 — A bandeja: o mini-painel É o Hub (uma webview só), e o atalho global mora no Rust
+
+**Contexto (ARSENAL, feature 8).** NEXUS na bandeja: tray do Windows, `Ctrl+Shift+N` global (Captura
+Rápida com o app em segundo plano), clique no ícone abrindo um "mini-painel com hábitos de hoje +
+score", e fechar-a-janela minimizando para a bandeja (desativável). Três decisões de peso.
+
+**Decisão.**
+
+1. **O mini-painel É o Hub — uma webview só.** A tentação era uma SEGUNDA janela flutuante pequena.
+   Recusada: uma segunda `WebviewWindow` sobe um SEGUNDO WebView2, e a constituição orça RSS < 300 MB
+   (§5) — dobrar o runtime web por um painel de dois dados é caro. E o Hub JÁ é esse painel: a faixa
+   "Hoje" tem os hábitos marcáveis, o topo tem o gauge do score. Então o clique-esquerdo na bandeja
+   **traz o Hub à frente** (mostra + desminimiza + foca + navega para `/`), e o menu do botão direito
+   dá "Abrir", "Captura rápida" e "Sair". Fiel ao pedido, sem um segundo processo web. Um painel
+   flutuante dedicado fica para a v1.1 se o custo de RAM deixar de importar.
+
+2. **O atalho global mora no RUST, não na webview.** `Ctrl+Shift+N` (o M0 já tinha o mesmo atalho,
+   mas SÓ com o app focado, via `useKeyboard`) agora é GLOBAL: o `tauri-plugin-global-shortcut` é
+   registrado e tratado no `setup`/handler do Rust. A webview **não** ganha permissão do plugin — a
+   `capability` segue `core:default` e nada mais (ADR mantém a allowlist mínima). O Rust, ao disparar,
+   `emit`e um evento (`nexus://quick-capture`) que o `Shell` escuta e abre a Captura. O mesmo canal
+   leva o clique da bandeja ao Hub (`nexus://go-hub`). A regra da constituição ("zero rede, allowlist
+   mínima") não é ferida: o plugin fala com o SO, não com a internet, e a webview não o alcança.
+
+3. **Fechar-para-a-bandeja é uma preferência FORA do banco.** O handler `CloseRequested` roda no loop
+   de eventos do Tauri e precisa da preferência sem tocar o banco — então ela vive num `settings.json`
+   na raiz de dados (`SettingsStore`, o molde do `security.json`/config de backup, ADR-0050/0054),
+   com um cache em memória (`RwLock`) para o handler não ler disco a cada fechamento. Ligado de
+   fábrica; um toggle em Configurações desliga. Quando ligado, fechar `hide()`a a janela e
+   `prevent_close()`; a bandeja mantém o processo vivo, e "Sair" no menu é a saída real.
+
+**Consequência.** A bandeja, o atalho global e o fechar-para-a-bandeja entram sem um segundo
+WebView2, sem alargar a allowlist da webview, e sem tabela nova — só um `settings.json` fora do
+banco. O `Ctrl+Shift+N` do M0 ganha alcance global reusando o mesmo gesto. Verificação: o binário
+COMPILA e empacota; o comportamento de bandeja em si (clicar, minimizar) é validado na máquina do
+usuário no M6, como toda a UI (a automação de SO do ADR-0012 não observa a bandeja).

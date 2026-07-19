@@ -67,8 +67,50 @@ pub fn run() {
         }
     };
 
+    use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
+
+    // Ctrl+Shift+N GLOBAL: a Captura Rápida com o app em segundo plano (ARSENAL).
+    let quick_capture_shortcut =
+        Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyN);
+
     tauri::Builder::default()
         .manage(state)
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(move |app, shortcut, event| {
+                    // Só no PRESS, e só o nosso atalho — o handler é global.
+                    if shortcut == &quick_capture_shortcut
+                        && event.state() == ShortcutState::Pressed
+                    {
+                        show_and_capture(app);
+                    }
+                })
+                .build(),
+        )
+        .setup(move |app| {
+            build_tray(app.handle())?;
+            // Registra o atalho global só depois que o app está de pé.
+            use tauri_plugin_global_shortcut::GlobalShortcutExt;
+            if let Err(e) = app.global_shortcut().register(quick_capture_shortcut) {
+                tracing::warn!(error = %e, "não foi possível registrar Ctrl+Shift+N global");
+            }
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Fechar a janela minimiza para a bandeja (desativável nas Configurações).
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                use tauri::Manager;
+                let app = window.app_handle();
+                let close_to_tray = app
+                    .try_state::<AppState>()
+                    .map(|s| s.settings.close_to_tray())
+                    .unwrap_or(false);
+                if close_to_tray {
+                    let _ = window.hide();
+                    api.prevent_close();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::system::system_info,
             commands::system::quick_check,
@@ -229,6 +271,8 @@ pub fn run() {
             commands::security::verify_pin,
             commands::security::set_pin,
             commands::security::disable_pin,
+            commands::settings::app_settings,
+            commands::settings::set_close_to_tray,
         ])
         .build(tauri::generate_context!())
         .expect("não foi possível construir a janela do NEXUS")
@@ -245,4 +289,73 @@ pub fn run() {
                 tracing::info!("NEXUS encerrado");
             }
         });
+}
+
+/// Constrói o ícone da bandeja e seu menu (ARSENAL — ADR-0065). O clique com o
+/// botão esquerdo traz o Hub à frente (o "mini-painel": hábitos de hoje +
+/// score); o menu do botão direito abre, captura ou sai.
+fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    use tauri::menu::{MenuBuilder, MenuItemBuilder};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+    let open = MenuItemBuilder::with_id("open", "Abrir NEXUS").build(app)?;
+    let capture = MenuItemBuilder::with_id("capture", "Captura rápida").build(app)?;
+    let quit = MenuItemBuilder::with_id("quit", "Sair").build(app)?;
+    let menu = MenuBuilder::new(app)
+        .items(&[&open, &capture])
+        .separator()
+        .item(&quit)
+        .build()?;
+
+    let mut builder = TrayIconBuilder::with_id("nexus-tray")
+        .tooltip("NEXUS")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "open" => show_main(app),
+            "capture" => show_and_capture(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_hub(tray.app_handle());
+            }
+        });
+
+    // O ícone da bandeja é o da janela — o astrolábio do NEXUS, embarcado.
+    if let Some(icon) = app.default_window_icon().cloned() {
+        builder = builder.icon(icon);
+    }
+    builder.build(app)?;
+    Ok(())
+}
+
+/// Traz a janela principal para a frente (mostra, desminimiza, foca).
+fn show_main(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
+/// Mostra a janela e pede à UI para abrir a Captura Rápida.
+fn show_and_capture(app: &tauri::AppHandle) {
+    use tauri::Emitter;
+    show_main(app);
+    let _ = app.emit("nexus://quick-capture", ());
+}
+
+/// Mostra a janela e leva ao Hub (o mini-painel: hábitos de hoje + score).
+fn show_hub(app: &tauri::AppHandle) {
+    use tauri::Emitter;
+    show_main(app);
+    let _ = app.emit("nexus://go-hub", ());
 }

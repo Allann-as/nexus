@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Outlet } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Outlet, useNavigate } from "react-router-dom";
+import { listen } from "@tauri-apps/api/event";
 
 import { TheNexo } from "./TheNexo";
 import { Topbar } from "./Topbar";
@@ -15,9 +16,27 @@ export function Shell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
+  const navigate = useNavigate();
 
   // Congela o Score e sincroniza conquistas/temporadas na abertura (ADR-0038/0039).
   useBootTasks();
+
+  // A bandeja e o atalho global (ARSENAL): o Rust emite; a UI reage. Captura
+  // rápida de qualquer lugar (mesmo com o app oculto) e o clique na bandeja leva
+  // ao Hub — o mini-painel com os hábitos de hoje e o score.
+  useEffect(() => {
+    const subs = [
+      listen("nexus://quick-capture", () => {
+        setPaletteOpen(false);
+        setNavOpen(false);
+        setCaptureOpen(true);
+      }),
+      listen("nexus://go-hub", () => navigate("/")),
+    ];
+    return () => {
+      subs.forEach((p) => void p.then((un) => un()));
+    };
+  }, [navigate]);
 
   useKeyboard({
     // Os dois overlays são mutuamente exclusivos: abrir um fecha o outro.

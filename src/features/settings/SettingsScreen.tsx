@@ -40,6 +40,8 @@ import {
 } from "lucide-react";
 
 import {
+  appSettings,
+  setCloseToTray,
   backupStatus,
   createBackup,
   exportData,
@@ -177,7 +179,28 @@ function AppearanceSection() {
       >
         <Toggle on={reducedMotion} onChange={setReducedMotion} />
       </SettingCard>
+
+      <TraySetting />
     </div>
+  );
+}
+
+/** O "fechar para a bandeja" (ARSENAL) — persiste no backend, que o lê no
+ *  handler de fechamento da janela. */
+function TraySetting() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["app-settings"], queryFn: appSettings });
+  const save = useMutation({
+    mutationFn: (v: boolean) => setCloseToTray(v),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["app-settings"] }),
+  });
+  return (
+    <SettingCard
+      title="Fechar para a bandeja"
+      hint="Fechar a janela minimiza o NEXUS para a bandeja do Windows em vez de sair. Ctrl+Shift+N abre a Captura Rápida mesmo com o app em segundo plano."
+    >
+      <Toggle on={q.data?.closeToTray ?? true} onChange={(v) => save.mutate(v)} />
+    </SettingCard>
   );
 }
 

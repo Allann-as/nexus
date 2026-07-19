@@ -10,3 +10,4 @@ pub mod logging;
 pub mod paths;
 pub mod repositories;
 pub mod security;
+pub mod settings;

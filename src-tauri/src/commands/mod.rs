@@ -29,6 +29,7 @@ pub mod retrospective;
 pub mod score;
 pub mod search;
 pub mod security;
+pub mod settings;
 pub mod spheres;
 pub mod studies;
 pub mod system;

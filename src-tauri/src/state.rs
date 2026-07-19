@@ -60,6 +60,7 @@ use crate::infrastructure::repositories::{
     task_repo::SqliteTaskRepository, timeline_repo::SqliteTimelineRepository,
 };
 use crate::infrastructure::security::SecurityService;
+use crate::infrastructure::settings::SettingsStore;
 
 pub struct AppState {
     pub db: Arc<Db>,
@@ -101,6 +102,8 @@ pub struct AppState {
     pub exports: ExportEngine,
     /// A tela de bloqueio por PIN (M5.5 §3.5): privacidade de tela, não de disco.
     pub security: SecurityService,
+    /// As preferências de SO (ARSENAL): fechar para a bandeja. Fora do banco.
+    pub settings: SettingsStore,
 }
 
 impl AppState {
@@ -332,6 +335,9 @@ impl AppState {
         let security = SecurityService::new(paths.clone());
         security.ensure_seeded()?;
 
+        // As preferências de SO (ARSENAL): lidas do `settings.json`, fora do banco.
+        let settings = SettingsStore::load(&paths);
+
         // A Revisão Semanal (M5): o ritual de 6 passos. O rascunho vive em disco
         // (retomável); o evento só entra no ledger quando os 6 passos fecham.
         let weekly_review = WeeklyReviewService {
@@ -385,6 +391,7 @@ impl AppState {
             backups,
             exports,
             security,
+            settings,
             db,
             paths,
         })

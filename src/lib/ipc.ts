@@ -546,6 +546,19 @@ export const annualRetrospective = (year: number) =>
 export const exportRetrospective = (year: number) =>
   call<RetroFile>("export_retrospective", { year });
 
+// --- Preferências de SO / bandeja (ARSENAL) ---
+
+export interface AppSettings {
+  closeToTray: boolean;
+}
+
+/** As preferências de SO atuais. */
+export const appSettings = () => call<AppSettings>("app_settings");
+
+/** Liga/desliga o "fechar a janela minimiza para a bandeja". */
+export const setCloseToTray = (value: boolean) =>
+  call<AppSettings>("set_close_to_tray", { value });
+
 export const habitWeekdayStats = (id: string, days = 180) =>
   call<WeekdayStat[]>("habit_weekday_stats", { id, days });
 
