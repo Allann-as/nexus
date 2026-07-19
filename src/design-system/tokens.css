@@ -334,6 +334,23 @@
   }
 }
 
+/* O +XP que flutua ao marcar um checkpoint (C2): sobe um tico e some. Discreto —
+   a recompensa é sentir o progresso, não uma explosão. Só opacity/transform. */
+@keyframes nexus-xp-float {
+  0% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.92);
+  }
+  22% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-24px) scale(1);
+  }
+}
+
 /* O PIN errado: um tremor curto e seco, e os círculos se apagam. Só transform. */
 @keyframes nexus-shake {
   0%,

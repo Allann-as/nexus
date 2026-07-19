@@ -96,7 +96,7 @@ export function HabitsScreen() {
 
         {creating && (
           <div className="mt-6">
-            <CreateForm onDone={() => setCreating(false)} />
+            <HabitCreateForm onDone={() => setCreating(false)} />
           </div>
         )}
 
@@ -262,19 +262,35 @@ function HabitRow({
   );
 }
 
-function CreateForm({ onDone }: { onDone: () => void }) {
+/**
+ * O formulário de criação de hábito, compartilhado entre a tela global de Hábitos
+ * e o "+ Adicionar hábito" contextual dos Checkpoints de uma Esfera (C2). Quando
+ * `presetAreaId` vem, a Esfera já está escolhida — o campo Área some, porque
+ * perguntar de novo o que o contexto já respondeu é ruído.
+ */
+export function HabitCreateForm({
+  onDone,
+  presetAreaId,
+}: {
+  onDone: () => void;
+  presetAreaId?: string;
+}) {
   const qc = useQueryClient();
   const pushError = useToasts((s) => s.pushError);
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<"daily" | "weekdays" | "times_per_week">("daily");
   const [days, setDays] = useState<number[]>([1, 3, 5]);
   const [times, setTimes] = useState(3);
-  const [areaId, setAreaId] = useState<string>("");
+  const [areaId, setAreaId] = useState<string>(presetAreaId ?? "");
   const [target, setTarget] = useState("");
   const [unit, setUnit] = useState("");
   const [reminder, setReminder] = useState("");
 
-  const { data: areas = [] } = useQuery({ queryKey: ["areas"], queryFn: () => listAreas(false) });
+  const { data: areas = [] } = useQuery({
+    queryKey: ["areas"],
+    queryFn: () => listAreas(false),
+    enabled: !presetAreaId,
+  });
 
   const create = useMutation({
     mutationFn: () => {
@@ -379,21 +395,23 @@ function CreateForm({ onDone }: { onDone: () => void }) {
         </div>
       )}
 
-      <div className="mt-4 grid grid-cols-4 gap-2">
-        <Field label="Área">
-          <select
-            value={areaId}
-            onChange={(e) => setAreaId(e.target.value)}
-            className="w-full rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-2 py-1 text-[12px] text-[var(--text-primary)] outline-none"
-          >
-            <option value="">nenhuma</option>
-            {areas.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        </Field>
+      <div className={cx("mt-4 grid gap-2", presetAreaId ? "grid-cols-3" : "grid-cols-4")}>
+        {!presetAreaId && (
+          <Field label="Área">
+            <select
+              value={areaId}
+              onChange={(e) => setAreaId(e.target.value)}
+              className="w-full rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-2 py-1 text-[12px] text-[var(--text-primary)] outline-none"
+            >
+              <option value="">nenhuma</option>
+              {areas.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
         <Field label="Meta (opcional)">
           <input
             value={target}
