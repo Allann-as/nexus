@@ -334,6 +334,19 @@
   }
 }
 
+/* O anel do Modo Foco RESPIRA em idle enquanto corre (C8): uma escala lentíssima
+   e sutil, que faz o timer parecer vivo sem circo. Só transform; `.nx-loop` o
+   congela com a janela sem foco, e reduced-motion também. */
+@keyframes nexus-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.028);
+  }
+}
+
 /* O +XP que flutua ao marcar um checkpoint (C2): sobe um tico e some. Discreto —
    a recompensa é sentir o progresso, não uma explosão. Só opacity/transform. */
 @keyframes nexus-xp-float {
