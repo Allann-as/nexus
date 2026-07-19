@@ -10,13 +10,15 @@
  * Duas telas divergindo sobre o mesmo dado seria pior que uma tela a menos.
  */
 
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckSquare, Flame, FolderKanban, Repeat } from "lucide-react";
+import { CheckSquare, Flame, FolderKanban, Plus, Repeat } from "lucide-react";
 
 import type { Area, SphereCard } from "../../lib/ipc";
 import { CountUp, HeroCard, StatCard, SummaryCard, Val } from "../../design-system/cards";
 import { ProgressRing, Sparkline } from "../../design-system/charts";
 import { Button, EmptyState } from "../../design-system/primitives";
+import { HabitCreateForm } from "../habits/HabitsScreen";
 
 export function SphereDashboard({
   sphere,
@@ -26,24 +28,35 @@ export function SphereDashboard({
   card: SphereCard | undefined;
 }) {
   const navigate = useNavigate();
+  const [adding, setAdding] = useState(false);
 
   if (!card) {
     return <div className="h-[420px] animate-pulse rounded-[var(--radius-lg)] bg-[var(--bg-surface)]" />;
   }
 
+  // Uma Esfera vazia (Casa, nota 2) NÃO pode ser um deserto que chuta o usuário
+  // para a tela global de Hábitos (C7). Ela nasce digna: a criação é CONTEXTUAL
+  // aqui mesmo (a Esfera já vem escolhida), e o texto aponta as abas que já são
+  // dela — Metas, Agenda, Checklists. O primeiro hábito acende o painel inteiro.
   if (card.isEmpty) {
     return (
-      <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--border-subtle)] py-16">
-        <EmptyState
-          icon={Repeat}
-          title={`${sphere.name} está vazia`}
-          hint="Hábitos, tarefas e projetos ligados a esta Esfera aparecem aqui. Comece criando um hábito — é o que faz o card do Hub ganhar vida."
-          action={
-            <Button variant="secondary" size="sm" onClick={() => navigate("/habits")}>
-              Criar um hábito
-            </Button>
-          }
-        />
+      <div className="flex flex-col gap-4">
+        {adding ? (
+          <HabitCreateForm presetAreaId={sphere.id} onDone={() => setAdding(false)} />
+        ) : (
+          <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--border-subtle)] py-14">
+            <EmptyState
+              icon={Repeat}
+              title={`${sphere.name} começa aqui`}
+              hint="Um hábito é o primeiro batimento de uma Esfera: crie um agendado para hoje e o painel — anel do dia, streak, tendência de 30 dias — ganha vida. Metas, Agenda e Checklists também são desta Esfera, nas abas acima."
+              action={
+                <Button variant="primary" size="sm" icon={Plus} onClick={() => setAdding(true)}>
+                  Adicionar hábito
+                </Button>
+              }
+            />
+          </div>
+        )}
       </div>
     );
   }
