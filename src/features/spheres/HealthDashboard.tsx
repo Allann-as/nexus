@@ -13,7 +13,7 @@ import { Activity, CalendarClock, CheckSquare, Flame } from "lucide-react";
 import type { Area, SphereCard } from "../../lib/ipc";
 import { eventsByCategory } from "../../lib/ipc";
 import { CountUp, HeroCard, StatCard, SummaryCard, Val } from "../../design-system/cards";
-import { ProgressRing } from "../../design-system/charts";
+import { ProgressRing, Sparkline } from "../../design-system/charts";
 import { EmptyState, cx } from "../../design-system/primitives";
 import { fromDay, toDay } from "../calendar/grid";
 
@@ -77,7 +77,29 @@ export function HealthDashboard({
             </span>
           </ProgressRing>
         }
-      />
+      >
+        {/* A tendência de 30 dias como dado VIVO, não só a média num card (C6):
+            a série já vem no `card.spark` (fração de checkpoints cumpridos por dia). */}
+        {card.spark.length >= 2 && (
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-[10px] font-semibold tracking-[0.12em] text-[var(--text-tertiary)] uppercase">
+                Tendência · últimos 30 dias
+              </span>
+              <span className="tabular text-[11px] text-[var(--text-secondary)]">
+                {avg30}% de média
+              </span>
+            </div>
+            <Sparkline
+              data={card.spark}
+              color="var(--sphere)"
+              width={600}
+              height={46}
+              className="w-full"
+            />
+          </div>
+        )}
+      </HeroCard>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatCard
