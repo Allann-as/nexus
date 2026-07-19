@@ -40,6 +40,16 @@ pub struct ScorePoint {
     pub value: u8,
 }
 
+/// Uma célula do "ano em pixels": o dia, o score (0..=100 ou `None` se nada
+/// estava agendado) e se veio do congelado (canônico) ou foi computado agora.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScoreCell {
+    pub day: String,
+    pub value: Option<u8>,
+    pub frozen: bool,
+}
+
 impl ScoreHistoryService {
     /// Congela o score dos dias FECHADOS ainda não gravados. Idempotente. Devolve
     /// quantos dias congelou. A UI chama na abertura do app.
@@ -124,6 +134,89 @@ impl ScoreHistoryService {
             day += Duration::days(1);
         }
         Ok(count)
+    }
+
+    /// O ANO EM PIXELS (ARSENAL): 365 células com o score de cada dia. Prefere o
+    /// valor CONGELADO (o que o usuário viu na época — canônico); onde não há
+    /// congelado, COMPUTA o comportamental na hora (a mesma fórmula sobre entradas
+    /// imutáveis — a aproximação "agenda atual no passado" já assumida pelo
+    /// `freeze`), marcando `frozen=false`. Não grava nada — é uma visão derivada.
+    /// `None` num dia em que nada estava agendado (célula sem cor). Ver ADR-0061.
+    pub fn year_pixels(&self, year: i64) -> Result<Vec<ScoreCell>> {
+        let today = parse_day(&self.clock.today_local())?;
+        let jan1 = NaiveDate::from_ymd_opt(year as i32, 1, 1)
+            .ok_or_else(|| crate::domain::errors::NexusError::Validation(format!("ano {year}")))?;
+        let dec31 = NaiveDate::from_ymd_opt(year as i32, 12, 31).unwrap();
+        let to = dec31.min(today);
+        if jan1 > to {
+            return Ok(Vec::new()); // ano futuro: nada ainda
+        }
+        let from_s = format_day(jan1);
+        let to_s = format_day(to);
+
+        // Os scores já congelados deste ano — canônicos.
+        let year_prefix = format!("{year:04}-");
+        let frozen: HashMap<String, u8> = self
+            .ledger
+            .by_entity_kind(LedgerEntityKind::DailyScore.as_str(), 100_000)?
+            .into_iter()
+            .filter(|e| e.entity_id.starts_with(&year_prefix))
+            .filter_map(|e| {
+                let value = serde_json::from_str::<serde_json::Value>(&e.payload)
+                    .ok()?
+                    .get("value")?
+                    .as_u64()? as u8;
+                Some((e.entity_id, value))
+            })
+            .collect();
+
+        // As entradas para computar os dias ainda não congelados.
+        let habits: Vec<(Schedule, HashSet<NaiveDate>)> = self
+            .insights
+            .active_habit_series()?
+            .into_iter()
+            .map(|s| {
+                let done: HashSet<NaiveDate> = s
+                    .done_days
+                    .iter()
+                    .filter_map(|d| parse_day(d).ok())
+                    .collect();
+                (s.schedule, done)
+            })
+            .collect();
+        let planned = to_map(self.insights.scheduled_tasks_by_day(&from_s, &to_s)?);
+        let done = to_map(self.insights.completed_tasks_by_day(&from_s, &to_s)?);
+
+        let mut out = Vec::new();
+        let mut day = jan1;
+        while day <= to {
+            let day_s = format_day(day);
+            let (value, is_frozen) = if let Some(&v) = frozen.get(&day_s) {
+                (Some(v), true)
+            } else {
+                let habits_scheduled = habits
+                    .iter()
+                    .filter(|(sched, _)| sched.is_scheduled_on(day))
+                    .count() as u32;
+                let habits_done = habits
+                    .iter()
+                    .filter(|(sched, dn)| sched.is_scheduled_on(day) && dn.contains(&day))
+                    .count() as u32;
+                let tasks_planned = *planned.get(&day_s).unwrap_or(&0) as u32;
+                let tasks_done = *done.get(&day_s).unwrap_or(&0) as u32;
+                (
+                    score::behavioural(habits_scheduled, habits_done, tasks_planned, tasks_done),
+                    false,
+                )
+            };
+            out.push(ScoreCell {
+                day: day_s,
+                value,
+                frozen: is_frozen,
+            });
+            day += Duration::days(1);
+        }
+        Ok(out)
     }
 
     /// A série congelada dos últimos `days` dias, do mais antigo ao mais recente —

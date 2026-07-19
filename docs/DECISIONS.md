@@ -2008,3 +2008,33 @@ histórico inteiro?
 sem tabela nova (o ledger já admite fatos sem node desde o ADR-0027; `event_type`/`entity_kind` são
 `TEXT` sem CHECK, então as variantes novas são enum Rust — ADR-0058). O limite: recordes cujo valor
 depende de hábitos ativos recomputam se um hábito é arquivado — o mesmo limite derivado de sempre.
+
+## ADR-0061 — Ano em pixels: o congelado manda; onde falta, computa a mesma fórmula (não grava)
+
+**Contexto (ARSENAL, feature 4).** 365 células coloridas pelo Nexus Score do dia. O score diário é
+congelado no ledger (ADR-0039), mas o `freeze` só olha 60 dias para trás por passada
+(`BACKFILL_DAYS`) — então um ano inteiro raramente está todo congelado, ainda mais num primeiro
+boot ou num seed. Colorir só os dias congelados deixaria o "visual mais denso do app" cheio de
+buracos.
+
+**Decisão.** `year_pixels(year)` é uma **visão derivada, sem escrita**:
+
+1. **O congelado manda.** Onde há um `nexus_score` gravado para o dia, a célula usa esse valor — é
+   o que o usuário viu na época, canônico (ADR-0039). Marcado `frozen=true`.
+2. **Onde falta, computa na hora.** Para os dias sem congelado, aplica a MESMA fórmula
+   (`score::behavioural`) sobre os ticks e tarefas daquele dia — entradas imutáveis. É a aproximação
+   "agenda atual no passado" que o próprio `freeze` já assume e documenta; aqui ela só não é gravada.
+   Marcado `frozen=false`. Isso **não é recomputar o passado** no sentido proibido pelo ADR-0039 —
+   aquele veto é sobre RE-congelar um dia já congelado com uma fórmula nova; um dia nunca congelado
+   não tem "o que você viu" a preservar, e a célula é explícita sobre ser computada.
+3. **Nada é gravado.** Ao contrário do `freeze` (que a abertura do app dispara), o ano em pixels só
+   lê e computa — abrir a tela de um ano velho não enche o ledger de 365 linhas. `None` num dia sem
+   nada agendado (célula sem cor).
+
+**Alternativas recusadas.** (a) *Congelar o ano ao abrir a tela* — encheria o ledger e arriscaria
+duplicatas quando o conjunto de congelados lido não cobrisse anos distantes. (b) *Só congelados* —
+buracos demais, o visual perde a graça. A escolha preserva o congelado como fonte da verdade e usa
+o cômputo apenas para PINTAR, com honestidade (`frozen` por célula).
+
+**Consequência.** O ano em pixels abre denso e correto, em SVG puro (~365 rects, ADR-0018), sem
+tabela, sem escrita, sem migração — coerente com o ARSENAL de zero recriações (ADR-0058).

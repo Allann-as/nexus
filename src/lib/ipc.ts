@@ -456,6 +456,20 @@ export interface PersonalRecord {
 /** Sincroniza (apenda no ledger o que subiu) e devolve os recordes pessoais. */
 export const personalRecords = () => call<PersonalRecord[]>("personal_records");
 
+// --- Ano em pixels (ARSENAL) ---
+
+export interface ScoreCell {
+  day: string;
+  /** 0..=100, ou null se nada estava agendado no dia. */
+  value: number | null;
+  /** Congelado (canônico) ou computado agora. */
+  frozen: boolean;
+}
+
+/** 365 células pelo Nexus Score do dia — o ano em pixels. */
+export const yearInPixels = (year: number) =>
+  call<ScoreCell[]>("year_in_pixels", { year });
+
 export const habitWeekdayStats = (id: string, days = 180) =>
   call<WeekdayStat[]>("habit_weekday_stats", { id, days });
 

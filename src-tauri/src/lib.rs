@@ -209,6 +209,7 @@ pub fn run() {
             commands::annual_goals::delete_annual_goal,
             commands::score::freeze_daily_scores,
             commands::score::score_history,
+            commands::score::year_in_pixels,
             commands::backup::create_backup,
             commands::backup::auto_backup,
             commands::backup::list_backups,

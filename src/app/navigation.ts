@@ -23,6 +23,7 @@ import {
   Calendar,
   FileText,
   FolderKanban,
+  Grid3x3,
   History,
   Inbox,
   LayoutGrid,
@@ -90,6 +91,7 @@ export const SECONDARY_ROUTES: NavItem[] = [
   // descobertas mesmo é pelo NEXO (não lotam a rail).
   { path: "/perfect-weeks", label: "Semana Perfeita", icon: CalendarHeart, jumpKey: "w" },
   { path: "/records", label: "Recordes", icon: Medal, jumpKey: "k" },
+  { path: "/year-pixels", label: "Ano em Pixels", icon: Grid3x3, jumpKey: "x" },
 ];
 
 /** Tudo que o chord `G+<tecla>` alcança. */
