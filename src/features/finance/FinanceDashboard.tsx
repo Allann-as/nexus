@@ -128,13 +128,36 @@ export function FinanceDashboard({ onAporte }: { onAporte: () => void }) {
         </section>
       </div>
 
-      {/* ===== Barras por banco ===== */}
+      {/* ===== Saldo por conta =====
+          O objetivo do dono é modesto e explícito: "registrar valores que eu
+          tenho, aportes em qual conta". A conta já era registrada em todo aporte
+          desde a 0010 — o que faltava era a tela somar por ela e MOSTRAR O
+          NÚMERO. Antes isto era um gráfico de barras relativas: dava para ver
+          qual banco tem mais, não quanto cada um tem. */}
       {data.byAccount.length > 0 && (
         <section className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
-          <h3 className="mb-3 text-[12px] font-semibold tracking-[0.08em] text-[var(--text-tertiary)] uppercase">
-            Por banco
-          </h3>
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h3 className="text-[12px] font-semibold tracking-[0.08em] text-[var(--text-tertiary)] uppercase">
+              Saldo por conta
+            </h3>
+            <span className="text-[11px] text-[var(--text-tertiary)]">
+              total aportado{" "}
+              <span className="tabular font-medium text-[var(--text-primary)]">
+                {formatMoney(data.totalContributedCents)}
+              </span>
+            </span>
+          </div>
           <BankBars buckets={data.byAccount} />
+          {/* Honestidade: isto é o LÍQUIDO APORTADO por conta, não o saldo que o
+              banco mostra. O NEXUS sabe o que entrou e o que saiu; o que rendeu
+              sozinho ele não tem como saber (sem cotação, sem rede — §1 da
+              constituição). O patrimônio real continua sendo o do herói, que o
+              usuário informa à mão. Dizer "saldo" sem esta linha seria deixar a
+              tela afirmar mais do que ela sabe. */}
+          <p className="mt-3 border-t border-[var(--border-subtle)] pt-2.5 text-[11px] leading-[17px] text-[var(--text-tertiary)]">
+            Soma dos aportes menos os resgates de cada conta. Não inclui
+            rendimento — o NEXUS não consulta cotação.
+          </p>
         </section>
       )}
 
