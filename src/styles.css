@@ -102,6 +102,14 @@
      2. uma aurora única e fraca        (a cor da Esfera, só um sopro)
      3. .nx-page::before                (os aros da bússola, fora de centro)
 
+   Só os AROS, sem as marcas cardeais — e foi a dirigida que decidiu.
+   Os tiques tinham stroke 4 contra o stroke 2 do aro que deveriam
+   graduar; sob `--astro-alpha` (0.12) essa hierarquia se inverte: o
+   aro some e o tique fica, e o que aparecia na tela eram quatro
+   riscos soltos perto das bordas, sem nada a que pertencer. Num
+   desenho de fundo a esta opacidade, tudo tem que ter o MESMO peso,
+   senão o detalhe sobrevive ao que ele detalha.
+
    Sem dot grid, sem segunda aurora, sem as bandas de anel borradas.
    Tudo `background-image` ESTÁTICO no mesmo elemento: zero DOM extra,
    zero canvas, zero frame de animação, zero backdrop-filter. O fundo
@@ -181,8 +189,8 @@
     mask-repeat: no-repeat;
     -webkit-mask-size: contain;
     mask-size: contain;
-    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 600' fill='none' stroke='%23fff' stroke-linecap='round'%3E%3Ccircle cx='300' cy='300' r='280' stroke-width='2'/%3E%3Ccircle cx='300' cy='300' r='210' stroke-width='1.5'/%3E%3Ccircle cx='300' cy='300' r='140' stroke-width='1.2'/%3E%3Cline x1='300' y1='20' x2='300' y2='46' stroke-width='4'/%3E%3Cline x1='580' y1='300' x2='554' y2='300' stroke-width='4'/%3E%3Cline x1='300' y1='580' x2='300' y2='554' stroke-width='4'/%3E%3Cline x1='20' y1='300' x2='46' y2='300' stroke-width='4'/%3E%3Cline x1='497.99' y1='102.01' x2='488.09' y2='111.91' stroke-width='2.4'/%3E%3Cline x1='497.99' y1='497.99' x2='488.09' y2='488.09' stroke-width='2.4'/%3E%3Cline x1='102.01' y1='497.99' x2='111.91' y2='488.09' stroke-width='2.4'/%3E%3Cline x1='102.01' y1='102.01' x2='111.91' y2='111.91' stroke-width='2.4'/%3E%3C/svg%3E");
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 600' fill='none' stroke='%23fff' stroke-linecap='round'%3E%3Ccircle cx='300' cy='300' r='280' stroke-width='2'/%3E%3Ccircle cx='300' cy='300' r='210' stroke-width='1.5'/%3E%3Ccircle cx='300' cy='300' r='140' stroke-width='1.2'/%3E%3Cline x1='300' y1='20' x2='300' y2='46' stroke-width='4'/%3E%3Cline x1='580' y1='300' x2='554' y2='300' stroke-width='4'/%3E%3Cline x1='300' y1='580' x2='300' y2='554' stroke-width='4'/%3E%3Cline x1='20' y1='300' x2='46' y2='300' stroke-width='4'/%3E%3Cline x1='497.99' y1='102.01' x2='488.09' y2='111.91' stroke-width='2.4'/%3E%3Cline x1='497.99' y1='497.99' x2='488.09' y2='488.09' stroke-width='2.4'/%3E%3Cline x1='102.01' y1='497.99' x2='111.91' y2='488.09' stroke-width='2.4'/%3E%3Cline x1='102.01' y1='102.01' x2='111.91' y2='111.91' stroke-width='2.4'/%3E%3C/svg%3E");
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 600' fill='none' stroke='%23fff'%3E%3Ccircle cx='300' cy='300' r='280' stroke-width='2'/%3E%3Ccircle cx='300' cy='300' r='210' stroke-width='1.5'/%3E%3Ccircle cx='300' cy='300' r='140' stroke-width='1.2'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 600' fill='none' stroke='%23fff'%3E%3Ccircle cx='300' cy='300' r='280' stroke-width='2'/%3E%3Ccircle cx='300' cy='300' r='210' stroke-width='1.5'/%3E%3Ccircle cx='300' cy='300' r='140' stroke-width='1.2'/%3E%3C/svg%3E");
   }
 
   /* ============================================================

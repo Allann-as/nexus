@@ -243,9 +243,14 @@ export function LockScreen() {
 }
 
 /**
- * A única decoração da tela: três aros finos, centrados atrás da composição, na
- * mesma família da marca (círculos + marcas cardeais, sem rosa dos ventos). Não
- * gira, não pulsa, não reage — é geometria parada, e é isso que a deixa calma.
+ * A única decoração da tela: três aros finos, centrados atrás da composição.
+ * Não gira, não pulsa, não reage — é geometria parada, e é isso que a deixa calma.
+ *
+ * Sem as marcas cardeais, e a dirigida é que decidiu: a 1296px os tiques caíam
+ * longe do aro que deveriam graduar e liam como quatro riscos soltos nas bordas
+ * da janela — um deles atravessando o rodapé da versão. A referência pedia
+ * "apenas 2-3 anéis finos"; os aros sozinhos são exatamente isso, e o
+ * instrumento já está desenhado no squircle logo acima.
  */
 function BackdropRings() {
   return (
@@ -262,12 +267,6 @@ function BackdropRings() {
       <circle cx="300" cy="300" r="280" strokeWidth="1.4" opacity="0.16" />
       <circle cx="300" cy="300" r="210" strokeWidth="1.2" opacity="0.11" />
       <circle cx="300" cy="300" r="140" strokeWidth="1" opacity="0.07" />
-      <g strokeWidth="3" opacity="0.2">
-        <line x1="300" y1="20" x2="300" y2="46" />
-        <line x1="580" y1="300" x2="554" y2="300" />
-        <line x1="300" y1="580" x2="300" y2="554" />
-        <line x1="20" y1="300" x2="46" y2="300" />
-      </g>
     </svg>
   );
 }
