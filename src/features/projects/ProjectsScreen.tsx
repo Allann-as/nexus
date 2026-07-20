@@ -14,6 +14,7 @@ import {
   listNodes,
   createProject,
   createTask,
+  deleteNode,
   listProjectTasks,
   projectProgress,
   setTaskCompleted,
@@ -32,6 +33,7 @@ import {
 import { CountUp, HeroCard, StatCard } from "../../design-system/cards";
 import { ProgressBar, ProgressRing } from "../../design-system/charts";
 import { sphereStyle, useSphereColor } from "../../design-system/useSphereColor";
+import { ArmedDelete } from "../../design-system/ArmedDelete";
 import { useToasts } from "../../stores/toasts";
 import { TaskList } from "./TaskList";
 
@@ -93,6 +95,11 @@ export function ProjectsScreen() {
                   projectId={current}
                   title={projects.find((p) => p.id === current)?.title ?? ""}
                   areaId={projects.find((p) => p.id === current)?.areaId ?? null}
+                  // Com o projeto apagado, `selected` apontaria para um id que
+                  // não existe mais e o painel ficaria olhando para o vazio.
+                  // Zerando a seleção, o `current` volta a cair no primeiro da
+                  // lista sozinho.
+                  onDeleted={() => setSelected(null)}
                 />
               ) : (
                 <Card className="p-8">
@@ -161,14 +168,17 @@ function ProjectPanel({
   projectId,
   title,
   areaId,
+  onDeleted,
 }: {
   projectId: string;
   title: string;
   areaId: string | null;
+  onDeleted: () => void;
 }) {
   const colour = useSphereColor(areaId);
   const qc = useQueryClient();
   const pushError = useToasts((s) => s.pushError);
+  const push = useToasts((s) => s.push);
   const [newTask, setNewTask] = useState("");
 
   // `includeDone` ligado: a tarefa concluída CONTINUA na lista, riscada. Sumir
@@ -208,6 +218,42 @@ function ProjectPanel({
     mutationFn: ({ id, toIndex }: { id: string; toIndex: number }) =>
       moveTask(id, projectId, toIndex),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", projectId] }),
+    onError: pushError,
+  });
+
+  /**
+   * Excluir uma tarefa. Some da lista e do progresso — as duas coisas vivem na
+   * mesma chave `["tasks"]`, então a invalidação de sempre já dá conta.
+   */
+  const removeTask = useMutation({
+    mutationFn: (task: Task) => deleteNode(task.id),
+    onSuccess: () => {
+      invalidate();
+      push("success", "Tarefa excluída");
+    },
+    onError: pushError,
+  });
+
+  /**
+   * Excluir o projeto inteiro.
+   *
+   * O gesto fica aqui no painel, e não na linha da nav: a nav é uma coluna de
+   * botões estreitos, e o que se apaga aqui não é um nome — é o resultado com
+   * todas as tarefas dentro. Quem está no painel já viu o progresso e a lista,
+   * que é exatamente o contexto que essa decisão pede.
+   *
+   * Some o ESTADO (ADR-0056); o ledger continua sabendo o que foi concluído.
+   */
+  const removeProject = useMutation({
+    mutationFn: () => deleteNode(projectId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["nodes"] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["spheres"] });
+      push("success", "Projeto excluído");
+      onDeleted();
+    },
     onError: pushError,
   });
 
@@ -280,9 +326,23 @@ function ProjectPanel({
             tasks={tasks}
             onToggle={(t) => toggle.mutate(t)}
             onReorder={(id, toIndex) => reorder.mutate({ id, toIndex })}
+            onDelete={(t) => removeTask.mutate(t)}
+            deletingId={removeTask.isPending ? removeTask.variables?.id : null}
           />
         )}
       </Card>
+
+      {/* O gesto destrutivo do projeto fica no fim, depois de tudo que ele
+          contém: quem chega aqui já passou pelo progresso e pela lista. */}
+      <div className="flex justify-end">
+        <ArmedDelete
+          onConfirm={() => removeProject.mutate()}
+          pending={removeProject.isPending}
+          question="Excluir este projeto?"
+          label="Excluir projeto"
+          ariaLabel="Excluir projeto"
+        />
+      </div>
     </div>
   );
 }

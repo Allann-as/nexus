@@ -7,12 +7,13 @@
  */
 
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, PiggyBank } from "lucide-react";
 
 import { Button, EmptyState } from "../../design-system/primitives";
+import { useToasts } from "../../stores/toasts";
 import { formatMoney } from "../../lib/format";
-import { listAccounts, listFinGoals, type FinGoalCard } from "../../lib/ipc";
+import { deleteFinGoal, listAccounts, listFinGoals, type FinGoalCard } from "../../lib/ipc";
 import { CaixinhaCard } from "./CaixinhaCard";
 import { DepositModal } from "./DepositModal";
 import { NewCaixinhaModal } from "./NewCaixinhaModal";
@@ -20,6 +21,8 @@ import { Celebration } from "./Celebration";
 
 export function CaixinhasTab({ areaId }: { areaId: string }) {
   const client = useQueryClient();
+  const push = useToasts((s) => s.push);
+  const pushError = useToasts((s) => s.pushError);
   const [depositFor, setDepositFor] = useState<FinGoalCard | null>(null);
   const [creating, setCreating] = useState(false);
   const [celebrating, setCelebrating] = useState<string | null>(null);
@@ -39,6 +42,19 @@ export function CaixinhasTab({ areaId }: { areaId: string }) {
     void client.invalidateQueries({ queryKey: ["finance"] });
     void client.invalidateQueries({ queryKey: ["ledger"] });
   };
+
+  /* Uma caixinha criada por engano tinha virado moradia permanente da tela: dava
+     para depositar, nunca para desfazer. Excluir leva junto os aportes dela — o
+     ESTADO se corrige, e é só o estado; o ledger continua guardando a história de
+     cada depósito (ADR-0056), e nada do passado é reescrito. */
+  const remove = useMutation({
+    mutationFn: (id: string) => deleteFinGoal(id),
+    onSuccess: () => {
+      push("success", "Caixinha excluída");
+      refresh();
+    },
+    onError: pushError,
+  });
 
   const cards = goals.data ?? [];
   const totalSaved = cards.reduce((s, c) => s + Math.max(0, c.savedCents), 0);
@@ -88,7 +104,13 @@ export function CaixinhasTab({ areaId }: { areaId: string }) {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {cards.map((card) => (
-            <CaixinhaCard key={card.id} card={card} onDeposit={() => setDepositFor(card)} />
+            <CaixinhaCard
+              key={card.id}
+              card={card}
+              onDeposit={() => setDepositFor(card)}
+              onDelete={() => remove.mutate(card.id)}
+              deleting={remove.isPending && remove.variables === card.id}
+            />
           ))}
         </div>
       )}

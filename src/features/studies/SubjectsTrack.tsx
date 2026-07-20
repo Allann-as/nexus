@@ -9,12 +9,14 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Brain, Plus, Clock, BookMarked, Link2 } from "lucide-react";
+import { Archive, Brain, Plus, Clock, BookMarked, Link2 } from "lucide-react";
 
+import { ArmedDelete } from "../../design-system/ArmedDelete";
 import { Button, Card, EmptyState } from "../../design-system/primitives";
 import { ProgressRing } from "../../design-system/charts";
 import { useToasts } from "../../stores/toasts";
 import {
+  archiveSubject,
   createSubject,
   listSubjects,
   subjectProgress,
@@ -58,6 +60,25 @@ export function SubjectsTrack({ areaId }: { areaId: string }) {
       setCreating(false);
       void client.invalidateQueries({ queryKey: ["subjects", areaId] });
       void client.invalidateQueries({ queryKey: ["nodes", "count"] });
+    },
+    onError: pushError,
+  });
+
+  /* Arquivar não é apagar. A matéria sai da trilha, mas as sessões continuam
+     onde sempre estiveram — as horas já vividas não deixam de ter sido vividas.
+     É a saída de quem terminou o semestre, ou de quem criou "Cálculo I" duas
+     vezes: some da vista sem falsificar o passado (ADR-0056). */
+  const archive = useMutation({
+    mutationFn: (id: string) => archiveSubject(id),
+    onSuccess: () => {
+      push("success", "Matéria arquivada");
+      void client.invalidateQueries({ queryKey: ["subjects", areaId] });
+      void client.invalidateQueries({ queryKey: ["subject-progress"] });
+      void client.invalidateQueries({ queryKey: ["studies"] });
+      void client.invalidateQueries({ queryKey: ["study-stats", areaId] });
+      void client.invalidateQueries({ queryKey: ["nodes", "count"] });
+      void client.invalidateQueries({ queryKey: ["gamification"] });
+      void client.invalidateQueries({ queryKey: ["spheres", "overview"] });
     },
     onError: pushError,
   });
@@ -150,7 +171,13 @@ export function SubjectsTrack({ areaId }: { areaId: string }) {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {items.map((s) => (
-            <SubjectCard key={s.id} subject={s} onLog={() => setLogFor(s.id)} />
+            <SubjectCard
+              key={s.id}
+              subject={s}
+              onLog={() => setLogFor(s.id)}
+              onArchive={() => archive.mutate(s.id)}
+              archiving={archive.isPending && archive.variables === s.id}
+            />
           ))}
         </div>
       )}
@@ -170,7 +197,18 @@ export function SubjectsTrack({ areaId }: { areaId: string }) {
   );
 }
 
-function SubjectCard({ subject, onLog }: { subject: Subject; onLog: () => void }) {
+function SubjectCard({
+  subject,
+  onLog,
+  onArchive,
+  archiving = false,
+}: {
+  subject: Subject;
+  onLog: () => void;
+  onArchive: () => void;
+  /** O arquivamento desta matéria está em voo. */
+  archiving?: boolean;
+}) {
   const prog = useQuery({
     queryKey: ["subject-progress", subject.id],
     queryFn: () => subjectProgress(subject.id),
@@ -193,6 +231,16 @@ function SubjectCard({ subject, onLog }: { subject: Subject; onLog: () => void }
             </p>
           )}
         </div>
+        {/* O arquivo fica no cabeçalho, longe do botão de registrar sessão: a
+            saída da matéria não pode dividir vizinhança com o gesto diário. */}
+        <ArmedDelete
+          onConfirm={onArchive}
+          pending={archiving}
+          question="Arquivar esta matéria?"
+          confirmLabel="Sim, arquivar"
+          ariaLabel="Arquivar matéria"
+          icon={Archive}
+        />
       </div>
 
       <div className="flex items-end justify-between gap-3">

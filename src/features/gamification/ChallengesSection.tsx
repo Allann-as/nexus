@@ -3,6 +3,16 @@
  *
  * "Vencida" é derivada no backend (ADR-0036) — aqui só se pinta. Uma temporada
  * manual ganha +/- para marcar o dia; uma de hábito conta os ticks sozinha.
+ *
+ * O fim de uma temporada tem DOIS gestos, e eles não são sinônimos:
+ *
+ *   * **Abandonar** é um resultado. Você tentou e largou; a temporada continua
+ *     na lista, marcada como "Abandonada". É história, e história se guarda.
+ *   * **Excluir** é uma correção. A temporada nunca deveria ter existido —
+ *     duplicata, erro de digitação — e some da lista.
+ *
+ * Por isso "Abandonar" só aparece enquanto a temporada está ativa (só se
+ * abandona o que ainda está de pé), e "Excluir" aparece em qualquer estado.
  */
 
 import { useState } from "react";
@@ -11,10 +21,12 @@ import { Ban, Minus, Plus, Trophy } from "lucide-react";
 
 import {
   abandonChallenge,
+  deleteChallenge,
   incrementChallenge,
   type Challenge,
   type ChallengeState,
 } from "../../lib/ipc";
+import { ArmedDelete } from "../../design-system/ArmedDelete";
 import { Button, Card, EmptyState } from "../../design-system/primitives";
 import { ProgressBar } from "../../design-system/charts";
 import { useToasts } from "../../stores/toasts";
@@ -68,6 +80,7 @@ export function ChallengesSection({
 
 function ChallengeCard({ challenge: c }: { challenge: Challenge }) {
   const qc = useQueryClient();
+  const push = useToasts((s) => s.push);
   const pushError = useToasts((s) => s.pushError);
   const state = STATE[c.state];
 
@@ -84,6 +97,16 @@ function ChallengeCard({ challenge: c }: { challenge: Challenge }) {
   const drop = useMutation({
     mutationFn: () => abandonChallenge(c.id),
     onSuccess: invalidate,
+    onError: pushError,
+  });
+  // Excluir usa as mesmas chaves do abandono: a lista muda e o placar geral da
+  // gamificação também, porque uma temporada a menos é um denominador a menos.
+  const remove = useMutation({
+    mutationFn: () => deleteChallenge(c.id),
+    onSuccess: () => {
+      push("success", "Temporada excluída");
+      invalidate();
+    },
     onError: pushError,
   });
 
@@ -123,38 +146,52 @@ function ChallengeCard({ challenge: c }: { challenge: Challenge }) {
       </div>
       <ProgressBar value={c.progressRatio} color={state.color} className="mt-2" />
 
-      {c.state === "active" && (
-        <div className="mt-3 flex items-center gap-2">
-          {isManual && (
-            <>
-              <Button
-                variant="ghost"
-                onClick={() => bump.mutate(-1)}
-                disabled={bump.isPending || c.progressCount <= 0}
-                aria-label="Menos um"
-              >
-                <Minus size={15} aria-hidden />
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => bump.mutate(1)}
-                disabled={bump.isPending}
-              >
-                <Plus size={15} aria-hidden />
-                Marcar dia
-              </Button>
-            </>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {c.state === "active" && isManual && (
+          <>
+            <Button
+              variant="ghost"
+              onClick={() => bump.mutate(-1)}
+              disabled={bump.isPending || c.progressCount <= 0}
+              aria-label="Menos um"
+            >
+              <Minus size={15} aria-hidden />
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => bump.mutate(1)}
+              disabled={bump.isPending}
+            >
+              <Plus size={15} aria-hidden />
+              Marcar dia
+            </Button>
+          </>
+        )}
+
+        {/* Os dois desfechos, juntos à direita mas nunca iguais: abandonar é
+            âmbar e mantém a temporada na lista; excluir é vermelho e a tira de
+            lá. O título de cada um diz em voz alta qual é qual. */}
+        <div className="ml-auto flex items-center gap-2">
+          {c.state === "active" && (
+            <button
+              onClick={() => drop.mutate()}
+              disabled={drop.isPending}
+              title="Marcar como abandonada — a temporada continua na lista, como história"
+              className="inline-flex items-center gap-1 text-[11px] text-[var(--text-tertiary)] transition-colors hover:text-[var(--warning)]"
+            >
+              <Ban size={13} aria-hidden />
+              Abandonar
+            </button>
           )}
-          <button
-            onClick={() => drop.mutate()}
-            disabled={drop.isPending}
-            className="ml-auto inline-flex items-center gap-1 text-[11px] text-[var(--text-tertiary)] transition-colors hover:text-[var(--warning)]"
-          >
-            <Ban size={13} aria-hidden />
-            Abandonar
-          </button>
+          <ArmedDelete
+            label="Excluir"
+            onConfirm={() => remove.mutate()}
+            pending={remove.isPending}
+            question="Excluir esta temporada?"
+            ariaLabel={`Excluir a temporada ${c.title} — para uma que nunca deveria ter existido`}
+          />
         </div>
-      )}
+      </div>
     </Card>
   );
 }

@@ -17,6 +17,7 @@
 import { useState } from "react";
 import { Check, GripVertical, Info, Plus, Repeat, Target, TrendingUp } from "lucide-react";
 
+import { ArmedDelete } from "../../design-system/ArmedDelete";
 import { Checkbox } from "../../design-system/Checkbox";
 import { CountUp } from "../../design-system/cards";
 import { ProgressBar, ProgressRing, Sparkline } from "../../design-system/charts";
@@ -40,6 +41,10 @@ export function GoalCard({
   onMoveMilestone,
   onCheckpoint,
   onSetSource,
+  onDelete,
+  deleting,
+  onDeleteMilestone,
+  deletingMilestoneId,
 }: {
   goal: GoalWithProgress;
   colour: string;
@@ -48,6 +53,11 @@ export function GoalCard({
   onMoveMilestone: (m: MilestoneView, toIndex: number) => void;
   onCheckpoint: (value: number) => void;
   onSetSource: (source: ProgressSource) => void;
+  onDelete: () => void;
+  deleting: boolean;
+  onDeleteMilestone: (m: MilestoneView) => void;
+  /** Qual degrau está em voo — só ele trava, e não a árvore inteira. */
+  deletingMilestoneId: string | null;
 }) {
   const [formula, setFormula] = useState(false);
   const done = goal.milestones.filter((m) => m.ratio >= 1).length;
@@ -112,7 +122,19 @@ export function GoalCard({
               DATA_MODEL). Sem métrica há uma só, o banco força
               `progress_source='milestones'`, e oferecer a escolha seria oferecer
               um botão que o backend recusa. */}
-          {quantitative && <SourceToggle source={goal.progressSource} onChange={onSetSource} />}
+          {/* O toggle e a exclusão dividem o canto direito do cabeçalho: os dois
+              são gestos sobre a meta INTEIRA, e é aqui que se olha quando se
+              quer mexer nela e não no que ela mede. Apagar corrige o ESTADO —
+              a meta some da tela; o que ela viveu segue no ledger (ADR-0056). */}
+          <div className="flex shrink-0 items-center gap-1">
+            {quantitative && <SourceToggle source={goal.progressSource} onChange={onSetSource} />}
+            <ArmedDelete
+              onConfirm={onDelete}
+              pending={deleting}
+              question="Excluir esta meta?"
+              ariaLabel="Excluir meta"
+            />
+          </div>
         </header>
 
         {/* ===== o dado é o herói: o número (ou o degrau) à esquerda, o anel à direita =====
@@ -237,6 +259,8 @@ export function GoalCard({
           onToggle={onToggleMilestone}
           onAdd={onAddMilestone}
           onMove={onMoveMilestone}
+          onDelete={onDeleteMilestone}
+          deletingId={deletingMilestoneId}
         />
 
         <footer className="mt-4 flex items-center gap-2 border-t border-[var(--border-subtle)] pt-3">
@@ -313,11 +337,15 @@ function MilestoneTree({
   onToggle,
   onAdd,
   onMove,
+  onDelete,
+  deletingId,
 }: {
   milestones: MilestoneView[];
   onToggle: (m: MilestoneView, done: boolean) => void;
   onAdd: (title: string) => void;
   onMove: (m: MilestoneView, toIndex: number) => void;
+  onDelete: (m: MilestoneView) => void;
+  deletingId: string | null;
 }) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<number | null>(null);
@@ -394,6 +422,20 @@ function MilestoneTree({
               </div>
             </span>
           )}
+
+          {/* A saída do sub-desafio, na mesma discrição da alça de arrasto: ela
+              só aparece quando a linha está sob o cursor. Uma lixeira acesa em
+              cada linha faria a árvore inteira parecer perigosa — e o gesto
+              comum aqui é marcar, não apagar. O `focus-within` é o que segura a
+              pergunta na tela depois de armada: o botão de confirmar recebe o
+              foco, e sem isso tirar o mouse da linha esconderia a resposta. */}
+          <ArmedDelete
+            onConfirm={() => onDelete(m)}
+            pending={deletingId === m.id}
+            question="Excluir este sub-desafio?"
+            ariaLabel="Excluir sub-desafio"
+            className="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+          />
         </div>
       ))}
 

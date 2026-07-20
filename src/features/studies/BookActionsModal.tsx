@@ -11,10 +11,12 @@
 import { useState } from "react";
 import { CheckCircle2, X } from "lucide-react";
 
+import { ArmedDelete } from "../../design-system/ArmedDelete";
 import { Modal } from "../../design-system/Modal";
 import { Button, cx } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
 import {
+  deleteNode,
   setBookProgress,
   setBookRating,
   setBookShelf,
@@ -84,6 +86,25 @@ export function BookActionsModal({
 
   const rate = (n: number) => {
     void run(() => setBookRating(book.id, n > 0 ? n : null), "Avaliação salva");
+  };
+
+  /* "Abandonado" era a única saída de um livro, e ela mente: abandonar é uma
+     leitura que aconteceu e parou, não um livro digitado errado. Excluir é para o
+     segundo caso — tira o livro do ESTADO da estante e fecha o modal, porque a
+     tela por trás não tem mais o que mostrar. O que já foi lido nele continua no
+     ledger (ADR-0056). */
+  const remove = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await deleteNode(book.id);
+      push("success", "Livro excluído");
+      onChanged();
+      onClose();
+    } catch (e) {
+      pushError(e);
+      setBusy(false);
+    }
   };
 
   return (
@@ -209,6 +230,18 @@ export function BookActionsModal({
                 Terminar livro
               </Button>
             )}
+
+            {/* A saída fica no pé, separada por uma linha: é o último gesto do
+                modal, e o único que não tem volta pela tela. */}
+            <div className="flex justify-end border-t border-[var(--border-subtle)] pt-3">
+              <ArmedDelete
+                onConfirm={() => void remove()}
+                pending={busy}
+                question="Excluir este livro?"
+                label="Excluir livro"
+                ariaLabel="Excluir livro"
+              />
+            </div>
           </div>
         </div>
       </Modal>

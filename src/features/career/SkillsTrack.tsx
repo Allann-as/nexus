@@ -6,6 +6,14 @@
  * confirmação leve (um clique arma, o segundo confirma; nada de modal). A trilha
  * de evolução vem da série do ledger; uma competência nova (um ponto só) NÃO
  * desenha sparkline — o padrão "número real, omitido sem dado" vale para gráfico.
+ *
+ * A competência também pode ser APAGADA (v1.2): uma trilha criada por engano não
+ * é uma trilha, é ruído. Apagar corrige o ESTADO — os níveis que já subiram
+ * continuam no ledger e no XP (ADR-0056), porque o passado não se reescreve.
+ * Repare que o cartão tem DOIS gestos armados de naturezas opostas: subir de
+ * nível é afirmativo e mora no botão largo, embaixo; excluir é destrutivo e mora
+ * no rodapé discreto, com a cor de perigo. Eles nunca aparecem armados juntos —
+ * ver `SkillCard`.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -13,10 +21,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Award, Plus, ChevronsUp, Check } from "lucide-react";
 
 import { Button, Card, EmptyState, cx } from "../../design-system/primitives";
+import { ArmedDelete } from "../../design-system/ArmedDelete";
 import { Sparkline } from "../../design-system/charts";
 import { useToasts } from "../../stores/toasts";
 import {
   createSkill,
+  deleteSkill,
   levelUpSkill,
   listSkills,
   skillTrack,
@@ -123,6 +133,7 @@ export function SkillsTrack({ areaId }: { areaId: string }) {
 
 function SkillCard({ skill, areaId }: { skill: Skill; areaId: string }) {
   const client = useQueryClient();
+  const push = useToasts((s) => s.push);
   const pushError = useToasts((s) => s.pushError);
   const [armed, setArmed] = useState(false);
   const armedTimer = useRef<number | null>(null);
@@ -146,6 +157,22 @@ function SkillCard({ skill, areaId }: { skill: Skill; areaId: string }) {
       setArmed(false);
       pushError(e);
     },
+  });
+
+  const remove = useMutation({
+    mutationFn: () => deleteSkill(skill.id),
+    onSuccess: () => {
+      push("success", "Competência excluída");
+      void client.invalidateQueries({ queryKey: ["skills", areaId] });
+      void client.invalidateQueries({ queryKey: ["skill-track", skill.id] });
+      // Some do painel de "em evolução" junto com o cartão — senão o número
+      // continua contando uma trilha que não existe mais.
+      void client.invalidateQueries({ queryKey: ["skills-evolving", areaId] });
+      // O XP dos níveis fica no ledger, mas o Hub relê o que ainda tem estado.
+      void client.invalidateQueries({ queryKey: ["gamification"] });
+      void client.invalidateQueries({ queryKey: ["spheres", "overview"] });
+    },
+    onError: pushError,
   });
 
   // A confirmação leve: o primeiro clique arma; se o segundo não vem em 3.5s, desarma.
@@ -233,6 +260,26 @@ function SkillCard({ skill, areaId }: { skill: Skill; areaId: string }) {
           </>
         )}
       </button>
+
+      {/* O rodapé destrutivo. Ele mora FORA do botão de nível, atrás de uma
+          hairline, e usa a cor de perigo — nada nele parece um passo adiante.
+          Enquanto o nível está armado, o rodapé fica invisível e sem cliques:
+          duas perguntas armadas ao mesmo tempo no mesmo cartão seriam a receita
+          para o "sim" errado. (O caminho inverso já é seguro: o mousedown no
+          botão de nível cai fora do ArmedDelete e o desarma sozinho.) */}
+      <div
+        className={cx(
+          "flex justify-end border-t border-[var(--border-subtle)] pt-2",
+          armed && "invisible pointer-events-none",
+        )}
+      >
+        <ArmedDelete
+          onConfirm={() => remove.mutate()}
+          pending={remove.isPending}
+          question="Excluir esta competência?"
+          ariaLabel={`Excluir a competência ${skill.title}`}
+        />
+      </div>
     </Card>
   );
 }

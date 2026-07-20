@@ -18,9 +18,10 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, MapPin, Plus } from "lucide-react";
 
+import { ArmedDelete } from "../../design-system/ArmedDelete";
 import { DatePicker } from "../../design-system/DatePicker";
 import { Button, Card, EmptyState, cx } from "../../design-system/primitives";
-import { createEvent, eventsByCategory, type Occurrence } from "../../lib/ipc";
+import { createEvent, deleteEvent, eventsByCategory, type Occurrence } from "../../lib/ipc";
 import { useToasts } from "../../stores/toasts";
 import { fromDay, toDay } from "../calendar/grid";
 
@@ -205,6 +206,21 @@ function ExamRow({ exam, days }: { exam: Occurrence; days: number }) {
   const soon = days >= 0 && days < 7;
   const start = new Date(exam.startsAt);
 
+  const qc = useQueryClient();
+  const push = useToasts((s) => s.push);
+  const pushError = useToasts((s) => s.pushError);
+
+  /* Um exame marcado por engano — ou desmarcado pelo laboratório — precisa sair
+     da lista. O evento some do estado; o ledger guarda que existiu (ADR-0056). */
+  const remove = useMutation({
+    mutationFn: () => deleteEvent(exam.eventId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["events"] });
+      push("success", "Exame excluído");
+    },
+    onError: pushError,
+  });
+
   return (
     <div
       className={cx(
@@ -249,6 +265,13 @@ function ExamRow({ exam, days }: { exam: Occurrence; days: number }) {
       >
         {days === 0 ? "hoje" : days === 1 ? "amanhã" : `em ${days} dias`}
       </span>
+
+      <ArmedDelete
+        onConfirm={() => remove.mutate()}
+        pending={remove.isPending}
+        question="Excluir este exame?"
+        ariaLabel="Excluir exame"
+      />
     </div>
   );
 }

@@ -1,10 +1,36 @@
-# NEXUS — Manual do Usuário (v1.0.0)
+# NEXUS — Manual do Usuário (v1.2.0)
 
 O NEXUS é o seu **Personal Operating System**: um único aplicativo de desktop que
 reúne as suas Esferas da vida — Saúde, Finanças, Carreira, Estudos e o que você
 criar —, com hábitos, tarefas, metas, agenda, notas e uma linha do tempo que nunca
 se apaga. **100% offline, zero telemetria, zero IA.** Todo número que ele mostra
 tem um "ⓘ como calculamos" ao lado — nada é mágica.
+
+---
+
+## 0. O que mudou na v1.2
+
+- **A marca agora é uma bússola.** O instrumento que orienta — que é o que o
+  NEXUS faz. O fundo das telas ficou mais limpo, e os campos de data passaram a
+  abrir um calendário do próprio app em vez do calendário do Windows.
+- **Você pode excluir o que criou.** Exames, metas, degraus, caixinhas, matérias,
+  competências, hábitos, tarefas, notas, livros, temporadas e marcos. O gesto é
+  sempre o mesmo: **um clique pergunta, o segundo confirma** — e ele desiste
+  sozinho se você não confirmar. Excluir corrige o ESTADO; a sua Linha do Tempo
+  guarda a história, como sempre.
+- **Metas deixaram de ser só número.** Ao criar uma meta, o primeiro passo agora
+  é o **tipo**:
+  - *Com número* — o formato de antes (métrica, hoje, alvo, unidade).
+  - *Conquista* — "Conseguir um emprego". Aconteceu ou não aconteceu.
+  - *Por etapas* — uma escada de níveis que você nomeia ("Básico →
+    Intermediário → Avançado → Fluente"), e o progresso é o degrau atual.
+
+  O formulário também nasce diferente em cada Esfera: Finanças só oferece R$,
+  Carreira abre em conquista, Estudos abre em etapas.
+- **Um seguro a mais nas atualizações.** Sempre que uma versão nova do NEXUS
+  precisa alterar a estrutura do seu banco, ele grava antes uma cópia completa em
+  `backups/pre-migration-....db`. Essa cópia **não** é apagada pela limpeza
+  automática de backups — ela fica.
 
 ---
 

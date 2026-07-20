@@ -57,6 +57,12 @@ export function LibraryTab({ areaId }: { areaId: string }) {
     void client.invalidateQueries({ queryKey: ["books"] });
     void client.invalidateQueries({ queryKey: ["studies"] });
     void client.invalidateQueries({ queryKey: ["ledger"] });
+    // Um livro que entra, termina ou some da estante mexe no ritmo de leitura,
+    // na contagem de nós e no que as Esferas mostram lá fora.
+    void client.invalidateQueries({ queryKey: ["reading-stats"] });
+    void client.invalidateQueries({ queryKey: ["nodes", "count"] });
+    void client.invalidateQueries({ queryKey: ["gamification"] });
+    void client.invalidateQueries({ queryKey: ["spheres", "overview"] });
   };
 
   const all = books.data ?? [];

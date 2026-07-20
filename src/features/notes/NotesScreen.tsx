@@ -15,10 +15,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, Pin, Plus, Search } from "lucide-react";
 
+import { ArmedDelete } from "../../design-system/ArmedDelete";
 import { Button, EmptyState, PageHeader, cx } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
 import {
   createNote,
+  deleteNode,
   getNote,
   listNotes,
   pinNote,
@@ -41,10 +43,12 @@ function relativeTime(ms: number): string {
 export function NotesScreen() {
   const qc = useQueryClient();
   const pushError = useToasts((s) => s.pushError);
+  const push = useToasts((s) => s.push);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const list = useQuery({
     queryKey: ["notes", "list"],
@@ -102,6 +106,33 @@ export function NotesScreen() {
     }
   };
 
+  /* Excluir a nota ABERTA. O gesto vive no cabeçalho, ao lado de "Nova nota", e
+     não em cada linha da lista: a lista é para navegar, e um alvo destrutivo em
+     cada item de uma lista que se percorre com o mouse é um acidente esperando
+     acontecer. Aqui a nota que some é sempre a que está à vista.
+
+     A seleção NÃO é escolhida à mão depois: o `useEffect` que já existe repara
+     que o `selectedId` sumiu da lista e salta para a primeira nota sozinho — a
+     mesma regra que vale quando a lista muda por qualquer outro motivo.
+
+     Apagar corrige o ESTADO; o ledger guarda que a nota existiu (ADR-0056). */
+  const handleDelete = async (id: string) => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      await deleteNode(id);
+      qc.removeQueries({ queryKey: ["notes", id] });
+      await qc.invalidateQueries({ queryKey: ["notes", "list"] });
+      // Os backlinks de OUTRAS notas apontavam para esta; a teia mudou.
+      await qc.invalidateQueries({ queryKey: ["links"] });
+      push("success", "Nota excluída");
+    } catch (e) {
+      pushError(e);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const hasNotes = notes.length > 0;
   const anyResult = filtered.pinned.length + filtered.rest.length > 0;
 
@@ -113,9 +144,19 @@ export function NotesScreen() {
         subtitle="Markdown puro, wiki-links e backlinks — um formato eterno"
         actions={
           hasNotes ? (
-            <Button variant="primary" size="sm" icon={Plus} onClick={handleCreate}>
-              Nova nota
-            </Button>
+            <div className="flex items-center gap-2">
+              {selected.data && (
+                <ArmedDelete
+                  onConfirm={() => void handleDelete(selected.data.id)}
+                  pending={deleting}
+                  question="Excluir esta nota?"
+                  ariaLabel="Excluir nota"
+                />
+              )}
+              <Button variant="primary" size="sm" icon={Plus} onClick={handleCreate}>
+                Nova nota
+              </Button>
+            </div>
           ) : undefined
         }
       />

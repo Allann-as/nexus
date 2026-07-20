@@ -3,15 +3,24 @@
  * ano, competências em evolução, próxima meta — mais a linha do tempo de cargos
  * com a DURAÇÃO de cada período (não só os pontos). Cada número é real e some
  * quando não há dado (o padrão do 3+4).
+ *
+ * Um marco também pode ser apagado (v1.2). Aqui a exclusão é de um tipo raro:
+ * o marco não tem linha de estado nenhuma — ele É um fato do ledger. Então
+ * "excluir" não remove nada: acrescenta um evento de RETRATAÇÃO, e é a leitura
+ * do ledger que passa a ignorar o marco retratado (ADR-0056). O passado fica
+ * inteiro; só a linha da carreira se corrige.
  */
 
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Award, Briefcase, CalendarClock, Plus, Target, TrendingUp } from "lucide-react";
 
 import { Button, EmptyState, cx } from "../../design-system/primitives";
+import { ArmedDelete } from "../../design-system/ArmedDelete";
+import { useToasts } from "../../stores/toasts";
 import {
   careerMilestones,
+  deleteCareerMilestone,
   listGoals,
   skillsEvolving,
   type CareerMilestoneKind,
@@ -220,7 +229,7 @@ export function CareerDashboard({ areaId }: { areaId: string }) {
                       {formatDay(m.entry.day)}
                     </span>
                   </div>
-                  <div className="mt-0.5 flex items-center gap-2">
+                  <div className="mt-0.5 flex flex-wrap items-center gap-2">
                     <span className="text-[11px] text-[var(--sphere)]">
                       {CAREER_KIND_META[m.kind].label}
                     </span>
@@ -235,6 +244,7 @@ export function CareerDashboard({ areaId }: { areaId: string }) {
                       <CalendarClock size={10} />
                       {isCurrent ? `atual · há ${humanize(spanDays)}` : `durou ${humanize(spanDays)}`}
                     </span>
+                    <MilestoneDelete entry={m.entry} />
                   </div>
                   {m.note && (
                     <p className="mt-1 text-[12.5px] leading-[18px] text-[var(--text-secondary)]">
@@ -250,6 +260,39 @@ export function CareerDashboard({ areaId }: { areaId: string }) {
 
       {recording && <RecordMilestoneModal onClose={() => setRecording(false)} onSaved={refresh} />}
     </div>
+  );
+}
+
+/**
+ * O gesto de retratar um marco, ao lado da duração da fase.
+ *
+ * As chaves invalidadas são as mesmas que `refresh` usa depois de registrar um
+ * marco — ["career"] redesenha a linha e os tiles, ["ledger"] redesenha a
+ * Timeline, que é onde o evento de correção também aparece.
+ */
+function MilestoneDelete({ entry }: { entry: LedgerEntry }) {
+  const client = useQueryClient();
+  const push = useToasts((s) => s.push);
+  const pushError = useToasts((s) => s.pushError);
+
+  const remove = useMutation({
+    mutationFn: () => deleteCareerMilestone(entry.entityId),
+    onSuccess: () => {
+      push("success", "Marco excluído");
+      void client.invalidateQueries({ queryKey: ["career"] });
+      void client.invalidateQueries({ queryKey: ["ledger"] });
+    },
+    onError: pushError,
+  });
+
+  return (
+    <ArmedDelete
+      className="ml-auto"
+      onConfirm={() => remove.mutate()}
+      pending={remove.isPending}
+      question="Excluir este marco?"
+      ariaLabel={`Excluir o marco ${entry.titleSnapshot}`}
+    />
   );
 }
 

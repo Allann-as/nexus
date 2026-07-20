@@ -5,10 +5,11 @@
  * elas exigem 30+ dias de amostra para não serem ruído.
  */
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X, Flame, Trophy } from "lucide-react";
 
 import {
+  deleteNode,
   getHabit,
   habitHeatmap,
   habitStreaks,
@@ -17,6 +18,8 @@ import {
   toNexusError,
 } from "../../lib/ipc";
 import { CountUp, StatCard } from "../../design-system/cards";
+import { ArmedDelete } from "../../design-system/ArmedDelete";
+import { useToasts } from "../../stores/toasts";
 import { Heatmap } from "./Heatmap";
 import { describeSchedule } from "./HabitsScreen";
 
@@ -24,6 +27,10 @@ import { describeSchedule } from "./HabitsScreen";
 const MIN_SAMPLE = 4;
 
 export function HabitDetail({ id, onClose }: { id: string; onClose: () => void }) {
+  const qc = useQueryClient();
+  const pushError = useToasts((s) => s.pushError);
+  const push = useToasts((s) => s.push);
+
   const { data: habit, error } = useQuery({
     queryKey: ["habits", "one", id],
     queryFn: () => getHabit(id),
@@ -46,6 +53,29 @@ export function HabitDetail({ id, onClose }: { id: string; onClose: () => void }
   // que a lista de hábitos já usa.
   const { data: areas = [] } = useQuery({ queryKey: ["areas"], queryFn: () => listAreas(false) });
   const sphere = areas.find((a) => a.id === habit?.areaId)?.color;
+
+  /**
+   * Excluir o hábito.
+   *
+   * O gesto mora aqui, e não na linha da lista: é neste diálogo que se vê o que
+   * se está prestes a perder — a sequência, o recorde, o ano inteiro de
+   * heatmap. Apagar de uma linha de 32px, sem esse contexto, é fácil demais.
+   *
+   * O que some é o ESTADO (ADR-0056): o ledger guarda as marcações que já
+   * aconteceram, e ninguém reescreve o passado. Com o hábito fora do banco, o
+   * diálogo não tem mais sujeito — por isso fecha junto.
+   */
+  const remove = useMutation({
+    mutationFn: () => deleteNode(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["habits"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["spheres"] });
+      push("success", "Hábito excluído");
+      onClose();
+    },
+    onError: pushError,
+  });
 
   const worst = weekdays
     .filter((w) => w.total >= MIN_SAMPLE)
@@ -89,13 +119,21 @@ export function HabitDetail({ id, onClose }: { id: string; onClose: () => void }
               </p>
             )}
           </div>
-          <button
-            onClick={onClose}
-            aria-label="Fechar"
-            className="text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)]"
-          >
-            <X size={16} />
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <ArmedDelete
+              onConfirm={() => remove.mutate()}
+              pending={remove.isPending}
+              question="Excluir este hábito?"
+              ariaLabel="Excluir hábito"
+            />
+            <button
+              onClick={onClose}
+              aria-label="Fechar"
+              className="text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)]"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
         {error && (

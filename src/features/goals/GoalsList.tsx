@@ -17,6 +17,7 @@ import { useToasts } from "../../stores/toasts";
 import {
   addGoalCheckpoint,
   addMilestone,
+  deleteNode,
   goalWithProgress,
   listAreas,
   listGoals,
@@ -96,6 +97,37 @@ export function GoalsList({ areaId }: { areaId: string | null }) {
     onError: pushError,
   });
 
+  /* Apagar um degrau. O `refresh` da meta basta: um sub-desafio não sai do card
+     dela para lugar nenhum, e a barra que ele movia já é recalculada pelo
+     `goal_with_progress` que volta. Quem apaga aqui costuma apagar um erro de
+     digitação, então o toast é curto — a história de que ele existiu fica no
+     ledger (ADR-0056). */
+  const removeMilestone = useMutation({
+    mutationFn: ({ m }: { m: MilestoneView }) => deleteNode(m.id),
+    onSuccess: (_r, { m }) => {
+      refresh(m.goalId);
+      push("success", "Sub-desafio excluído");
+    },
+    onError: pushError,
+  });
+
+  /* Apagar a meta inteira. Aqui o `refresh` NÃO basta: uma meta a menos muda o
+     que a Esfera mostra no Hub e o que a gamificação conta, e essas duas telas
+     não são recarregadas por ninguém nesta rota. A chave da meta some junto —
+     invalidar ["goal", id] deixaria o React Query buscando um nó que não existe
+     mais; o que se remove é o cache dela. */
+  const remove = useMutation({
+    mutationFn: ({ goalId }: { goalId: string }) => deleteNode(goalId),
+    onSuccess: (_r, { goalId }) => {
+      client.removeQueries({ queryKey: ["goal", goalId] });
+      void client.invalidateQueries({ queryKey: ["goals"] });
+      void client.invalidateQueries({ queryKey: ["spheres", "overview"] });
+      void client.invalidateQueries({ queryKey: ["gamification"] });
+      push("success", "Meta excluída");
+    },
+    onError: pushError,
+  });
+
   const source = useMutation({
     mutationFn: ({ goalId, src }: { goalId: string; src: ProgressSource }) =>
       setGoalProgressSource(goalId, src),
@@ -154,6 +186,12 @@ export function GoalsList({ areaId }: { areaId: string | null }) {
           onMoveMilestone={(m, toIndex) => move.mutate({ m, toIndex })}
           onCheckpoint={(value) => checkpoint.mutate({ goalId: goal.id, value })}
           onSetSource={(src) => source.mutate({ goalId: goal.id, src })}
+          onDelete={() => remove.mutate({ goalId: goal.id })}
+          deleting={remove.isPending && remove.variables?.goalId === goal.id}
+          onDeleteMilestone={(m) => removeMilestone.mutate({ m })}
+          deletingMilestoneId={
+            removeMilestone.isPending ? (removeMilestone.variables?.m.id ?? null) : null
+          }
         />
       ))}
 

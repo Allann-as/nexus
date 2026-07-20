@@ -11,6 +11,7 @@ import { PiggyBank, Plus, Trophy } from "lucide-react";
 
 import { GoalIcon } from "./GoalIcon";
 
+import { ArmedDelete } from "../../design-system/ArmedDelete";
 import { ProgressBar } from "../../design-system/charts";
 import { useCountUp } from "../../design-system/useCountUp";
 import { cx } from "../../design-system/primitives";
@@ -32,9 +33,14 @@ export function formatMonth(ym: string): string {
 export function CaixinhaCard({
   card,
   onDeposit,
+  onDelete,
+  deleting = false,
 }: {
   card: FinGoalCard;
   onDeposit: () => void;
+  onDelete: () => void;
+  /** A exclusão desta caixinha está em voo. */
+  deleting?: boolean;
 }) {
   const pct = card.targetCents > 0 ? card.savedCents / card.targetCents : 0;
   const done = card.status === "done" || pct >= 1;
@@ -80,12 +86,23 @@ export function CaixinhaCard({
             )}
           </div>
         </div>
-        {done && (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--sphere)_22%,transparent)] px-2 py-0.5 text-[11px] font-semibold text-[var(--sphere)]">
-            <Trophy size={11} aria-hidden />
-            Concluído
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {done && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--sphere)_22%,transparent)] px-2 py-0.5 text-[11px] font-semibold text-[var(--sphere)]">
+              <Trophy size={11} aria-hidden />
+              Concluído
+            </span>
+          )}
+          {/* A saída da caixinha mora no mesmo canto de onde ela se anuncia: um
+              clique pergunta, o segundo apaga. Os aportes vão junto — o ledger é
+              que guarda a história deles. */}
+          <ArmedDelete
+            onConfirm={onDelete}
+            pending={deleting}
+            question="Excluir esta caixinha?"
+            ariaLabel="Excluir caixinha"
+          />
+        </div>
       </header>
 
       <div className="flex items-baseline justify-between gap-2">

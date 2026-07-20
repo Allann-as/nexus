@@ -27,6 +27,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Timer } from "lucide-react";
 
 import { Checkbox } from "../../design-system/Checkbox";
+import { ArmedDelete } from "../../design-system/ArmedDelete";
 import { cx } from "../../design-system/primitives";
 import { useFocus } from "../../stores/focus";
 import type { Task } from "../../lib/ipc";
@@ -37,10 +38,19 @@ export function TaskList({
   tasks,
   onToggle,
   onReorder,
+  onDelete,
+  deletingId,
 }: {
   tasks: Task[];
   onToggle: (task: Task) => void;
   onReorder: (id: string, toIndex: number) => void;
+  /**
+   * Excluir a tarefa. Opcional: a lista continua servindo a quem só quer
+   * mostrar tarefas — quem não passa isto simplesmente não ganha o gesto.
+   */
+  onDelete?: (task: Task) => void;
+  /** Qual tarefa está em voo agora, para travar os botões da linha certa. */
+  deletingId?: string | null;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -96,6 +106,8 @@ export function TaskList({
                   task={task}
                   top={v.start}
                   onToggle={() => onToggle(task)}
+                  onDelete={onDelete && (() => onDelete(task))}
+                  deleting={deletingId === task.id}
                 />
               ) : (
                 <SortableRow
@@ -103,6 +115,8 @@ export function TaskList({
                   task={task}
                   top={v.start}
                   onToggle={() => onToggle(task)}
+                  onDelete={onDelete && (() => onDelete(task))}
+                  deleting={deletingId === task.id}
                 />
               );
             })}
@@ -124,10 +138,14 @@ function SortableRow({
   task,
   top,
   onToggle,
+  onDelete,
+  deleting,
 }: {
   task: Task;
   top: number;
   onToggle: () => void;
+  onDelete?: () => void;
+  deleting: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: task.id });
@@ -155,6 +173,8 @@ function SortableRow({
       <RowBody
         task={task}
         onToggle={onToggle}
+        onDelete={onDelete}
+        deleting={deleting}
         handle={
           <button
             {...attributes}
@@ -182,10 +202,14 @@ function DoneRow({
   task,
   top,
   onToggle,
+  onDelete,
+  deleting,
 }: {
   task: Task;
   top: number;
   onToggle: () => void;
+  onDelete?: () => void;
+  deleting: boolean;
 }) {
   return (
     <div
@@ -196,7 +220,7 @@ function DoneRow({
       )}
       style={{ top, height: ROW_H }}
     >
-      <RowBody task={task} onToggle={onToggle} />
+      <RowBody task={task} onToggle={onToggle} onDelete={onDelete} deleting={deleting} />
     </div>
   );
 }
@@ -205,10 +229,14 @@ function DoneRow({
 function RowBody({
   task,
   onToggle,
+  onDelete,
+  deleting,
   handle,
 }: {
   task: Task;
   onToggle: () => void;
+  onDelete?: () => void;
+  deleting: boolean;
   handle?: ReactNode;
 }) {
   const done = task.completedAt != null;
@@ -261,6 +289,21 @@ function RowBody({
         >
           <Timer size={14} />
         </button>
+      )}
+
+      {/* Excluir esta tarefa. Segue a mesma regra da alça e do pomodoro: some
+          em repouso, aparece no hover — a linha continua sendo só a tarefa até
+          alguém pedir o contrário. O `focus-within` é o que segura o botão em
+          cena depois de armado: o "Sim, excluir" recebe foco sozinho, e sem
+          isto a pergunta desapareceria no instante em que o cursor saísse. */}
+      {onDelete && (
+        <ArmedDelete
+          onConfirm={onDelete}
+          pending={deleting}
+          question="Excluir esta tarefa?"
+          ariaLabel={`Excluir ${task.title}`}
+          className="opacity-0 transition-opacity duration-[var(--dur-fast)] group-hover:opacity-100 focus-within:opacity-100"
+        />
       )}
     </>
   );
