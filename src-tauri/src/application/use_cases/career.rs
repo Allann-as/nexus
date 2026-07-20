@@ -11,7 +11,8 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::application::ports::{
-    AreaRepository, Clock, IdGen, LedgerRepository, NewNode, NewSkill, Skill, SkillRepository,
+    AreaRepository, Clock, IdGen, LedgerRepository, NewNode, NewSkill, NodeRepository, Skill,
+    SkillRepository,
 };
 use crate::domain::entities::{validate_title, CareerMilestoneKind, Kind};
 use crate::domain::errors::{NexusError, Result};
@@ -23,6 +24,9 @@ const MILESTONE_LIMIT: i64 = 50;
 
 pub struct CareerService {
     pub skills: Arc<dyn SkillRepository>,
+    /// Para EXCLUIR uma competência: ela é um node, e apagar um node é a mesma
+    /// operação para todos eles (ADR-0056). Ver `CareerService::delete_skill`.
+    pub nodes: Arc<dyn NodeRepository>,
     pub areas: Arc<dyn AreaRepository>,
     pub ledger: Arc<dyn LedgerRepository>,
     pub ids: Arc<dyn IdGen>,
@@ -81,9 +85,97 @@ impl CareerService {
     }
 
     /// Os marcos de carreira, do mais recente ao mais antigo.
+    ///
+    /// Os marcos RETRATADOS (ver `delete_milestone`) somem daqui: o painel mostra
+    /// o que é verdade hoje. Os dois eventos — o original e a retratação —
+    /// continuam no ledger, e a Timeline desenha os dois, cada um no seu dia.
     pub fn milestones(&self) -> Result<Vec<LedgerEntry>> {
-        self.ledger
-            .by_entity_kind("career_milestone", MILESTONE_LIMIT)
+        // O limite é dobrado na leitura porque a lista traz criações E
+        // retratações misturadas; sem isso, um usuário com muitas correções veria
+        // a página encolher. O corte final volta ao limite do painel.
+        let raw = self
+            .ledger
+            .by_entity_kind("career_milestone", MILESTONE_LIMIT * 2)?;
+
+        let retracted: std::collections::HashSet<&str> = raw
+            .iter()
+            .filter(|e| e.event_type == EventType::Deleted.as_str())
+            .map(|e| e.entity_id.as_str())
+            .collect();
+
+        Ok(raw
+            .iter()
+            .filter(|e| {
+                e.event_type == EventType::Created.as_str()
+                    && !retracted.contains(e.entity_id.as_str())
+            })
+            .take(MILESTONE_LIMIT as usize)
+            .cloned()
+            .collect())
+    }
+
+    /// "Exclui" um marco de carreira — apendando uma RETRATAÇÃO (BÚSSOLA, fase B).
+    ///
+    /// Aqui o pedido "delete" não pode ser atendido ao pé da letra, e a razão é
+    /// estrutural: um marco de carreira **não tem estado**. Ele é um fato do
+    /// ledger e nada mais (ADR-0032) — não há node, satélite nem linha de estado
+    /// para apagar. E o ledger é append-only por GATILHO (`RAISE(ABORT)` em
+    /// UPDATE/DELETE): nem o próprio app reescreve a história.
+    ///
+    /// Então o único caminho honesto é o do ADR-0056, levado ao seu caso-limite.
+    /// No aporte, "excluir" eram DUAS coisas — apagar a linha de estado e apendar
+    /// a correção. Um marco não tem a primeira metade: sobra a segunda, e ela
+    /// sozinha É a operação. Apendamos um `Deleted` com o MESMO `entity_id`, e o
+    /// painel passa a ler os marcos descontando os retratados (`milestones`).
+    ///
+    /// O usuário vê o marco sumir da Carreira, que era o que ele queria; e o
+    /// ledger guarda os dois fatos, ambos verdadeiros no seu instante — que ele
+    /// registrou o marco, e que depois o retirou.
+    pub fn delete_milestone(&self, entity_id: &str) -> Result<LedgerEntry> {
+        // O evento original é a fonte do título e do tipo: a retratação carrega o
+        // mesmo `title_snapshot` para a Timeline poder dizer O QUE saiu, e não só
+        // que "algo saiu".
+        let history = self.ledger.for_entity(entity_id, MILESTONE_LIMIT)?;
+        let original = history
+            .iter()
+            .find(|e| {
+                e.entity_kind == LedgerEntityKind::CareerMilestone.as_str()
+                    && e.event_type == EventType::Created.as_str()
+            })
+            .ok_or_else(|| NexusError::NotFound(format!("marco de carreira {entity_id}")))?;
+
+        // Retratar duas vezes não é um erro (o segundo clique de uma UI lenta),
+        // mas também não empilha um evento a mais.
+        if let Some(previous) = history
+            .iter()
+            .find(|e| e.event_type == EventType::Deleted.as_str())
+        {
+            return Ok(previous.clone());
+        }
+
+        let event = NewLedgerEvent {
+            ts: self.clock.now_ms(),
+            // O dia da RETRATAÇÃO é hoje, não o dia do marco: ela aconteceu
+            // agora, e a Timeline conta os dois na sua data certa.
+            day: self.clock.today_local(),
+            entity_id: entity_id.to_string(),
+            entity_kind: LedgerEntityKind::CareerMilestone,
+            event_type: EventType::Deleted,
+            payload: json!({ "retractedDay": original.day }),
+            title_snapshot: original.title_snapshot.clone(),
+        };
+        let seq = self.ledger.append(&event)?;
+
+        Ok(LedgerEntry {
+            seq,
+            ts: event.ts,
+            day: event.day,
+            entity_id: event.entity_id,
+            entity_kind: event.entity_kind.as_str().to_string(),
+            event_type: event.event_type.as_str().to_string(),
+            payload: event.payload.to_string(),
+            title_snapshot: event.title_snapshot,
+        })
     }
 
     /* ===== Competências (M4.6) ===== */
@@ -169,6 +261,29 @@ impl CareerService {
             .into_iter()
             .map(|(day, level)| SkillPoint { day, level })
             .collect())
+    }
+
+    /// EXCLUI uma competência (BÚSSOLA, fase B).
+    ///
+    /// Uma competência É um node, então aqui vale a regra inteira do ADR-0056 —
+    /// ao contrário do marco de carreira, que não tem estado nenhum a apagar
+    /// (ver `delete_milestone`). O evento `Deleted` entra na mesma transação do
+    /// DELETE, e a trilha de níveis fica no ledger: o usuário tirou a competência
+    /// da tela, não a história de ter subido de nível nela.
+    pub fn delete_skill(&self, id: &str) -> Result<()> {
+        // Pelo repositório de competências, para um id de outro kind não ser
+        // apagado por um command chamado `delete_skill`.
+        let skill = self.skills.get(id)?;
+        let event = NewLedgerEvent {
+            ts: self.clock.now_ms(),
+            day: self.clock.today_local(),
+            entity_id: id.to_string(),
+            entity_kind: LedgerEntityKind::Node(Kind::Skill),
+            event_type: EventType::Deleted,
+            payload: json!({ "level": skill.level }),
+            title_snapshot: skill.title.clone(),
+        };
+        self.nodes.delete_with_event(id, &event)
     }
 
     /// As competências "em evolução" do painel: as que subiram de nível nos últimos

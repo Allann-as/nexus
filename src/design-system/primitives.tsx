@@ -11,7 +11,7 @@
 import type { ReactNode, ButtonHTMLAttributes } from "react";
 import type { LucideIcon } from "lucide-react";
 
-import { AstrolabeGlyph } from "./AstrolabeGlyph";
+import { EmptyGlyph } from "./EmptyGlyph";
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
@@ -127,11 +127,11 @@ export function Kbd({ children }: { children: ReactNode }) {
  * Every module ships one of these. A blank screen is a dead end; an empty
  * state tells you what this place is for and how to start.
  *
- * A ilustração é o emblema do astrolábio (§3.4) tingido pela Esfera, com o ícone
- * do módulo no núcleo — a mesma família geométrica dos fundos, agora concentrada
- * num símbolo. Cada tela passa a própria frase e a própria ação primária: o
- * "Nada por aqui ainda" genérico morre por construção, porque não há default de
- * texto para cair.
+ * A ilustração é o `EmptyGlyph`: um disco discreto na cor da Esfera com o ícone
+ * do módulo dentro, e nada mais — o ícone já é contextual em cada chamada, então
+ * a geometria não precisa dizer nada por cima dele. Cada tela passa a própria
+ * frase e a própria ação primária: o "Nada por aqui ainda" genérico morre por
+ * construção, porque não há default de texto para cair.
  */
 export function EmptyState({
   icon: Icon,
@@ -146,7 +146,7 @@ export function EmptyState({
 }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-5 px-6 text-center">
-      <AstrolabeGlyph icon={Icon} />
+      <EmptyGlyph icon={Icon} />
       <div className="space-y-1">
         <h2 className="text-[15px] font-medium text-[var(--text-primary)]">{title}</h2>
         <p className="max-w-[340px] text-[13px] leading-[20px] text-[var(--text-tertiary)]">

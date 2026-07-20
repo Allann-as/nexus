@@ -2272,3 +2272,144 @@ Esferas do sistema, marcador consumido, segundo boot não repete.
 **Consequência.** "Começar do zero" (Configurações → Backup & Dados) com confirmação forte (digitar
 "ZERAR") faz o backup, reinicia e recria o app vazio, sem perder nada de verdade nem esquecer o PIN.
 Verificado ao vivo o backup e a UI; o zeramento em si é provado pelo teste de boot.
+
+## ADR-0069 — A promessa do backup pré-migration não era verdade; agora é código, e só dispara quando há o que perder
+
+**Data:** 2026-07-20 · **Status:** aceito · **v1.2 (BÚSSOLA)** · **corrige a §6 do DATA_MODEL**
+
+**Contexto.** A §6 do DATA_MODEL dizia, desde o M5: *"Toda migration roda em transação, precedida de
+backup automático do arquivo (M5)."* Abrindo a v1.2 — a primeira versão a migrar um `%APPDATA%` com
+dados REAIS do usuário, e uma versão que traz migration nova (a 0016) — a linha foi conferida antes
+de escrever qualquer SQL. **Ela era falsa.** O `Db::open` fazia exatamente isto:
+
+```rust
+Self::quick_check(&writer)?;
+migrations::run(&mut writer)?;   // <- nada entre os dois
+```
+
+Nenhum backup, em lugar nenhum do caminho de abertura. O `BackupEngine` existia e era bom (ADR-0050),
+mas ninguém o chamava antes de migrar — e ele nem poderia ser chamado ali: ele precisa de um
+`Arc<Db>` que, neste ponto do boot, ainda não existe. A promessa vivia só na documentação.
+
+O risco não é teórico. A migration 0016 RECONSTRÓI `goal_details` (copiar, dropar, renomear), e as
+migrations de `nodes` do histórico do projeto fazem o mesmo com a tabela mais referenciada do schema,
+com as FKs desligadas. É precisamente o momento em que anos de história passam por SQL destrutivo.
+
+**Decisão.** `snapshot_before_migrating`, chamada entre o `quick_check` e o `run`:
+
+1. **Só dispara quando o banco vai de fato ser alterado** — `user_version` entre 1 e a versão
+   corrente. Um banco novo em folha (versão 0) sobe do zero e não tem nada a perder; um banco em dia
+   não vai ser tocado. Sem esse filtro, cada teste com `tempdir` e cada primeiro boot escreveriam um
+   snapshot inútil. O gate É a decisão: o snapshot existe para o upgrade, não para a abertura.
+
+2. **`VACUUM INTO`, não cópia de arquivo.** Sob WAL o `nexus.db` sozinho não é o banco — as escritas
+   recentes moram no `-wal`. Copiar o arquivo copiaria um estado velho, que é a pior espécie de
+   backup: o que parece existir e mente. É o mesmo motor do `BackupEngine::create`.
+
+3. **`.db` cru em `backups/pre-migration-AAAAMMDD-HHMMSS.db`, fora do padrão `nexus-*.zip`.** Não é um
+   backup do usuário: é uma apólice de suporte. Ficando fora do padrão de nome, a **retenção nunca o
+   poda** (`parse_stamp` o ignora) e ele não polui a lista da UI. Migrations são raras — 16 na vida
+   inteira do projeto —, então isso não acumula de forma relevante, e guardar um a mais custa muito
+   menos que não ter.
+
+4. **Falhar não impede o boot.** Pasta cheia ou somente-leitura vira um `warn` no log, e o app abre.
+   O NEXUS não pode se recusar a iniciar por causa da própria apólice.
+
+**Consequência.** Dois testes prendem o comportamento: `a_brand_new_database_is_not_snapshotted` (o
+gate, nas duas direções — banco novo e banco em dia) e
+`a_database_behind_the_schema_is_snapshotted_before_migrating`, que não se contenta em ver o arquivo
+aparecer: ele abre o snapshot, roda `quick_check` e lê o dado de dentro. Um backup que não restaura é
+teatro, e a regra de ouro do M5 vale aqui igual.
+
+A lição que fica registrada: **uma linha de documentação não é uma garantia.** Esta promessa
+sobreviveu do M5 até a v1.2 sem código por baixo, e só caiu porque a v1.2 foi obrigada a olhar para
+ela. Toda afirmação de segurança na doc deveria ter um teste com o nome dela.
+
+## ADR-0070 — A marca vira uma BÚSSOLA: a mesma metáfora, numa silhueta que se lê a 32px
+
+**Data:** 2026-07-20 · **Status:** aceito · **v1.2 (BÚSSOLA), fase A** · **substitui o ADR-0043**
+
+**Contexto.** O ADR-0043 escolheu o ASTROLÁBIO e defendeu bem: anéis concêntricos como as esferas da
+vida, o limbo graduado como instrumento de medida, a alidade cruzando o centro, o núcleo como o nexo.
+A metáfora estava certa — *o instrumento com que se navega a própria vida*.
+
+O uso real reprovou a EXECUÇÃO, não a metáfora. Palavras do dono do app, depois de uma semana
+olhando para ela todo dia: *"abstrata, não faz o menor sentido"*. E ele tem razão pela geometria:
+quatro anéis, sessenta tiques de limbo e uma alidade a −34° são detalhe que **recompensa o zoom** —
+e a marca não vive no zoom. Ela vive a 28px na rail, a 32px na bandeja, a 16px no favicon. Nesses
+tamanhos o astrolábio é um borrão cinza redondo.
+
+**Decisão.** A BÚSSOLA — uma rosa dos ventos de 4 pontas com a agulha do norte destacada.
+
+1. **A metáfora é a MESMA, e fica até melhor.** Bússola é o instrumento que orienta; o NEXUS é o
+   instrumento com que o dono orienta a vida. Não se perdeu conceito na troca — perdeu-se ruído.
+
+2. **A silhueta é o ativo, não o detalhe.** Uma estrela de 4 pontas com um braço mais claro que os
+   outros é reconhecível em qualquer tamanho, porque a informação está na FORMA e num único contraste,
+   não em micro-traços. A graduação sobrou apenas como 8 marcas cardeais — ela existe para dizer
+   "instrumento de medida" e para de existir antes de virar granulado.
+
+3. **Inverte-se a relação com a cor da marca.** O astrolábio era desenhado NA rampa índigo. A bússola
+   é branca sobre um squircle índigo. O índigo continua sendo a marca — ele virou o FUNDO. Branco
+   contra índigo escuro é o contraste que sobrevive ao downscale; índigo-médio contra índigo-escuro
+   não é. O ADR-0043 §3 segue valendo no que importa: um logo tem UMA identidade, não se tinge com o
+   tema nem com a Esfera, e por isso é o único lugar do app onde hex cru não é bug.
+
+4. **A grade continua sendo o desenho.** Centro 120 num quadro 240, anel em 96, pontas da rosa em 76,
+   cintura em 26, pivô em 9. Os mesmos números em três lugares: `design-system/NexusMark.tsx` (a marca
+   in-app), `docs/logo-concepts-v2/compass/appicon.svg` (a variante BOLD que alimenta o `tauri icon`)
+   e o splash cru do `index.html`. Três desenhos, uma geometria.
+
+5. **A variante do bundle é engrossada, não é a mesma arte.** Anel a 5, marcas cardeais a 7, pivô a
+   11 — o nível "ícone simplificado" da receita do ADR-0043 §4, que aqui deixa de ser uma nota de
+   rodapé e vira a arte que de fato vai para o `.ico`.
+
+**Consequência.** A família geométrica dos fundos, o emblema dos empty states, o splash, a tela de
+bloqueio e os ícones do bundle migram todos do astrolábio para a bússola. Os conceitos do ADR-0043
+seguem arquivados em `docs/logo-concepts-v2/` — a marca foi revista a partir de um ponto de partida
+rico, não de um recomeço.
+
+## ADR-0071 — Metas ganham TIPO; os degraus são os `milestone` que já existiam
+
+**Data:** 2026-07-20 · **Status:** aceito · **v1.2 (BÚSSOLA), fase C** · **migration 0016**
+
+**Contexto.** O formulário "Nova meta" era um só para o app inteiro, e era quantitativo: métrica,
+valor de hoje, alvo, unidade. Em uso real isso recusou a vida do dono. *"Conseguir um emprego"* não
+tem métrica. *"Sair do básico ao avançado em inglês"* não é um número. E o placeholder "Perder 10 kg"
+aparecia até dentro de Finanças.
+
+A recusa não era da UI: era do BANCO. `goal_details` nasceu na 0001 com `metric_name`, `start_value`,
+`target_value`, `unit` e `direction` **todos NOT NULL**. O formulário não podia sequer oferecer outro
+tipo, porque a linha seria rejeitada. Vale notar que a 0012 já sabia disso: `annual_goal_details`
+nasceu com `goal_kind` e com as colunas de métrica nullable, e o comentário dela diz explicitamente
+que reusa *o padrão* de goal, não a tabela.
+
+**Decisão.** Três tipos, e **nenhuma tabela nova para os degraus**.
+
+1. **`goal_kind` em `goal_details`**: `'quantitative'` (o formato de sempre), `'binary'` (a conquista:
+   só título e prazo) e `'staged'` (a escada de níveis nomeados: Básico → Fluente).
+
+2. **As cinco colunas de métrica viram nullable, e o NOT NULL é substituído por um CHECK POR TIPO.**
+   Nullable não pode virar opcional: uma quantitativa sem alvo é uma barra que ninguém alimenta, e uma
+   conquista com `target_value` é uma meta que finge ter número. O CHECK de tabela exige os cinco
+   campos quando o tipo é quantitativo e proíbe os cinco quando não é. Um segundo CHECK garante que
+   uma meta sem métrica meça por degraus (`progress_source='milestones'`) — pedir uma divisão por um
+   alvo inexistente seria o caminho silencioso para um NaN na tela.
+
+3. **Os DEGRAUS são os `milestone` da 0007.** Um sub-desafio já é um node ordenado com `parent_id` = a
+   meta e `nodes.status='done'` como o checkbox. Uma escada "Básico → Intermediário → Avançado →
+   Fluente" é exatamente isso: quatro deles em ordem, e o degrau atual é a contagem dos concluídos.
+   Nada de tabela de estágios, nada de kind novo. O que o C2 pede — degraus dentro de qualquer meta,
+   uns simples e outros alimentados por um hábito — **já existia inteiro no schema desde o M3** e só
+   nunca tinha sido exposto na UI: `milestone_details.kind='counter'` com `habit_id` e `counts_from`
+   está implementado, testado e inalcançável pelo frontend, que só sabia criar `simple`.
+
+4. **A reconstrução de `goal_details` é barata, e é por isso que ela pôde acontecer.** Recriar `nodes`
+   custa as três armadilhas do 12-step (CASCADE, rowid do FTS, rename dos gatilhos). `goal_details` não
+   tem nenhuma delas: nenhum gatilho de FTS a menciona, nada indexa o rowid dela, e quem a referencia
+   (`goal_checkpoints`) aponta para a PK, que volta idêntica. Provado por teste, incluindo um
+   `foreign_key_check` explícito depois da migração de um banco semeado na 0015.
+
+**Consequência.** O formulário passa a perguntar o tipo primeiro, e cada Esfera pode sugerir o seu
+(fase C3) sem uma linha de código por Esfera — é catálogo, não `if`. A individualidade que o dono
+pediu sai de configuração; o schema só precisou parar de assumir que toda meta é um número.

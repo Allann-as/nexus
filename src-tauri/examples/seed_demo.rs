@@ -25,7 +25,7 @@ use nexus_lib::application::use_cases::{
 };
 use nexus_lib::domain::entities::CareerMilestoneKind;
 use nexus_lib::domain::entities::{
-    AssetClass, Direction, Kind, MilestoneKind, ProgressSource, Template,
+    AssetClass, Direction, GoalKind, Kind, MilestoneKind, ProgressSource, Template,
 };
 use nexus_lib::domain::recurrence::Recurrence;
 use nexus_lib::domain::schedule::{format_day, parse_day, Schedule};
@@ -91,7 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let goals = GoalService {
         goals: goal_repo,
-        nodes: node_repo,
+        nodes: node_repo.clone(),
         areas: area_repo.clone(),
         ids: ids.clone(),
         clock: clock.clone(),
@@ -105,6 +105,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let fin_goals = FinGoalService {
         fin_goals: fin_goal_repo,
+        nodes: node_repo.clone(),
         areas: area_repo.clone(),
         ids: ids.clone(),
         clock: clock.clone(),
@@ -118,6 +119,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ledger_repo: Arc<dyn LedgerRepository> = Arc::new(SqliteLedgerRepository::new(db.clone()));
     let career = CareerService {
         skills: Arc::new(SqliteSkillRepository::new(db.clone())),
+        nodes: node_repo.clone(),
         areas: area_repo.clone(),
         ledger: ledger_repo,
         ids: ids.clone(),
@@ -508,11 +510,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         title: "Perder 10 kg".into(),
         area_id: Some(saude.id.clone()),
         details: NewGoalDetails {
-            metric_name: "Peso".into(),
-            start_value: 82.0,
-            target_value: 72.0,
-            unit: "kg".into(),
-            direction: Direction::Decrease,
+            goal_kind: GoalKind::Quantitative,
+            metric_name: Some("Peso".into()),
+            start_value: Some(82.0),
+            target_value: Some(72.0),
+            unit: Some("kg".into()),
+            direction: Some(Direction::Decrease),
             deadline: Some(at(today + chrono::Duration::days(150), 12, 0)),
             progress_source: ProgressSource::Metric,
         },
@@ -578,11 +581,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         title: "Ler 12 livros no ano".into(),
         area_id: Some(carreira.id.clone()),
         details: NewGoalDetails {
-            metric_name: "Livros lidos".into(),
-            start_value: 0.0,
-            target_value: 12.0,
-            unit: "livros".into(),
-            direction: Direction::Increase,
+            goal_kind: GoalKind::Quantitative,
+            metric_name: Some("Livros lidos".into()),
+            start_value: Some(0.0),
+            target_value: Some(12.0),
+            unit: Some("livros".into()),
+            direction: Some(Direction::Increase),
             deadline: None,
             progress_source: ProgressSource::Milestones,
         },
@@ -835,6 +839,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ===== Temporadas (M4.5) =====
     let challenges = ChallengeService {
         challenges: Arc::new(SqliteChallengeRepository::new(db.clone())),
+        nodes: node_repo.clone(),
         areas: area_repo.clone(),
         habits: Arc::new(SqliteHabitRepository::new(db.clone())),
         ids: ids.clone(),

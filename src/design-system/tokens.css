@@ -60,12 +60,15 @@
 
   /* Opacidades das camadas de fundo (ver .nx-page). Ficam aqui e
      não hardcoded porque o tema claro precisa de outras. */
-  --dot-alpha: 0.04;
   --aurora-alpha: 0.16;
-  /* A geometria do astrolábio de fundo (ver .nx-page::before/::after). Tingida
-     pela Esfera ativa; baixa o bastante para não competir com o texto, alta o
-     bastante para aparecer num screenshot a 100%. Subida no REFINO R3 (era 0.07):
-     a composição mais rica pede um pouco mais de presença. */
+  /* Os anéis da bússola no fundo (ver .nx-page::before). Tingidos pela Esfera
+     ativa; baixos o bastante para não competir com o texto, altos o bastante
+     para aparecer num screenshot a 100%.
+
+     v1.2: o `--dot-alpha` que morava aqui foi REMOVIDO junto com o dot grid.
+     A composição do M5.5 empilhava astrolábio + aurora + grão + anéis
+     desfocados + grade de pontos, e em uso real isso virou ruído ("o fundo do
+     NEXUS é péssimo"). Sobrou uma camada de geometria só. */
   --astro-alpha: 0.12;
   /* O grão da camada de viewport (ver .nx-viewport-fx). Alto o
      bastante para dar casca ao fundo, baixo o bastante para sumir
@@ -111,7 +114,6 @@
   --shadow-float: 0 16px 48px rgb(15 23 42 / 0.14);
   --glow-accent: 0 0 0 1px rgb(79 70 229 / 0.18), 0 8px 28px rgb(79 70 229 / 0.1);
 
-  --dot-alpha: 0.055;
   --aurora-alpha: 0.09;
   --grain-alpha: 0.04;
   /* Sobre branco a mesma geometria precisa de menos alfa — a linha fina escura

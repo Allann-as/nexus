@@ -152,6 +152,57 @@ impl Status {
     }
 }
 
+/// O TIPO de uma meta (BÚSSOLA, fase C).
+///
+/// Espelha o CHECK de `goal_details.goal_kind` (0016). Fechado porque decide o
+/// que a meta PODE ter: `quantitative` exige os cinco campos de métrica,
+/// `binary` e `staged` proíbem todos os cinco — é o mesmo CHECK de tabela da
+/// 0016, dito de novo aqui, onde a mensagem de erro pode ser em português.
+///
+/// Não se confunde com `AnnualGoalKind`: aquele é da meta ANUAL (satélite
+/// `annual_goal_details`, 0012) e só tem dois valores. São duas entidades
+/// diferentes que reusam o PADRÃO, não a tabela.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GoalKind {
+    /// A meta de sempre: métrica, ponto de partida, alvo e unidade.
+    Quantitative,
+    /// A CONQUISTA — "conseguir um emprego". Só título e prazo; o progresso vem
+    /// dos degraus, ou do ato de concluir.
+    Binary,
+    /// A ESCADA de níveis nomeados — "Básico -> Fluente". O progresso é o degrau
+    /// atual sobre o total, e os degraus SÃO os sub-desafios, em `sort_order`.
+    Staged,
+}
+
+impl GoalKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            GoalKind::Quantitative => "quantitative",
+            GoalKind::Binary => "binary",
+            GoalKind::Staged => "staged",
+        }
+    }
+
+    pub fn parse(s: &str) -> Result<Self> {
+        Ok(match s {
+            "quantitative" => GoalKind::Quantitative,
+            "binary" => GoalKind::Binary,
+            "staged" => GoalKind::Staged,
+            other => {
+                return Err(NexusError::Validation(format!(
+                    "tipo de meta desconhecido: {other} (esperado 'quantitative', 'binary' ou 'staged')"
+                )))
+            }
+        })
+    }
+
+    /// Uma meta sem métrica não tem o que dividir: ela só mede pelos degraus.
+    pub fn is_quantitative(self) -> bool {
+        matches!(self, GoalKind::Quantitative)
+    }
+}
+
 /// Para que lado uma meta quantitativa anda.
 ///
 /// Espelha o CHECK de `goal_details.direction` (0001). Não é dedutível de

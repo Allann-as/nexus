@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PiggyBank } from "lucide-react";
 
+import { DatePicker } from "../../design-system/DatePicker";
 import { Modal, ModalHeader } from "../../design-system/Modal";
 import { Button, cx } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
@@ -150,11 +151,12 @@ export function NewCaixinhaModal({
             )}
 
             <Field label="Prazo (opcional)">
-              <input
-                type="date"
+              <DatePicker
                 value={deadline}
-                onChange={(e) => setDeadline(e.target.value)}
-                className="h-10 w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-3 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--sphere)]"
+                onChange={(d) => setDeadline(d ?? "")}
+                clearable
+                placeholder="Sem prazo"
+                ariaLabel="Prazo da caixinha"
               />
             </Field>
 

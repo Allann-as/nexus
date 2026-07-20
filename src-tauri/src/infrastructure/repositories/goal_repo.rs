@@ -8,7 +8,7 @@ use crate::application::ports::{
     Checkpoint, Goal, GoalRepository, Milestone, NewCheckpoint, NewGoalDetails, NewMilestone,
     NewNode,
 };
-use crate::domain::entities::{Direction, MilestoneKind, ProgressSource};
+use crate::domain::entities::{Direction, GoalKind, MilestoneKind, ProgressSource};
 use crate::domain::errors::{NexusError, Result};
 use crate::domain::ledger::NewLedgerEvent;
 use crate::infrastructure::db::Db;
@@ -26,7 +26,7 @@ impl SqliteGoalRepository {
 }
 
 const SELECT_GOAL: &str = "
-    SELECT n.id, n.title, n.area_id, n.status,
+    SELECT n.id, n.title, n.area_id, n.status, g.goal_kind,
            g.metric_name, g.start_value, g.target_value, g.unit, g.direction,
            g.deadline, g.progress_source
       FROM nodes n
@@ -62,19 +62,27 @@ fn to_sql_err(e: NexusError) -> rusqlite::Error {
 }
 
 fn map_goal(row: &Row) -> rusqlite::Result<Goal> {
-    let direction: String = row.get(8)?;
-    let source: String = row.get(10)?;
+    let kind: String = row.get(4)?;
+    // NULL numa meta 'binary'/'staged' — o `transpose` mantém "sem direção" e
+    // "direção ilegível" como coisas diferentes (0016).
+    let direction: Option<String> = row.get(9)?;
+    let source: String = row.get(11)?;
     Ok(Goal {
         id: row.get(0)?,
         title: row.get(1)?,
         area_id: row.get(2)?,
         status: row.get(3)?,
-        metric_name: row.get(4)?,
-        start_value: row.get(5)?,
-        target_value: row.get(6)?,
-        unit: row.get(7)?,
-        direction: Direction::parse(&direction).map_err(to_sql_err)?,
-        deadline: row.get(9)?,
+        goal_kind: GoalKind::parse(&kind).map_err(to_sql_err)?,
+        metric_name: row.get(5)?,
+        start_value: row.get(6)?,
+        target_value: row.get(7)?,
+        unit: row.get(8)?,
+        direction: direction
+            .as_deref()
+            .map(Direction::parse)
+            .transpose()
+            .map_err(to_sql_err)?,
+        deadline: row.get(10)?,
         progress_source: ProgressSource::parse(&source).map_err(to_sql_err)?,
     })
 }
@@ -120,16 +128,17 @@ impl GoalRepository for SqliteGoalRepository {
             insert_in_tx(&tx, id, node, event.ts)?;
             tx.execute(
                 "INSERT INTO goal_details
-                   (node_id, metric_name, start_value, target_value, unit, direction,
-                    deadline, progress_source)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                   (node_id, goal_kind, metric_name, start_value, target_value, unit,
+                    direction, deadline, progress_source)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     id,
+                    d.goal_kind.as_str(),
                     d.metric_name,
                     d.start_value,
                     d.target_value,
                     d.unit,
-                    d.direction.as_str(),
+                    d.direction.map(Direction::as_str),
                     d.deadline,
                     d.progress_source.as_str(),
                 ],
@@ -459,15 +468,42 @@ mod tests {
                 parent_id: None,
             },
             &NewGoalDetails {
-                metric_name: "Peso".into(),
-                start_value: 90.0,
-                target_value: 80.0,
-                unit: "kg".into(),
-                direction: Direction::Decrease,
+                goal_kind: GoalKind::Quantitative,
+                metric_name: Some("Peso".into()),
+                start_value: Some(90.0),
+                target_value: Some(80.0),
+                unit: Some("kg".into()),
+                direction: Some(Direction::Decrease),
                 deadline: None,
                 progress_source: ProgressSource::Metric,
             },
             &ledger_event("g1", Kind::Goal),
+        )
+        .unwrap()
+    }
+
+    /// Uma meta SEM métrica (0016): os cinco campos em NULL e a fonte nos
+    /// degraus — é o que o CHECK de tabela exige de uma 'binary'/'staged'.
+    fn metricless_goal(repo: &SqliteGoalRepository, id: &str, kind: GoalKind) -> Goal {
+        repo.create_with_event(
+            id,
+            &NewNode {
+                kind: Kind::Goal,
+                title: "Conseguir um emprego".into(),
+                area_id: None,
+                parent_id: None,
+            },
+            &NewGoalDetails {
+                goal_kind: kind,
+                metric_name: None,
+                start_value: None,
+                target_value: None,
+                unit: None,
+                direction: None,
+                deadline: None,
+                progress_source: ProgressSource::Milestones,
+            },
+            &ledger_event(id, Kind::Goal),
         )
         .unwrap()
     }
@@ -504,7 +540,8 @@ mod tests {
         let (_dir, db, repo) = fixture();
         let g = goal(&repo);
         assert_eq!(g.progress_source, ProgressSource::Metric);
-        assert_eq!(g.direction, Direction::Decrease);
+        assert_eq!(g.goal_kind, GoalKind::Quantitative);
+        assert_eq!(g.direction, Some(Direction::Decrease));
 
         let logged: i64 = db
             .with_read(|c| {
@@ -516,6 +553,50 @@ mod tests {
             })
             .unwrap();
         assert_eq!(logged, 1);
+    }
+
+    #[test]
+    fn a_goal_without_a_metric_round_trips_as_nulls() {
+        // A 0016 tornou os cinco campos NULLABLE. O repositório tem que gravar e
+        // reler o NULL como `None` — se ele mandasse string vazia ou zero, o
+        // CHECK de tabela recusaria a linha, e a barra teria um alvo falso.
+        let (_dir, _db, repo) = fixture();
+        for (id, kind) in [("gb", GoalKind::Binary), ("gs", GoalKind::Staged)] {
+            let g = metricless_goal(&repo, id, kind);
+            assert_eq!(g.goal_kind, kind);
+            for field in [g.metric_name.is_none(), g.unit.is_none()] {
+                assert!(field, "{id}: um campo de métrica veio preenchido");
+            }
+            assert!(g.start_value.is_none());
+            assert!(g.target_value.is_none());
+            assert!(g.direction.is_none());
+            assert_eq!(g.progress_source, ProgressSource::Milestones);
+
+            // E relendo do banco, não só do INSERT que acabou de rodar.
+            assert_eq!(repo.get(id).unwrap().goal_kind, kind);
+        }
+    }
+
+    #[test]
+    fn the_goal_kind_default_comes_from_the_migration() {
+        // A 0016 reconstruiu a tabela com DEFAULT 'quantitative' — é o que toda
+        // linha anterior a ela é. Uma meta gravada sem a coluna tem que
+        // continuar legível.
+        let (_dir, db, _repo) = fixture();
+        db.with_write(|c| {
+            c.execute_batch(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('g0', 'goal', 'Meta antiga', 0, 0);
+                 INSERT INTO goal_details
+                        (node_id, metric_name, start_value, target_value, unit, direction)
+                      VALUES ('g0', 'Peso', 90, 80, 'kg', 'decrease');",
+            )?;
+            Ok(())
+        })
+        .unwrap();
+
+        let repo = SqliteGoalRepository::new(db);
+        assert_eq!(repo.get("g0").unwrap().goal_kind, GoalKind::Quantitative);
     }
 
     #[test]

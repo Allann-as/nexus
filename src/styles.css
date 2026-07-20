@@ -88,167 +88,107 @@
 }
 
 /* ============================================================
-   O FUNDO — três camadas, custo ~zero
+   O FUNDO — sobriedade, custo zero
    ------------------------------------------------------------
-   A regra do Midnight: nenhum container de página é chapado.
-   Toda tela empilha, de baixo para cima:
+   A v1.1 empilhava aurora + dot grid + a geometria do astrolábio +
+   grão + vinheta. Cada camada era defensável sozinha; somadas
+   viraram RUÍDO, e o dono do app leu o resultado como "péssimo". A
+   referência que ele trouxe (a tela de bloqueio de um app de banco)
+   faz o oposto: quase preto, dois ou três aros finos, e vazio.
 
-     1. --bg-base sólido        (o navy)
-     2. dot grid                (a textura)
-     3. aurora radial           (a identidade — na cor da Esfera)
+   Então o fundo agora tem DUAS camadas, de baixo para cima:
 
-   Tudo `background-image` ESTÁTICO no mesmo elemento. Zero
-   elementos extras no DOM, zero canvas, zero partícula, zero
-   frame de animação. O fundo não custa nada porque não faz nada:
-   quem se move são os DADOS.
+     1. --bg-base sólido                (a superfície)
+     2. uma aurora única e fraca        (a cor da Esfera, só um sopro)
+     3. .nx-page::before                (os aros da bússola, fora de centro)
 
-   A cor da aurora vem de `--sphere`, que a tela define. Uma
-   propriedade, e a Esfera Saúde fica verde inteira.
+   Sem dot grid, sem segunda aurora, sem as bandas de anel borradas.
+   Tudo `background-image` ESTÁTICO no mesmo elemento: zero DOM extra,
+   zero canvas, zero frame de animação, zero backdrop-filter. O fundo
+   não custa nada porque não faz nada — quem se move são os DADOS.
+
+   A cor vem de `--sphere`, que a tela define. Uma propriedade, e a
+   Esfera Saúde fica verde inteira.
    ============================================================ */
 @layer components {
   .nx-page {
     position: relative;
     background-color: var(--bg-base);
 
-    /* Ordem importa: o primeiro é o mais alto da pilha.
-       - Aurora 1: o brilho principal, no alto à direita.
-       - Aurora 2: um eco frio no canto oposto, para o fundo não
-         ficar simétrico demais (simetria lê como wallpaper).
-       - Dot grid: a textura por baixo de tudo. */
-    background-image:
-      radial-gradient(
-        900px 420px at 80% -10%,
-        color-mix(in srgb, var(--sphere) calc(var(--aurora-alpha) * 100%), transparent),
-        transparent 70%
-      ),
-      radial-gradient(
-        700px 380px at 5% 0%,
-        color-mix(in srgb, var(--accent-deep) calc(var(--aurora-alpha) * 55%), transparent),
-        transparent 72%
-      ),
-      /* B4 — o SEGUNDO PLANO de profundidade: dois anéis GRANDES e desfocados, um
-         subindo do canto inferior esquerdo, outro descendo do topo. Bandas soltas
-         num radial (transparente → cor fininha → transparente) desenham o aro sem
-         custo — nada anima, é o mesmo preço de um gradiente parado. */
-      radial-gradient(
-        1200px 1200px at 10% 116%,
-        transparent 45%,
-        color-mix(in srgb, var(--sphere) 7%, transparent) 49%,
-        transparent 54%
-      ),
-      radial-gradient(
-        1000px 1000px at 96% -16%,
-        transparent 52%,
-        color-mix(in srgb, var(--accent-bright) 6%, transparent) 56%,
-        transparent 61%
-      ),
-      radial-gradient(
-        circle,
-        rgb(255 255 255 / var(--dot-alpha)) 1px,
-        transparent 1px
-      );
-    background-size:
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      26px 26px;
-    background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, repeat;
-    background-attachment: local, local, local, local, local;
+    /* A aurora, no alto à direita e MUITO abaixo do que era: ela existe
+       para o fundo não ser chapado, não para ser vista. */
+    background-image: radial-gradient(
+      1000px 480px at 82% -12%,
+      color-mix(in srgb, var(--sphere) calc(var(--aurora-alpha) * 55%), transparent),
+      transparent 72%
+    );
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    background-attachment: local;
   }
 
-  /* O dot grid do tema claro precisa ser escuro sobre branco —
-     pontos brancos sobre #f4f6fb são invisíveis. */
+  /* No tema claro a mesma aurora pesa mais sobre branco — encolhe. */
   :root[data-theme="light"] .nx-page {
-    background-image:
-      radial-gradient(
-        900px 420px at 80% -10%,
-        color-mix(in srgb, var(--sphere) calc(var(--aurora-alpha) * 100%), transparent),
-        transparent 70%
-      ),
-      radial-gradient(
-        700px 380px at 5% 0%,
-        color-mix(in srgb, var(--accent-deep) calc(var(--aurora-alpha) * 55%), transparent),
-        transparent 72%
-      ),
-      radial-gradient(
-        1200px 1200px at 10% 116%,
-        transparent 45%,
-        color-mix(in srgb, var(--sphere) 8%, transparent) 49%,
-        transparent 54%
-      ),
-      radial-gradient(
-        1000px 1000px at 96% -16%,
-        transparent 52%,
-        color-mix(in srgb, var(--accent-deep) 7%, transparent) 56%,
-        transparent 61%
-      ),
-      radial-gradient(circle, rgb(12 20 36 / var(--dot-alpha)) 1px, transparent 1px);
+    background-image: radial-gradient(
+      1000px 480px at 82% -12%,
+      color-mix(in srgb, var(--sphere) calc(var(--aurora-alpha) * 45%), transparent),
+      transparent 72%
+    );
   }
 
   /* ============================================================
-     A GEOMETRIA DO ASTROLÁBIO — a marca vira o fundo (M5.5 §3.2)
+     OS AROS DA BÚSSOLA — a marca vira o fundo, em voz baixa
      ------------------------------------------------------------
-     A aurora e o dot grid dão profundidade, mas são genéricos — qualquer app
-     escuro os teria. Aqui entra a IDENTIDADE: a mesma geometria do NexusMark
-     (anéis concêntricos, limbo graduado, alidade, constelação) desenhada FORA
-     DE CENTRO em cada seção, na cor da Esfera ativa.
+     A identidade do fundo é a MESMA família da marca (`NexusMark`):
+     círculos concêntricos finos com marcas cardeais. Só isso — três
+     aros e oito tiques, sem rosa dos ventos, sem limbo graduado, sem
+     constelação. O fundo cita o instrumento; ele não é o instrumento.
 
      Como funciona sem custo e sem tocar cada tela:
-       - São dois pseudo-elementos de `.nx-page` — zero DOM, presentes em toda
-         página por construção (a régua do §3.1 garante que TODA tela é `.nx-page`).
-       - A geometria é uma MÁSCARA (SVG branco sobre transparente, data-URI, zero
-         rede). A COR vem de `background-color: var(--sphere)` — então a mesma
-         máscara se tinge com a Esfera, e um SVG serve às cinco.
+       - UM pseudo-elemento de `.nx-page` — zero DOM, presente em toda
+         página por construção (a régua do §3.1 garante que TODA tela é
+         `.nx-page`).
+       - A geometria é uma MÁSCARA (SVG branco sobre transparente,
+         data-URI, zero rede). A COR vem de `background-color:
+         var(--sphere)` — então a mesma máscara se tinge com a Esfera, e
+         um SVG serve às cinco. É por isso que a técnica da máscara fica.
+       - FORA DE CENTRO e sangrando pelo canto: centrado leria como
+         wallpaper, não como composição.
        - Estático: nada anima. O custo é o de pintar um gradiente parado.
+       - O tema claro herda tudo; só a opacidade muda, via `--astro-alpha`
+         (o token que governa a presença desta camada, definido em
+         `design-system/tokens.css` para os dois temas).
 
      `isolation: isolate` cria o contexto de empilhamento que PRENDE o
-     `z-index: -1` dentro do `.nx-page`: a geometria fica ACIMA do fundo em
+     `z-index: -1` dentro do `.nx-page`: os aros ficam ACIMA do fundo em
      camadas e ABAIXO de todo card e texto, sem vazar para trás da janela. */
   .nx-page {
     isolation: isolate;
   }
 
-  .nx-page::before,
-  .nx-page::after {
+  .nx-page::before {
     content: "";
     position: absolute;
     z-index: -1;
     pointer-events: none;
+    top: -220px;
+    right: -240px;
+    width: 780px;
+    height: 780px;
     background-color: var(--sphere);
     opacity: var(--astro-alpha);
     -webkit-mask-repeat: no-repeat;
     mask-repeat: no-repeat;
     -webkit-mask-size: contain;
     mask-size: contain;
-  }
-
-  /* Composição A: o astrolábio inteiro, sangrando pelo canto superior direito. */
-  .nx-page::before {
-    top: -230px;
-    right: -190px;
-    width: 640px;
-    height: 640px;
-    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 600' fill='none'%3E%3Cline x1='300' y1='28' x2='300' y2='54' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='328.43' y1='29.49' x2='327.6' y2='37.45' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='356.55' y1='33.94' x2='354.89' y2='41.77' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='384.05' y1='41.31' x2='381.58' y2='48.92' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='410.63' y1='51.52' x2='407.38' y2='58.82' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='436' y1='64.44' x2='423' y2='86.96' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='459.88' y1='79.95' x2='455.18' y2='86.42' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='482' y1='97.86' x2='476.65' y2='103.81' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='502.14' y1='118' x2='496.19' y2='123.35' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='520.05' y1='140.12' x2='513.58' y2='144.82' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='535.56' y1='164' x2='513.04' y2='177' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='548.48' y1='189.37' x2='541.18' y2='192.62' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='558.69' y1='215.95' x2='551.08' y2='218.42' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='566.06' y1='243.45' x2='558.23' y2='245.11' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='570.51' y1='271.57' x2='562.55' y2='272.4' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='572' y1='300' x2='546' y2='300' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='570.51' y1='328.43' x2='562.55' y2='327.6' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='566.06' y1='356.55' x2='558.23' y2='354.89' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='558.69' y1='384.05' x2='551.08' y2='381.58' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='548.48' y1='410.63' x2='541.18' y2='407.38' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='535.56' y1='436' x2='513.04' y2='423' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='520.05' y1='459.88' x2='513.58' y2='455.18' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='502.14' y1='482' x2='496.19' y2='476.65' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='482' y1='502.14' x2='476.65' y2='496.19' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='459.88' y1='520.05' x2='455.18' y2='513.58' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='436' y1='535.56' x2='423' y2='513.04' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='410.63' y1='548.48' x2='407.38' y2='541.18' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='384.05' y1='558.69' x2='381.58' y2='551.08' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='356.55' y1='566.06' x2='354.89' y2='558.23' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='328.43' y1='570.51' x2='327.6' y2='562.55' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='300' y1='572' x2='300' y2='546' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='271.57' y1='570.51' x2='272.4' y2='562.55' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='243.45' y1='566.06' x2='245.11' y2='558.23' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='215.95' y1='558.69' x2='218.42' y2='551.08' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='189.37' y1='548.48' x2='192.62' y2='541.18' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='164' y1='535.56' x2='177' y2='513.04' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='140.12' y1='520.05' x2='144.82' y2='513.58' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='118' y1='502.14' x2='123.35' y2='496.19' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='97.86' y1='482' x2='103.81' y2='476.65' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='79.95' y1='459.88' x2='86.42' y2='455.18' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='64.44' y1='436' x2='86.96' y2='423' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='51.52' y1='410.63' x2='58.82' y2='407.38' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='41.31' y1='384.05' x2='48.92' y2='381.58' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='33.94' y1='356.55' x2='41.77' y2='354.89' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='29.49' y1='328.43' x2='37.45' y2='327.6' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='28' y1='300' x2='54' y2='300' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='29.49' y1='271.57' x2='37.45' y2='272.4' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='33.94' y1='243.45' x2='41.77' y2='245.11' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='41.31' y1='215.95' x2='48.92' y2='218.42' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='51.52' y1='189.37' x2='58.82' y2='192.62' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='64.44' y1='164' x2='86.96' y2='177' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='79.95' y1='140.12' x2='86.42' y2='144.82' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='97.86' y1='118' x2='103.81' y2='123.35' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='118' y1='97.86' x2='123.35' y2='103.81' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='140.12' y1='79.95' x2='144.82' y2='86.42' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='164' y1='64.44' x2='177' y2='86.96' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='189.37' y1='51.52' x2='192.62' y2='58.82' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='215.95' y1='41.31' x2='218.42' y2='48.92' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='243.45' y1='33.94' x2='245.11' y2='41.77' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='271.57' y1='29.49' x2='272.4' y2='37.45' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Ccircle cx='300' cy='300' r='272' fill='none' stroke='%23fff' stroke-width='2'/%3E%3Ccircle cx='300' cy='300' r='228' fill='none' stroke='%23fff' stroke-width='1.6'/%3E%3Ccircle cx='300' cy='300' r='176' fill='none' stroke='%23fff' stroke-width='1.3'/%3E%3Ccircle cx='300' cy='300' r='120' fill='none' stroke='%23fff' stroke-width='1.1'/%3E%3Cline x1='153.49' y1='82.79' x2='446.51' y2='517.21' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='445.91' y1='201.58' x2='154.09' y2='398.42' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cpath d='M385.51,65.08 A250,250 0 0 1 425,516.51' fill='none' stroke='%23fff' stroke-width='1.4'/%3E%3Cpath d='M229.89,492.64 A205,205 0 0 1 168.23,142.96' fill='none' stroke='%23fff' stroke-width='1.2'/%3E%3Ccircle cx='300' cy='300' r='52' fill='none' stroke='%23fff' stroke-width='1'/%3E%3Ccircle cx='300' cy='300' r='6' fill='%23fff'/%3E%3Cline x1='300' y1='290' x2='300' y2='280' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='307.07' y1='292.93' x2='314.14' y2='285.86' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='310' y1='300' x2='320' y2='300' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='307.07' y1='307.07' x2='314.14' y2='314.14' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='300' y1='310' x2='300' y2='320' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='292.93' y1='307.07' x2='285.86' y2='314.14' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='290' y1='300' x2='280' y2='300' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='292.93' y1='292.93' x2='285.86' y2='285.86' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Ccircle cx='118' cy='150' r='36' fill='none' stroke='%23fff' stroke-width='1'/%3E%3Ccircle cx='118' cy='150' r='22' fill='none' stroke='%23fff' stroke-width='0.9'/%3E%3Ccircle cx='118' cy='150' r='3' fill='%23fff'/%3E%3Cline x1='118' y1='143' x2='118' y2='133' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='122.95' y1='145.05' x2='130.02' y2='137.98' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='125' y1='150' x2='135' y2='150' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='122.95' y1='154.95' x2='130.02' y2='162.02' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='118' y1='157' x2='118' y2='167' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='113.05' y1='154.95' x2='105.98' y2='162.02' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='111' y1='150' x2='101' y2='150' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='113.05' y1='145.05' x2='105.98' y2='137.98' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E");
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 600' fill='none'%3E%3Cline x1='300' y1='28' x2='300' y2='54' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='328.43' y1='29.49' x2='327.6' y2='37.45' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='356.55' y1='33.94' x2='354.89' y2='41.77' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='384.05' y1='41.31' x2='381.58' y2='48.92' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='410.63' y1='51.52' x2='407.38' y2='58.82' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='436' y1='64.44' x2='423' y2='86.96' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='459.88' y1='79.95' x2='455.18' y2='86.42' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='482' y1='97.86' x2='476.65' y2='103.81' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='502.14' y1='118' x2='496.19' y2='123.35' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='520.05' y1='140.12' x2='513.58' y2='144.82' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='535.56' y1='164' x2='513.04' y2='177' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='548.48' y1='189.37' x2='541.18' y2='192.62' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='558.69' y1='215.95' x2='551.08' y2='218.42' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='566.06' y1='243.45' x2='558.23' y2='245.11' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='570.51' y1='271.57' x2='562.55' y2='272.4' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='572' y1='300' x2='546' y2='300' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='570.51' y1='328.43' x2='562.55' y2='327.6' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='566.06' y1='356.55' x2='558.23' y2='354.89' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='558.69' y1='384.05' x2='551.08' y2='381.58' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='548.48' y1='410.63' x2='541.18' y2='407.38' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='535.56' y1='436' x2='513.04' y2='423' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='520.05' y1='459.88' x2='513.58' y2='455.18' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='502.14' y1='482' x2='496.19' y2='476.65' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='482' y1='502.14' x2='476.65' y2='496.19' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='459.88' y1='520.05' x2='455.18' y2='513.58' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='436' y1='535.56' x2='423' y2='513.04' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='410.63' y1='548.48' x2='407.38' y2='541.18' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='384.05' y1='558.69' x2='381.58' y2='551.08' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='356.55' y1='566.06' x2='354.89' y2='558.23' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='328.43' y1='570.51' x2='327.6' y2='562.55' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='300' y1='572' x2='300' y2='546' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='271.57' y1='570.51' x2='272.4' y2='562.55' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='243.45' y1='566.06' x2='245.11' y2='558.23' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='215.95' y1='558.69' x2='218.42' y2='551.08' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='189.37' y1='548.48' x2='192.62' y2='541.18' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='164' y1='535.56' x2='177' y2='513.04' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='140.12' y1='520.05' x2='144.82' y2='513.58' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='118' y1='502.14' x2='123.35' y2='496.19' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='97.86' y1='482' x2='103.81' y2='476.65' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='79.95' y1='459.88' x2='86.42' y2='455.18' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='64.44' y1='436' x2='86.96' y2='423' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='51.52' y1='410.63' x2='58.82' y2='407.38' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='41.31' y1='384.05' x2='48.92' y2='381.58' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='33.94' y1='356.55' x2='41.77' y2='354.89' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='29.49' y1='328.43' x2='37.45' y2='327.6' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='28' y1='300' x2='54' y2='300' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='29.49' y1='271.57' x2='37.45' y2='272.4' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='33.94' y1='243.45' x2='41.77' y2='245.11' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='41.31' y1='215.95' x2='48.92' y2='218.42' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='51.52' y1='189.37' x2='58.82' y2='192.62' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='64.44' y1='164' x2='86.96' y2='177' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='79.95' y1='140.12' x2='86.42' y2='144.82' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='97.86' y1='118' x2='103.81' y2='123.35' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='118' y1='97.86' x2='123.35' y2='103.81' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='140.12' y1='79.95' x2='144.82' y2='86.42' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='164' y1='64.44' x2='177' y2='86.96' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cline x1='189.37' y1='51.52' x2='192.62' y2='58.82' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='215.95' y1='41.31' x2='218.42' y2='48.92' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='243.45' y1='33.94' x2='245.11' y2='41.77' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Cline x1='271.57' y1='29.49' x2='272.4' y2='37.45' stroke='%23fff' stroke-width='1.1' stroke-linecap='round'/%3E%3Ccircle cx='300' cy='300' r='272' fill='none' stroke='%23fff' stroke-width='2'/%3E%3Ccircle cx='300' cy='300' r='228' fill='none' stroke='%23fff' stroke-width='1.6'/%3E%3Ccircle cx='300' cy='300' r='176' fill='none' stroke='%23fff' stroke-width='1.3'/%3E%3Ccircle cx='300' cy='300' r='120' fill='none' stroke='%23fff' stroke-width='1.1'/%3E%3Cline x1='153.49' y1='82.79' x2='446.51' y2='517.21' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='445.91' y1='201.58' x2='154.09' y2='398.42' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cpath d='M385.51,65.08 A250,250 0 0 1 425,516.51' fill='none' stroke='%23fff' stroke-width='1.4'/%3E%3Cpath d='M229.89,492.64 A205,205 0 0 1 168.23,142.96' fill='none' stroke='%23fff' stroke-width='1.2'/%3E%3Ccircle cx='300' cy='300' r='52' fill='none' stroke='%23fff' stroke-width='1'/%3E%3Ccircle cx='300' cy='300' r='6' fill='%23fff'/%3E%3Cline x1='300' y1='290' x2='300' y2='280' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='307.07' y1='292.93' x2='314.14' y2='285.86' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='310' y1='300' x2='320' y2='300' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='307.07' y1='307.07' x2='314.14' y2='314.14' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='300' y1='310' x2='300' y2='320' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='292.93' y1='307.07' x2='285.86' y2='314.14' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='290' y1='300' x2='280' y2='300' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='292.93' y1='292.93' x2='285.86' y2='285.86' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Ccircle cx='118' cy='150' r='36' fill='none' stroke='%23fff' stroke-width='1'/%3E%3Ccircle cx='118' cy='150' r='22' fill='none' stroke='%23fff' stroke-width='0.9'/%3E%3Ccircle cx='118' cy='150' r='3' fill='%23fff'/%3E%3Cline x1='118' y1='143' x2='118' y2='133' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='122.95' y1='145.05' x2='130.02' y2='137.98' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='125' y1='150' x2='135' y2='150' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='122.95' y1='154.95' x2='130.02' y2='162.02' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='118' y1='157' x2='118' y2='167' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='113.05' y1='154.95' x2='105.98' y2='162.02' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='111' y1='150' x2='101' y2='150' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='113.05' y1='145.05' x2='105.98' y2='137.98' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E");
-  }
-
-  /* Composição B: arcos graduados + constelação, no canto inferior esquerdo.
-     Mesma família, composição mais leve — o fundo não fica simétrico (simetria
-     lê como wallpaper, não como instrumento). */
-  .nx-page::after {
-    bottom: -170px;
-    left: -180px;
-    width: 540px;
-    height: 540px;
-    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 600' fill='none'%3E%3Cpath d='M214.49,534.92 A250,250 0 0 1 214.49,65.08' fill='none' stroke='%23fff' stroke-width='2'/%3E%3Cline x1='214.49' y1='534.92' x2='219.97' y2='519.89' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='186.5' y1='522.75' x2='193.77' y2='508.5' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='160.2' y1='507.26' x2='169.15' y2='493.99' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='135.99' y1='488.68' x2='146.48' y2='476.6' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='114.21' y1='467.28' x2='126.1' y2='456.58' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='95.21' y1='443.39' x2='108.32' y2='434.22' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='79.26' y1='417.37' x2='93.39' y2='409.86' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='66.6' y1='389.59' x2='81.54' y2='383.86' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='57.43' y1='360.48' x2='72.95' y2='356.61' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='51.86' y1='330.47' x2='67.74' y2='328.52' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='50' y1='300' x2='66' y2='300' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='51.86' y1='269.53' x2='67.74' y2='271.48' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='57.43' y1='239.52' x2='72.95' y2='243.39' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='66.6' y1='210.41' x2='81.54' y2='216.14' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='79.26' y1='182.63' x2='93.39' y2='190.14' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='95.21' y1='156.61' x2='108.32' y2='165.78' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='114.21' y1='132.72' x2='126.1' y2='143.42' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='135.99' y1='111.32' x2='146.48' y2='123.4' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='160.2' y1='92.74' x2='169.15' y2='106.01' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='186.5' y1='77.25' x2='193.77' y2='91.5' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='214.49' y1='65.08' x2='219.97' y2='80.11' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cpath d='M195,481.87 A210,210 0 0 1 195,118.13' fill='none' stroke='%23fff' stroke-width='1.4'/%3E%3Cpath d='M203.58,414.91 A150,150 0 0 1 203.58,185.09' fill='none' stroke='%23fff' stroke-width='1.1'/%3E%3Cpath d='M213.99,360.23 A105,105 0 0 1 213.99,239.77' fill='none' stroke='%23fff' stroke-width='1'/%3E%3Ccircle cx='452' cy='150' r='40' fill='none' stroke='%23fff' stroke-width='1.1'/%3E%3Cline x1='452' y1='110' x2='452' y2='117' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='472' y1='115.36' x2='468.5' y2='121.42' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='486.64' y1='130' x2='480.58' y2='133.5' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='492' y1='150' x2='485' y2='150' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='486.64' y1='170' x2='480.58' y2='166.5' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='472' y1='184.64' x2='468.5' y2='178.58' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='452' y1='190' x2='452' y2='183' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='432' y1='184.64' x2='435.5' y2='178.58' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='417.36' y1='170' x2='423.42' y2='166.5' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='412' y1='150' x2='419' y2='150' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='417.36' y1='130' x2='423.42' y2='133.5' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='432' y1='115.36' x2='435.5' y2='121.42' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Ccircle cx='452' cy='150' r='24' fill='none' stroke='%23fff' stroke-width='0.9'/%3E%3Ccircle cx='452' cy='150' r='3.5' fill='%23fff'/%3E%3Cline x1='452' y1='142.5' x2='452' y2='132.5' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='457.3' y1='144.7' x2='464.37' y2='137.63' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='459.5' y1='150' x2='469.5' y2='150' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='457.3' y1='155.3' x2='464.37' y2='162.37' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='452' y1='157.5' x2='452' y2='167.5' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='446.7' y1='155.3' x2='439.63' y2='162.37' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='444.5' y1='150' x2='434.5' y2='150' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='446.7' y1='144.7' x2='439.63' y2='137.63' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='110' y1='470' x2='175' y2='428' stroke='%23fff' stroke-width='1'/%3E%3Cline x1='175' y1='428' x2='242' y2='452' stroke='%23fff' stroke-width='1'/%3E%3Cline x1='242' y1='452' x2='300' y2='405' stroke='%23fff' stroke-width='1'/%3E%3Cline x1='300' y1='405' x2='360' y2='430' stroke='%23fff' stroke-width='1'/%3E%3Ccircle cx='110' cy='470' r='3.5' fill='%23fff'/%3E%3Ccircle cx='175' cy='428' r='3.5' fill='%23fff'/%3E%3Ccircle cx='242' cy='452' r='3.5' fill='%23fff'/%3E%3Ccircle cx='300' cy='405' r='3.5' fill='%23fff'/%3E%3Ccircle cx='360' cy='430' r='3.5' fill='%23fff'/%3E%3C/svg%3E");
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 600' fill='none'%3E%3Cpath d='M214.49,534.92 A250,250 0 0 1 214.49,65.08' fill='none' stroke='%23fff' stroke-width='2'/%3E%3Cline x1='214.49' y1='534.92' x2='219.97' y2='519.89' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='186.5' y1='522.75' x2='193.77' y2='508.5' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='160.2' y1='507.26' x2='169.15' y2='493.99' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='135.99' y1='488.68' x2='146.48' y2='476.6' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='114.21' y1='467.28' x2='126.1' y2='456.58' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='95.21' y1='443.39' x2='108.32' y2='434.22' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='79.26' y1='417.37' x2='93.39' y2='409.86' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='66.6' y1='389.59' x2='81.54' y2='383.86' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='57.43' y1='360.48' x2='72.95' y2='356.61' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='51.86' y1='330.47' x2='67.74' y2='328.52' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='50' y1='300' x2='66' y2='300' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='51.86' y1='269.53' x2='67.74' y2='271.48' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='57.43' y1='239.52' x2='72.95' y2='243.39' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='66.6' y1='210.41' x2='81.54' y2='216.14' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='79.26' y1='182.63' x2='93.39' y2='190.14' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='95.21' y1='156.61' x2='108.32' y2='165.78' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='114.21' y1='132.72' x2='126.1' y2='143.42' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='135.99' y1='111.32' x2='146.48' y2='123.4' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='160.2' y1='92.74' x2='169.15' y2='106.01' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='186.5' y1='77.25' x2='193.77' y2='91.5' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='214.49' y1='65.08' x2='219.97' y2='80.11' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cpath d='M195,481.87 A210,210 0 0 1 195,118.13' fill='none' stroke='%23fff' stroke-width='1.4'/%3E%3Cpath d='M203.58,414.91 A150,150 0 0 1 203.58,185.09' fill='none' stroke='%23fff' stroke-width='1.1'/%3E%3Cpath d='M213.99,360.23 A105,105 0 0 1 213.99,239.77' fill='none' stroke='%23fff' stroke-width='1'/%3E%3Ccircle cx='452' cy='150' r='40' fill='none' stroke='%23fff' stroke-width='1.1'/%3E%3Cline x1='452' y1='110' x2='452' y2='117' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='472' y1='115.36' x2='468.5' y2='121.42' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='486.64' y1='130' x2='480.58' y2='133.5' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='492' y1='150' x2='485' y2='150' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='486.64' y1='170' x2='480.58' y2='166.5' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='472' y1='184.64' x2='468.5' y2='178.58' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='452' y1='190' x2='452' y2='183' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='432' y1='184.64' x2='435.5' y2='178.58' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='417.36' y1='170' x2='423.42' y2='166.5' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='412' y1='150' x2='419' y2='150' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='417.36' y1='130' x2='423.42' y2='133.5' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='432' y1='115.36' x2='435.5' y2='121.42' stroke='%23fff' stroke-width='1.2' stroke-linecap='round'/%3E%3Ccircle cx='452' cy='150' r='24' fill='none' stroke='%23fff' stroke-width='0.9'/%3E%3Ccircle cx='452' cy='150' r='3.5' fill='%23fff'/%3E%3Cline x1='452' y1='142.5' x2='452' y2='132.5' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='457.3' y1='144.7' x2='464.37' y2='137.63' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='459.5' y1='150' x2='469.5' y2='150' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='457.3' y1='155.3' x2='464.37' y2='162.37' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='452' y1='157.5' x2='452' y2='167.5' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='446.7' y1='155.3' x2='439.63' y2='162.37' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='444.5' y1='150' x2='434.5' y2='150' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='446.7' y1='144.7' x2='439.63' y2='137.63' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='110' y1='470' x2='175' y2='428' stroke='%23fff' stroke-width='1'/%3E%3Cline x1='175' y1='428' x2='242' y2='452' stroke='%23fff' stroke-width='1'/%3E%3Cline x1='242' y1='452' x2='300' y2='405' stroke='%23fff' stroke-width='1'/%3E%3Cline x1='300' y1='405' x2='360' y2='430' stroke='%23fff' stroke-width='1'/%3E%3Ccircle cx='110' cy='470' r='3.5' fill='%23fff'/%3E%3Ccircle cx='175' cy='428' r='3.5' fill='%23fff'/%3E%3Ccircle cx='242' cy='452' r='3.5' fill='%23fff'/%3E%3Ccircle cx='300' cy='405' r='3.5' fill='%23fff'/%3E%3Ccircle cx='360' cy='430' r='3.5' fill='%23fff'/%3E%3C/svg%3E");
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 600' fill='none' stroke='%23fff' stroke-linecap='round'%3E%3Ccircle cx='300' cy='300' r='280' stroke-width='2'/%3E%3Ccircle cx='300' cy='300' r='210' stroke-width='1.5'/%3E%3Ccircle cx='300' cy='300' r='140' stroke-width='1.2'/%3E%3Cline x1='300' y1='20' x2='300' y2='46' stroke-width='4'/%3E%3Cline x1='580' y1='300' x2='554' y2='300' stroke-width='4'/%3E%3Cline x1='300' y1='580' x2='300' y2='554' stroke-width='4'/%3E%3Cline x1='20' y1='300' x2='46' y2='300' stroke-width='4'/%3E%3Cline x1='497.99' y1='102.01' x2='488.09' y2='111.91' stroke-width='2.4'/%3E%3Cline x1='497.99' y1='497.99' x2='488.09' y2='488.09' stroke-width='2.4'/%3E%3Cline x1='102.01' y1='497.99' x2='111.91' y2='488.09' stroke-width='2.4'/%3E%3Cline x1='102.01' y1='102.01' x2='111.91' y2='111.91' stroke-width='2.4'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 600' fill='none' stroke='%23fff' stroke-linecap='round'%3E%3Ccircle cx='300' cy='300' r='280' stroke-width='2'/%3E%3Ccircle cx='300' cy='300' r='210' stroke-width='1.5'/%3E%3Ccircle cx='300' cy='300' r='140' stroke-width='1.2'/%3E%3Cline x1='300' y1='20' x2='300' y2='46' stroke-width='4'/%3E%3Cline x1='580' y1='300' x2='554' y2='300' stroke-width='4'/%3E%3Cline x1='300' y1='580' x2='300' y2='554' stroke-width='4'/%3E%3Cline x1='20' y1='300' x2='46' y2='300' stroke-width='4'/%3E%3Cline x1='497.99' y1='102.01' x2='488.09' y2='111.91' stroke-width='2.4'/%3E%3Cline x1='497.99' y1='497.99' x2='488.09' y2='488.09' stroke-width='2.4'/%3E%3Cline x1='102.01' y1='497.99' x2='111.91' y2='488.09' stroke-width='2.4'/%3E%3Cline x1='102.01' y1='102.01' x2='111.91' y2='111.91' stroke-width='2.4'/%3E%3C/svg%3E");
   }
 
   /* ============================================================
      A CAMADA DE VIEWPORT — profundidade que emoldura, não que rola
      ------------------------------------------------------------
-     A aurora e o dot grid vivem no `.nx-page` e ROLAM com o
+     A aurora e os aros vivem no `.nx-page` e ROLAM com o
      conteúdo (background-attachment: local) — eles são a identidade
      da tela. Mas grão e vinheta emolduram os OLHOS, não o texto:
      têm que ficar presos à viewport enquanto a página rola por
@@ -277,11 +217,12 @@
     );
   }
 
-  /* O grão: a mesma textura de filme dos fundos escuros bons.
-     feTurbulence embarcado como data-URI (zero rede), lado a lado
-     em tiles de 140px, em `overlay` para pegar só a luz — sobre
-     texto ele é literalmente imperceptível, sobre as áreas chapadas
-     dá a "casca" que separa o fundo de um PDF. */
+  /* O grão: a textura de filme, agora em DOSE MÍNIMA (35% do que era).
+     Ele contava como mais uma camada na conta de ruído do fundo, e a
+     limpeza da v1.2 pedia sobriedade — mas zerar deixa as áreas chapadas
+     com cara de PDF. Então ele fica, quase invisível: feTurbulence
+     embarcado como data-URI (zero rede), tiles de 140px, `overlay` para
+     pegar só a luz. */
   .nx-viewport-fx::before {
     content: "";
     position: absolute;
@@ -289,7 +230,7 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     background-size: 140px 140px;
     mix-blend-mode: overlay;
-    opacity: var(--grain-alpha);
+    opacity: calc(var(--grain-alpha) * 0.35);
   }
 
   /* No tema claro o `overlay` do grão clareia demais — quase branca
@@ -297,7 +238,7 @@
      é suave por natureza. */
   :root[data-theme="light"] .nx-viewport-fx::before {
     mix-blend-mode: multiply;
-    opacity: calc(var(--grain-alpha) * 0.6);
+    opacity: calc(var(--grain-alpha) * 0.2);
   }
 
   /* A entrada de uma tela: fade + 12px. Só na montagem. */

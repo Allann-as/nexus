@@ -15,7 +15,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2 } from "lucide-react";
+import { Coins, Plus, Trash2 } from "lucide-react";
 
 import { Button, EmptyState, cx } from "../../design-system/primitives";
 import { formatMoney } from "../../lib/format";
@@ -88,7 +88,7 @@ export function ContributionsTab({ onAporte }: { onAporte: () => void }) {
     return (
       <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--border-subtle)] py-16">
         <EmptyState
-          icon={Plus}
+          icon={Coins}
           title="Nenhum aporte registrado"
           hint="Cada aporte que você lançar aparece aqui, agrupado por mês, do mais recente ao mais antigo."
           action={

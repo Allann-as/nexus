@@ -77,3 +77,10 @@ pub fn fin_goal_deposits(
 ) -> Result<Vec<FinGoalDeposit>> {
     state.fin_goals.deposits(&goal_id)
 }
+
+/// Exclui uma caixinha (BÚSSOLA, fase B). Os depósitos saem junto pelo CASCADE
+/// do schema; o ledger guarda que ela existiu e que foi removida (ADR-0056).
+#[tauri::command]
+pub fn delete_fin_goal(state: State<'_, AppState>, id: String) -> Result<()> {
+    state.fin_goals.delete(&id)
+}

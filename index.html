@@ -14,7 +14,9 @@
         background: #f7f8fa;
       }
 
-      /* Splash: o astrolábio pinta antes do React montar. O React limpa o
+      /* Splash: a bússola pinta antes do React montar. Mesma geometria do
+         `NexusMark` (centro 120, anel 96, pontas 76, cintura 26) — três
+         desenhos, uma geometria só. O React limpa o
          #root ao montar, então este bloco some sozinho no primeiro render.
          Só opacity/transform animam (a §6 do design system), e o movimento
          respeita prefers-reduced-motion. */
@@ -71,50 +73,49 @@
       <figure class="nx-splash" aria-label="NEXUS">
         <svg width="112" height="112" viewBox="0 0 240 240" fill="none">
           <defs>
-            <radialGradient id="s-core" cx="38%" cy="34%" r="72%">
-              <stop offset="0%" stop-color="#EEF1FF" />
-              <stop offset="30%" stop-color="#A7B4FB" />
-              <stop offset="70%" stop-color="#7C8CF8" />
-              <stop offset="100%" stop-color="#414FB4" />
-            </radialGradient>
+            <linearGradient id="s-plate" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#2B3585" />
+              <stop offset="100%" stop-color="#10163A" />
+            </linearGradient>
             <radialGradient id="s-halo" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stop-color="#7C8CF8" stop-opacity="0.5" />
-              <stop offset="60%" stop-color="#7C8CF8" stop-opacity="0.12" />
+              <stop offset="35%" stop-color="#7C8CF8" stop-opacity="0.42" />
+              <stop offset="70%" stop-color="#7C8CF8" stop-opacity="0.12" />
               <stop offset="100%" stop-color="#7C8CF8" stop-opacity="0" />
             </radialGradient>
-            <linearGradient id="s-ring" x1="18%" y1="8%" x2="86%" y2="94%">
-              <stop offset="0%" stop-color="#CAD3FF" />
-              <stop offset="42%" stop-color="#5D6BDC" />
-              <stop offset="100%" stop-color="#1B2258" />
-            </linearGradient>
           </defs>
-          <g stroke="#7C8CF8" stroke-linecap="round">
-            <line x1="120" y1="18" x2="120" y2="29" stroke-width="1.5" opacity="0.9" />
-            <line x1="171" y1="31.67" x2="165.5" y2="41.19" stroke-width="1.5" opacity="0.9" />
-            <line x1="208.33" y1="69" x2="198.81" y2="74.5" stroke-width="1.5" opacity="0.9" />
-            <line x1="222" y1="120" x2="211" y2="120" stroke-width="1.5" opacity="0.9" />
-            <line x1="208.33" y1="171" x2="198.81" y2="165.5" stroke-width="1.5" opacity="0.9" />
-            <line x1="171" y1="208.33" x2="165.5" y2="198.81" stroke-width="1.5" opacity="0.9" />
-            <line x1="120" y1="222" x2="120" y2="211" stroke-width="1.5" opacity="0.9" />
-            <line x1="69" y1="208.33" x2="74.5" y2="198.81" stroke-width="1.5" opacity="0.9" />
-            <line x1="31.67" y1="171" x2="41.19" y2="165.5" stroke-width="1.5" opacity="0.9" />
-            <line x1="18" y1="120" x2="29" y2="120" stroke-width="1.5" opacity="0.9" />
-            <line x1="31.67" y1="69" x2="41.19" y2="74.5" stroke-width="1.5" opacity="0.9" />
-            <line x1="69" y1="31.67" x2="74.5" y2="41.19" stroke-width="1.5" opacity="0.9" />
+
+          <!-- o halo, que vaza por fora do squircle -->
+          <circle cx="120" cy="120" r="118" fill="url(#s-halo)" />
+
+          <!-- o squircle índigo -->
+          <rect x="16" y="16" width="208" height="208" rx="60" fill="url(#s-plate)" />
+          <rect x="16" y="16" width="208" height="208" rx="60" fill="none" stroke="#414FB4" stroke-width="1.5" opacity="0.55" />
+
+          <!-- o anel e as oito marcas cardeais -->
+          <circle cx="120" cy="120" r="96" fill="none" stroke="#FFFFFF" stroke-width="3" opacity="0.3" />
+          <g stroke="#FFFFFF" stroke-linecap="round">
+            <line x1="120" y1="24" x2="120" y2="37" stroke-width="5" opacity="0.85" />
+            <line x1="216" y1="120" x2="203" y2="120" stroke-width="5" opacity="0.85" />
+            <line x1="120" y1="216" x2="120" y2="203" stroke-width="5" opacity="0.85" />
+            <line x1="24" y1="120" x2="37" y2="120" stroke-width="5" opacity="0.85" />
+            <line x1="187.88" y1="52.12" x2="182.93" y2="57.07" stroke-width="3" opacity="0.4" />
+            <line x1="187.88" y1="187.88" x2="182.93" y2="182.93" stroke-width="3" opacity="0.4" />
+            <line x1="52.12" y1="187.88" x2="57.07" y2="182.93" stroke-width="3" opacity="0.4" />
+            <line x1="52.12" y1="52.12" x2="57.07" y2="57.07" stroke-width="3" opacity="0.4" />
           </g>
-          <circle cx="120" cy="120" r="104" fill="none" stroke="url(#s-ring)" stroke-width="3.4" />
-          <circle cx="120" cy="120" r="84" fill="none" stroke="url(#s-ring)" stroke-width="2.2" />
-          <circle cx="120" cy="120" r="65" fill="none" stroke="url(#s-ring)" stroke-width="1.7" />
-          <circle cx="120" cy="120" r="47" fill="none" stroke="#A7B4FB" stroke-width="1.35" opacity="0.7" />
-          <g stroke-linecap="round">
-            <line x1="175.92" y1="202.9" x2="64.08" y2="37.1" stroke="#1B2258" stroke-width="6" opacity="0.35" />
-            <line x1="175.92" y1="202.9" x2="64.08" y2="37.1" stroke="#A7B4FB" stroke-width="2.2" />
-          </g>
+
+          <!-- a rosa dos ventos, e por cima dela a agulha do norte -->
+          <path
+            d="M120,44 L138.38,101.62 L196,120 L138.38,138.38 L120,196 L101.62,138.38 L44,120 L101.62,101.62 Z"
+            fill="#FFFFFF"
+            opacity="0.45"
+          />
+          <path d="M120,44 L138.38,101.62 L120,120 L101.62,101.62 Z" fill="#FFFFFF" />
+
+          <!-- o pivô: o furo por onde a agulha gira, e o que pulsa -->
           <g class="nx-splash-core">
-            <circle cx="120" cy="120" r="46" fill="url(#s-halo)" />
-            <circle cx="120" cy="120" r="27" fill="url(#s-core)" />
-            <circle cx="120" cy="120" r="20" fill="none" stroke="#EEF1FF" stroke-width="0.7" opacity="0.55" />
-            <circle cx="114" cy="113" r="4.5" fill="#EEF1FF" opacity="0.9" />
+            <circle cx="120" cy="120" r="9" fill="#10163A" />
+            <circle cx="120" cy="120" r="9" fill="none" stroke="#FFFFFF" stroke-width="3" />
           </g>
         </svg>
         <figcaption>NEXUS</figcaption>

@@ -13,7 +13,7 @@ use serde_json::json;
 
 use crate::application::ports::{
     AreaRepository, Challenge, ChallengeRepository, Clock, HabitRepository, IdGen, NewChallenge,
-    NewNode,
+    NewNode, NodeRepository,
 };
 use crate::domain::entities::{validate_title, ChallengeMetric, Kind};
 use crate::domain::errors::{NexusError, Result};
@@ -44,6 +44,9 @@ pub struct CompletedChallenge {
 
 pub struct ChallengeService {
     pub challenges: Arc<dyn ChallengeRepository>,
+    /// Para EXCLUIR: uma temporada é um node, e apagar um node é a mesma
+    /// operação para todos eles (ADR-0056). Ver `ChallengeService::delete`.
+    pub nodes: Arc<dyn NodeRepository>,
     pub areas: Arc<dyn AreaRepository>,
     pub habits: Arc<dyn HabitRepository>,
     pub ids: Arc<dyn IdGen>,
@@ -193,6 +196,36 @@ impl ChallengeService {
         let challenge = self.challenges.set_status(id, "dropped", now, &event)?;
         let today = parse_day(&self.clock.today_local())?;
         Ok(to_card(challenge, today))
+    }
+
+    /// EXCLUI uma temporada (BÚSSOLA, fase B).
+    ///
+    /// Não é o mesmo que `abandon`, e a diferença importa: abandonar é um FATO
+    /// da vida ("tentei e larguei"), e a temporada continua na lista, marcada
+    /// 'dropped'. Excluir é dizer que ela nunca deveria ter existido — um erro
+    /// de digitação, uma duplicata. As duas precisam existir; oferecer só o
+    /// abandono obriga o usuário a conviver com o próprio engano.
+    ///
+    /// A regra do ADR-0056 continua valendo: o evento `Deleted` entra na mesma
+    /// transação do DELETE, e a história de que a temporada existiu fica.
+    pub fn delete(&self, id: &str) -> Result<()> {
+        // Pelo repositório da temporada, para um id de outro kind não ser apagado
+        // por um command chamado `delete_challenge`.
+        let current = self.challenges.get(id)?;
+        let event = NewLedgerEvent {
+            ts: self.clock.now_ms(),
+            day: self.clock.today_local(),
+            entity_id: id.to_string(),
+            entity_kind: LedgerEntityKind::Node(Kind::Challenge),
+            event_type: EventType::Deleted,
+            payload: json!({
+                "metric": current.metric.as_str(),
+                "startsOn": current.starts_on,
+                "endsOn": current.ends_on,
+            }),
+            title_snapshot: current.title.clone(),
+        };
+        self.nodes.delete_with_event(id, &event)
     }
 
     /// Fecha toda temporada ATIVA cujo placar já bateu o alvo. Idempotente — a UI

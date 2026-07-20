@@ -536,4 +536,18 @@ node, exatamente como a sessão de estudo (§5.12). Ver o **ADR do Modo Foco**.
 - `user_version` gerenciado pelo `rusqlite_migration`.
 - Na inicialização: `PRAGMA quick_check` **antes** das migrations. Falhou? Oferecer
   restauração do backup mais recente **antes** de abrir a UI (M5).
-- Toda migration roda em transação, precedida de backup automático do arquivo (M5).
+- Toda migration roda em transação.
+- **O snapshot pré-migration (v1.2).** Esta linha prometia desde o M5 um "backup
+  automático do arquivo" antes de migrar. A promessa **não era verdade**: o
+  `Db::open` ia do `quick_check` direto para o `migrations::run`. Achado ao abrir a
+  v1.2 — a primeira versão a migrar um `%APPDATA%` com dados REAIS do usuário —, e
+  corrigido antes de qualquer migration nova ser escrita.
+
+  `snapshot_before_migrating` grava `backups/pre-migration-AAAAMMDD-HHMMSS.db`
+  **só quando o banco vai de fato ser alterado** (`user_version` entre 1 e a versão
+  corrente): um banco novo em folha não tem nada a perder. É `VACUUM INTO`, não
+  cópia de arquivo — sob WAL, o `nexus.db` sozinho é um estado velho, pois as
+  escritas recentes moram no `-wal`. É `.db` cru e fora do padrão `nexus-*.zip` de
+  propósito: assim a **retenção nunca o poda** e ele não polui a lista da UI. Falhar
+  não impede o boot (o aviso vai para o log) — o app não pode se recusar a abrir por
+  causa da própria apólice.

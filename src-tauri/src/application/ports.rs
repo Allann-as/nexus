@@ -5,8 +5,8 @@
 //! estes traits de novo, sem tocar em uma linha de regra de negócio.
 
 use crate::domain::entities::{
-    AnnualGoalKind, Area, AssetClass, BookStatus, ChallengeMetric, Direction, Kind, MilestoneKind,
-    Node, ProgressSource, Status, Template,
+    AnnualGoalKind, Area, AssetClass, BookStatus, ChallengeMetric, Direction, GoalKind, Kind,
+    MilestoneKind, Node, ProgressSource, Status, Template,
 };
 use crate::domain::errors::Result;
 use crate::domain::ledger::{LedgerEntry, NewLedgerEvent};
@@ -671,11 +671,17 @@ pub trait EventRepository: Send + Sync {
 
 #[derive(Debug, Clone)]
 pub struct NewGoalDetails {
-    pub metric_name: String,
-    pub start_value: f64,
-    pub target_value: f64,
-    pub unit: String,
-    pub direction: Direction,
+    /// O tipo manda nos cinco campos abaixo: `quantitative` exige todos,
+    /// `binary`/`staged` exigem que todos sejam `None` (0016). Quem impõe é o
+    /// `GoalService::create`; o CHECK da tabela é a segunda linha de defesa.
+    pub goal_kind: GoalKind,
+    pub metric_name: Option<String>,
+    pub start_value: Option<f64>,
+    pub target_value: Option<f64>,
+    pub unit: Option<String>,
+    /// `None` numa meta quantitativa quer dizer "deduza dos números" — o
+    /// serviço a deriva de `start` vs `target`. Ver `GoalService::create`.
+    pub direction: Option<Direction>,
     pub deadline: Option<i64>,
     pub progress_source: ProgressSource,
 }
@@ -694,11 +700,15 @@ pub struct Goal {
     pub title: String,
     pub area_id: Option<String>,
     pub status: String,
-    pub metric_name: String,
-    pub start_value: f64,
-    pub target_value: f64,
-    pub unit: String,
-    pub direction: Direction,
+    pub goal_kind: GoalKind,
+    /// Os cinco campos da métrica. `None` em bloco numa meta `binary` ou
+    /// `staged` — uma conquista não mede nada, e fingir um alvo desenharia uma
+    /// barra que ninguém alimenta (0016).
+    pub metric_name: Option<String>,
+    pub start_value: Option<f64>,
+    pub target_value: Option<f64>,
+    pub unit: Option<String>,
+    pub direction: Option<Direction>,
     pub deadline: Option<i64>,
     pub progress_source: ProgressSource,
 }

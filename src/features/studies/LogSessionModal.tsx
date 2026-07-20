@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 
+import { DatePicker } from "../../design-system/DatePicker";
 import { Modal } from "../../design-system/Modal";
 import { Button, cx } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
@@ -162,12 +163,11 @@ export function LogSessionModal({
                 <span className="text-[10px] tracking-[0.1em] text-[var(--text-tertiary)] uppercase">
                   Dia
                 </span>
-                <input
-                  type="date"
+                <DatePicker
                   value={day}
                   max={toDay(new Date())}
-                  onChange={(e) => setDay(e.target.value)}
-                  className="tabular h-9 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-3 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--sphere)]"
+                  onChange={(d) => setDay(d ?? toDay(new Date()))}
+                  ariaLabel="Dia da sessão"
                 />
               </div>
             </div>

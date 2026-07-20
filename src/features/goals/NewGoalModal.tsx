@@ -1,23 +1,46 @@
 /**
- * Nova meta.
+ * Nova meta (recomposta na v1.2, fase C).
  *
- * Uma meta precisa de mais do que um título — métrica, ponto de partida, alvo,
- * unidade e direção —, e nenhum desses tem padrão honesto: "perder peso" começa
- * em 82 e mira 72; "ler livros" começa em 0 e mira 12. Inventar o começo faria a
- * primeira barra mentir, e a projeção depois dela.
+ * O que mudou, e por quê: este formulário era quantitativo e SÓ quantitativo —
+ * métrica, começo, alvo, unidade, todos obrigatórios. Em uso real isso recusou a
+ * vida do dono do app. *"Conseguir um emprego"* não tem métrica. *"Sair do
+ * básico ao avançado em inglês"* não é um número. E o exemplo "Perder 10 kg"
+ * aparecia até dentro de Finanças.
  *
- * A direção é derivada, não perguntada: quem parte de 82 rumo a 72 está
- * diminuindo. Um campo a menos, e um a menos para errar.
+ * Agora o primeiro passo é **que tipo de meta?** (ADR-0071):
+ *
+ *   * QUANTITATIVA — o formato de sempre. Nada aqui regrediu.
+ *   * CONQUISTA    — só título. Ou aconteceu, ou não. Os degraus contam o caminho.
+ *   * POR ETAPAS   — uma escada de estágios nomeados; o progresso é o degrau atual.
+ *
+ * E o formulário nasce CONTEXTUAL: os exemplos, as unidades, o tipo que abre
+ * marcado e os degraus sugeridos vêm de `goalTemplates.ts`, indexados pelo
+ * `template` da Esfera. Trocar a Esfera troca o formulário inteiro. Isso é
+ * catálogo, não `if` — nenhuma Esfera tem código próprio aqui.
+ *
+ * Os DEGRAUS de uma escada não são entidade nova: são os `milestone` de sempre
+ * (§5.6 do DATA_MODEL), criados em ordem logo depois da meta. É por isso que o
+ * salvamento tem duas etapas — e é por isso que a falha ao criar um degrau NÃO
+ * descarta a meta: ela já existe e é válida sem eles, então o erro é avisado e o
+ * usuário adiciona o que faltou no card. Perder a meta inteira por causa do
+ * terceiro degrau seria o pior desfecho possível.
  */
 
-import { useState } from "react";
-import { Target } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Plus, Target, X } from "lucide-react";
 
 import { Modal, ModalHeader } from "../../design-system/Modal";
 import { Button, cx } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
-import { createGoal, type Area } from "../../lib/ipc";
+import { addMilestone, createGoal, type Area, type GoalKind } from "../../lib/ipc";
 import { SphereIcon } from "../hub/SphereIcon";
+import { goalTemplateFor } from "./goalTemplates";
+
+const KINDS: Array<{ key: GoalKind; label: string; hint: string }> = [
+  { key: "quantitative", label: "Com número", hint: "Uma métrica que sobe ou desce até um alvo" },
+  { key: "binary", label: "Conquista", hint: "Aconteceu ou não aconteceu" },
+  { key: "staged", label: "Por etapas", hint: "Uma escada de níveis nomeados" },
+];
 
 export function NewGoalModal({
   areas,
@@ -31,38 +54,92 @@ export function NewGoalModal({
   onCreated: () => void;
 }) {
   const pushError = useToasts((s) => s.pushError);
+  const push = useToasts((s) => s.push);
+
+  const [areaId, setAreaId] = useState<string | null>(defaultAreaId);
+  const [kind, setKind] = useState<GoalKind>("quantitative");
+  const [kindTouched, setKindTouched] = useState(false);
   const [title, setTitle] = useState("");
   const [metricName, setMetricName] = useState("");
   const [unit, setUnit] = useState("");
   const [startValue, setStartValue] = useState("");
   const [targetValue, setTargetValue] = useState("");
-  const [areaId, setAreaId] = useState<string | null>(defaultAreaId);
+  const [stages, setStages] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+
+  const tpl = useMemo(
+    () => goalTemplateFor(areas.find((a) => a.id === areaId)?.template),
+    [areas, areaId],
+  );
+
+  /* Trocar a Esfera reabre o formulário no tipo que aquela Esfera costuma usar —
+     a menos que o usuário JÁ tenha escolhido um tipo. A escolha explícita dele
+     sempre ganha da sugestão; o catálogo abre a porta certa, não tranca as outras. */
+  useEffect(() => {
+    if (!kindTouched) setKind(tpl.defaultKind);
+  }, [tpl, kindTouched]);
+
+  /* Os degraus sugeridos entram quando a escada é escolhida — e só enquanto o
+     usuário não mexeu neles. */
+  useEffect(() => {
+    if (kind === "staged") setStages((s) => (s.length === 0 ? tpl.stages : s));
+  }, [kind, tpl]);
 
   const start = Number(startValue.replace(",", "."));
   const target = Number(targetValue.replace(",", "."));
+
+  const namedStages = stages.map((s) => s.trim()).filter((s) => s !== "");
+
   const valid =
     title.trim() !== "" &&
-    metricName.trim() !== "" &&
-    unit.trim() !== "" &&
-    Number.isFinite(start) &&
-    Number.isFinite(target) &&
-    start !== target;
+    (kind !== "quantitative" ||
+      (metricName.trim() !== "" &&
+        unit.trim() !== "" &&
+        Number.isFinite(start) &&
+        Number.isFinite(target) &&
+        start !== target)) &&
+    // Uma escada sem degraus é uma escada sem degrau nenhum para subir: ela
+    // nasceria em 0/0 e nunca sairia dali.
+    (kind !== "staged" || namedStages.length >= 2);
 
   const submit = async () => {
     if (!valid || saving) return;
     setSaving(true);
     try {
-      await createGoal({
+      const quantitative = kind === "quantitative";
+      const goal = await createGoal({
         title: title.trim(),
         areaId,
-        metricName: metricName.trim(),
-        startValue: start,
-        targetValue: target,
-        unit: unit.trim(),
-        // Derivada do próprio par de números: 82 → 72 é 'decrease'.
-        direction: target < start ? "decrease" : "increase",
+        goalKind: kind,
+        // Os cinco campos da métrica só existem na quantitativa. O banco recusa
+        // qualquer um deles nos outros tipos (o CHECK por tipo da 0016).
+        metricName: quantitative ? metricName.trim() : null,
+        startValue: quantitative ? start : null,
+        targetValue: quantitative ? target : null,
+        unit: quantitative ? unit.trim() : null,
+        // A direção é DERIVADA pelo backend a partir do par de números.
+        progressSource: quantitative ? "metric" : "milestones",
       });
+
+      // Os degraus da escada, em ordem. Sequencial de propósito: `sort_order` sai
+      // da ordem de chegada, e um Promise.all embaralharia a escada.
+      //
+      // O catch é SEPARADO do da meta, e não relança: neste ponto a meta já
+      // existe e é perfeitamente válida sem os degraus. Deixar o erro subir
+      // manteria a modal aberta sobre uma meta que já foi criada, e um segundo
+      // "Criar meta" faria a segunda. Avisar e seguir é o desfecho honesto — o
+      // usuário completa a escada no card.
+      if (kind === "staged") {
+        try {
+          for (const label of namedStages) {
+            await addMilestone({ goalId: goal.id, title: label });
+          }
+        } catch (e) {
+          pushError(e);
+          push("success", "A meta foi criada; adicione os degraus que faltaram no card.");
+        }
+      }
+
       onCreated();
     } catch (e) {
       pushError(e);
@@ -71,58 +148,158 @@ export function NewGoalModal({
     }
   };
 
+  const subtitle =
+    kind === "quantitative"
+      ? "Uma métrica, um começo honesto e um alvo"
+      : kind === "binary"
+        ? "A linha de chegada; os degraus vêm depois"
+        : "Os degraus da escada, do primeiro ao último";
+
   return (
     <Modal onClose={onClose}>
       <div className="p-5">
-          <ModalHeader
-            icon={Target}
-            title="Nova meta"
-            subtitle="Uma métrica, um começo honesto e um alvo"
-            onClose={onClose}
+        <ModalHeader icon={Target} title="Nova meta" subtitle={subtitle} onClose={onClose} />
+
+        <div className="flex flex-col gap-3">
+          {/* ===== passo 1: que tipo de meta? ===== */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] tracking-[0.1em] text-[var(--text-tertiary)] uppercase">
+              Tipo
+            </span>
+            <div className="grid grid-cols-3 gap-2">
+              {KINDS.map((k) => (
+                <button
+                  key={k.key}
+                  title={k.hint}
+                  onClick={() => {
+                    setKind(k.key);
+                    setKindTouched(true);
+                  }}
+                  className={cx(
+                    "rounded-[var(--radius-md)] border px-2 py-2 text-[12px] font-medium",
+                    "transition-colors duration-[var(--dur-fast)]",
+                    kind === k.key
+                      ? "border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] text-[var(--text-primary)]"
+                      : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-glow)]",
+                  )}
+                >
+                  {k.label}
+                </button>
+              ))}
+            </div>
+            <span className="text-[11px] text-[var(--text-tertiary)]">
+              {KINDS.find((k) => k.key === kind)?.hint}
+            </span>
+          </div>
+
+          <Input
+            autoFocus
+            value={title}
+            onChange={setTitle}
+            placeholder={tpl.titlePlaceholder}
+            label="Meta"
           />
 
-          <div className="flex flex-col gap-3">
-            <Input autoFocus value={title} onChange={setTitle} placeholder="Perder 10 kg" label="Meta" />
-            <Input value={metricName} onChange={setMetricName} placeholder="Peso" label="Métrica" />
-
-            <div className="grid grid-cols-3 gap-2">
-              <Input value={startValue} onChange={setStartValue} placeholder="82" label="Hoje" />
-              <Input value={targetValue} onChange={setTargetValue} placeholder="72" label="Alvo" />
-              <Input value={unit} onChange={setUnit} placeholder="kg" label="Unidade" />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <span className="text-[10px] tracking-[0.1em] text-[var(--text-tertiary)] uppercase">
-                Esfera
-              </span>
+          {/* ===== os campos da métrica: só a quantitativa os tem ===== */}
+          {kind === "quantitative" && (
+            <>
+              <Input
+                value={metricName}
+                onChange={setMetricName}
+                placeholder={tpl.metricPlaceholder}
+                label="Métrica"
+              />
+              <div className="grid grid-cols-3 gap-2">
+                <Input value={startValue} onChange={setStartValue} placeholder="82" label="Hoje" />
+                <Input value={targetValue} onChange={setTargetValue} placeholder="72" label="Alvo" />
+                <Input value={unit} onChange={setUnit} placeholder={tpl.units[0]} label="Unidade" />
+              </div>
+              {/* As unidades que ESTA Esfera mede, a um clique. Em Finanças isso é
+                  só "R$" — e é exatamente esse o ponto. */}
               <div className="flex flex-wrap gap-1">
-                <Chip active={areaId === null} onClick={() => setAreaId(null)}>
-                  Nenhuma
-                </Chip>
-                {areas.map((a) => (
-                  <Chip
-                    key={a.id}
-                    active={areaId === a.id}
-                    colour={a.color}
-                    onClick={() => setAreaId(a.id)}
-                  >
-                    <SphereIcon name={a.icon} size={12} />
-                    {a.name}
+                {tpl.units.map((u) => (
+                  <Chip key={u} active={unit === u} onClick={() => setUnit(u)}>
+                    {u}
                   </Chip>
                 ))}
               </div>
-            </div>
+            </>
+          )}
 
-            <div className="flex justify-end gap-2 pt-1">
-              <Button variant="ghost" onClick={onClose}>
-                Cancelar
+          {/* ===== os degraus da escada ===== */}
+          {kind === "staged" && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] tracking-[0.1em] text-[var(--text-tertiary)] uppercase">
+                Degraus
+              </span>
+              <div className="flex flex-col gap-1.5">
+                {stages.map((s, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="tabular w-4 shrink-0 text-[11px] text-[var(--text-tertiary)]">
+                      {i + 1}
+                    </span>
+                    <input
+                      value={s}
+                      onChange={(e) =>
+                        setStages((cur) => cur.map((v, j) => (j === i ? e.target.value : v)))
+                      }
+                      placeholder={`Degrau ${i + 1}`}
+                      className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-3 text-[13px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent)]"
+                    />
+                    <button
+                      onClick={() => setStages((cur) => cur.filter((_, j) => j !== i))}
+                      aria-label={`Remover degrau ${i + 1}`}
+                      className="shrink-0 rounded-[var(--radius-sm)] p-1 text-[var(--text-tertiary)] hover:text-[var(--danger)]"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={Plus}
+                onClick={() => setStages((cur) => [...cur, ""])}
+                className="self-start"
+              >
+                Adicionar degrau
               </Button>
-              <Button variant="primary" onClick={submit} disabled={!valid || saving}>
-                Criar meta
-              </Button>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] tracking-[0.1em] text-[var(--text-tertiary)] uppercase">
+              Esfera
+            </span>
+            <div className="flex flex-wrap gap-1">
+              <Chip active={areaId === null} onClick={() => setAreaId(null)}>
+                Nenhuma
+              </Chip>
+              {areas.map((a) => (
+                <Chip
+                  key={a.id}
+                  active={areaId === a.id}
+                  colour={a.color}
+                  onClick={() => setAreaId(a.id)}
+                >
+                  <SphereIcon name={a.icon} size={12} />
+                  {a.name}
+                </Chip>
+              ))}
             </div>
           </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="ghost" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button variant="primary" onClick={submit} disabled={!valid || saving}>
+              Criar meta
+            </Button>
+          </div>
         </div>
+      </div>
     </Modal>
   );
 }

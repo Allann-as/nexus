@@ -10,8 +10,8 @@ use rusqlite_migration::{Migrations, M};
 
 use crate::domain::errors::{NexusError, Result};
 
-fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![
+fn migration_set() -> Vec<M<'static>> {
+    vec![
         M::up(include_str!("../../../migrations/0001_core_schema.sql")),
         M::up(include_str!("../../../migrations/0002_fts.sql")),
         M::up(include_str!("../../../migrations/0003_ledger.sql")),
@@ -35,7 +35,29 @@ fn migrations() -> Migrations<'static> {
             "../../../migrations/0014_contributes_to_link.sql"
         )),
         M::up(include_str!("../../../migrations/0015_focus_sessions.sql")),
-    ])
+        M::up(include_str!("../../../migrations/0016_compass.sql")),
+    ]
+}
+
+fn migrations() -> Migrations<'static> {
+    Migrations::new(migration_set())
+}
+
+/// O `user_version` que um banco em dia carrega — o `rusqlite_migration` grava
+/// nele a quantidade de migrations aplicadas.
+fn latest_version() -> i64 {
+    migration_set().len() as i64
+}
+
+/// Este banco vai ser ALTERADO por esta abertura?
+///
+/// `from > 0` é o filtro que importa: um banco novo em folha (versão 0) sobe do
+/// zero e não tem nada a perder, então não vale um snapshot. Um banco com dados
+/// do usuário que está atrás da versão corrente, sim — é exatamente o momento em
+/// que anos de história passam por SQL destrutivo (o 12-step recria `nodes`).
+pub fn is_upgrade_pending(conn: &Connection) -> Result<bool> {
+    let from = user_version(conn)?;
+    Ok(from > 0 && from < latest_version())
 }
 
 /// Brings the schema to the latest version. Each migration runs in its own
@@ -768,6 +790,210 @@ mod tests {
                 [],
             );
             assert!(bad.is_err(), "uma métrica fora do vocabulário é recusada");
+        }
+    }
+
+    /// A 0016 (BÚSSOLA) reconstrói `goal_details` para admitir metas SEM métrica.
+    /// A reconstrução acontece sobre dados reais do usuário, então ela é provada
+    /// como as recriações de `nodes`: os dados atravessam, as invariantes novas
+    /// valem, e o que a referencia continua de pé.
+    mod goal_kinds {
+        use super::*;
+
+        /// Um banco no estado da 0015, com uma meta quantitativa e o checkpoint
+        /// dela — a linha que a FK de `goal_checkpoints` prende a `goal_details`.
+        fn seeded_at_v15() -> Connection {
+            let mut conn = Connection::open_in_memory().unwrap();
+            conn.execute_batch("PRAGMA foreign_keys = OFF;").unwrap();
+            migrations().to_version(&mut conn, 15).unwrap();
+
+            conn.execute_batch(
+                "INSERT INTO areas (id, name) VALUES ('a1', 'Saude');
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('g1', 'goal', 'Perder 10 kg', 'a1', 100, 100);
+                 INSERT INTO goal_details
+                      (node_id, metric_name, start_value, target_value, unit, direction, deadline)
+                      VALUES ('g1', 'Peso', 90.0, 80.0, 'kg', 'decrease', 999);
+                 INSERT INTO goal_checkpoints (id, goal_id, value, noted_at)
+                      VALUES ('c1', 'g1', 88.0, 200);",
+            )
+            .unwrap();
+            conn
+        }
+
+        #[test]
+        fn the_existing_goals_survive_and_are_quantitative() {
+            let mut conn = seeded_at_v15();
+            migrations().to_latest(&mut conn).unwrap();
+
+            let (kind, metric, target, source): (String, String, f64, String) = conn
+                .query_row(
+                    "SELECT goal_kind, metric_name, target_value, progress_source
+                       FROM goal_details WHERE node_id = 'g1'",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                )
+                .unwrap();
+
+            assert_eq!(kind, "quantitative", "toda meta anterior é quantitativa");
+            assert_eq!(metric, "Peso", "a métrica atravessou a reconstrução");
+            assert_eq!(target, 80.0);
+            assert_eq!(source, "metric", "a fonte de progresso atravessou");
+        }
+
+        #[test]
+        fn the_checkpoints_still_point_at_their_goal() {
+            let mut conn = seeded_at_v15();
+            migrations().to_latest(&mut conn).unwrap();
+
+            // O dado continua lá...
+            let value: f64 = conn
+                .query_row(
+                    "SELECT value FROM goal_checkpoints WHERE id = 'c1'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(value, 88.0);
+
+            // ...e a FK para a tabela RECONSTRUÍDA está íntegra. É o que o
+            // `foreign_key_check` do runner cobraria no banco do usuário.
+            let mut stmt = conn.prepare("PRAGMA foreign_key_check").unwrap();
+            let mut rows = stmt.query([]).unwrap();
+            assert!(
+                rows.next().unwrap().is_none(),
+                "a reconstrução não deixou referência órfã"
+            );
+        }
+
+        #[test]
+        fn a_goal_without_a_metric_is_now_possible() {
+            let mut conn = Connection::open_in_memory().unwrap();
+            migrations().to_latest(&mut conn).unwrap();
+            conn.execute_batch(
+                "INSERT INTO areas (id, name) VALUES ('a1', 'Carreira');
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('g2', 'goal', 'Conseguir um emprego', 'a1', 100, 100);",
+            )
+            .unwrap();
+
+            // A conquista binária: o que o formulário não conseguia criar antes.
+            conn.execute(
+                "INSERT INTO goal_details (node_id, goal_kind, progress_source)
+                      VALUES ('g2', 'binary', 'milestones')",
+                [],
+            )
+            .expect("uma conquista binária nasce sem métrica nenhuma");
+        }
+
+        #[test]
+        fn a_quantitative_goal_still_needs_its_five_fields() {
+            let mut conn = Connection::open_in_memory().unwrap();
+            migrations().to_latest(&mut conn).unwrap();
+            conn.execute_batch(
+                "INSERT INTO areas (id, name) VALUES ('a1', 'Saude');
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('g3', 'goal', 'Meia meta', 'a1', 100, 100);",
+            )
+            .unwrap();
+
+            // Nullable não virou opcional: o CHECK por tipo substitui o NOT NULL
+            // que a coluna perdeu. Sem isso, a fase C teria afrouxado o banco.
+            let bad = conn.execute(
+                "INSERT INTO goal_details (node_id, goal_kind, metric_name)
+                      VALUES ('g3', 'quantitative', 'Peso')",
+                [],
+            );
+            assert!(bad.is_err(), "quantitativa sem alvo/unidade é recusada");
+        }
+
+        #[test]
+        fn a_goal_without_a_metric_cannot_measure_by_metric() {
+            let mut conn = Connection::open_in_memory().unwrap();
+            migrations().to_latest(&mut conn).unwrap();
+            conn.execute_batch(
+                "INSERT INTO areas (id, name) VALUES ('a1', 'Estudos');
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('g4', 'goal', 'Ingles fluente', 'a1', 100, 100);",
+            )
+            .unwrap();
+
+            let bad = conn.execute(
+                "INSERT INTO goal_details (node_id, goal_kind, progress_source)
+                      VALUES ('g4', 'staged', 'metric')",
+                [],
+            );
+            assert!(
+                bad.is_err(),
+                "uma escada não mede por uma métrica que não tem"
+            );
+        }
+
+        #[test]
+        fn the_subject_track_and_the_skill_checkins_are_live() {
+            let mut conn = Connection::open_in_memory().unwrap();
+            migrations().to_latest(&mut conn).unwrap();
+            conn.execute_batch(
+                "INSERT INTO areas (id, name) VALUES ('a1', 'Estudos');
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('s1', 'subject', 'Ingles', 'a1', 100, 100);
+                 INSERT INTO subject_details (node_id, track) VALUES ('s1', 'idioma');
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('k1', 'skill', 'Rust', 'a1', 100, 100);
+                 INSERT INTO skill_details (node_id, level) VALUES ('k1', 1);",
+            )
+            .unwrap();
+
+            // A trilha é fechada: a seção não pode receber um valor inventado.
+            let bad = conn.execute(
+                "UPDATE subject_details SET track = 'qualquer' WHERE node_id = 's1'",
+                [],
+            );
+            assert!(bad.is_err(), "a trilha tem vocabulário fechado");
+
+            // As matérias antigas (0013) nascem na trilha livre — nenhuma delas
+            // aparece por engano numa das seções novas.
+            conn.execute_batch(
+                "INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('s2', 'subject', 'Calculo', 'a1', 100, 100);
+                 INSERT INTO subject_details (node_id) VALUES ('s2');",
+            )
+            .unwrap();
+            let track: String = conn
+                .query_row(
+                    "SELECT track FROM subject_details WHERE node_id = 's2'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(track, "livre", "a matéria sem trilha fica fora das seções");
+
+            // O check-in mensal: um retrato por mês, e reinformar CORRIGE.
+            conn.execute_batch(
+                "INSERT INTO skill_checkins (skill_id, month, studied, applied, stars, noted_at)
+                      VALUES ('k1', '2026-07', 1, 3, 4, 500);
+                 INSERT OR REPLACE INTO skill_checkins
+                      (skill_id, month, studied, applied, stars, noted_at)
+                      VALUES ('k1', '2026-07', 1, 9, 5, 600);",
+            )
+            .unwrap();
+            let (n, applied): (i64, i64) = conn
+                .query_row(
+                    "SELECT COUNT(*), MAX(applied) FROM skill_checkins WHERE skill_id = 'k1'",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!(n, 1, "o mês tem UM retrato, não uma pilha");
+            assert_eq!(applied, 9, "reinformar corrigiu o retrato");
+
+            // As estrelas são 1..5 — uma auto-avaliação fora da régua é recusada.
+            let bad = conn.execute(
+                "INSERT INTO skill_checkins (skill_id, month, studied, applied, stars, noted_at)
+                      VALUES ('k1', '2026-08', 1, 0, 9, 700)",
+                [],
+            );
+            assert!(bad.is_err(), "a auto-avaliação vive entre 1 e 5");
         }
     }
 }

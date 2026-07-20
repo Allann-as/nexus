@@ -60,3 +60,13 @@ pub fn abandon_challenge(state: State<'_, AppState>, id: String) -> Result<Chall
 pub fn sync_challenges(state: State<'_, AppState>) -> Result<Vec<CompletedChallenge>> {
     state.challenges.sync()
 }
+
+/// EXCLUI uma temporada (BÚSSOLA, fase B).
+///
+/// Diferente de `abandon_challenge`: abandonar é o fato "tentei e larguei", e a
+/// temporada continua na lista marcada 'dropped'; excluir é tirar da existência
+/// uma que nunca deveria estar lá (duplicata, erro de digitação).
+#[tauri::command]
+pub fn delete_challenge(state: State<'_, AppState>, id: String) -> Result<()> {
+    state.challenges.delete(&id)
+}

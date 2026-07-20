@@ -1,7 +1,15 @@
 # NEXUS — Arquitetura
 
 > Documento vivo. Atualize-o no mesmo commit que muda a estrutura.
-> Estado atual: **M5.6 ARSENAL concluído**. O PRIME+ (M5.5) entregou o layout, a
+>
+> **v1.2 BÚSSOLA (em curso)** — o passe da primeira semana de uso REAL. A marca
+> deixa de ser o astrolábio e vira a bússola (ADR-0070); o fundo perde quatro das
+> cinco camadas; as metas ganham TIPO (ADR-0071, migration 0016) porque o
+> formulário quantitativo único recusava a vida do dono; e o backup pré-migration,
+> que a doc prometia desde o M5 sem nunca ter existido, virou código (ADR-0069).
+> Ver a §9.
+>
+> Estado anterior: **M5.6 ARSENAL concluído**. O PRIME+ (M5.5) entregou o layout, a
 > geometria do astrolábio, o NEXO, empty states, a tela de PIN e o REFINO (accent
 > índigo, ADR-0055; exclusão de aporte, ADR-0056; hub Objetivos + ritmo, ADR-0057).
 > O ARSENAL somou oito features, **todas agregando o que já existe — ZERO
@@ -447,3 +455,63 @@ npx tauri build        # instaladores NSIS + MSI
 > **Atenção:** `cargo build --release` sozinho **não** produz um app funcional —
 > ele não embute o frontend e o binário tenta carregar `localhost:1420`. Só a
 > CLI (`tauri build`) orquestra o bundle. Ver ADR-0005.
+## 9. A v1.2 BÚSSOLA — o que uma semana de uso real cobrou
+
+O M6 entregou a v1.0 e o dono começou a registrar a vida de verdade. O que a
+dirigida sintética nunca tinha mostrado apareceu na primeira semana: **os
+formulários genéricos não aceitavam a vida dele**, e a identidade visual não
+sobrevivia ao uso diário. A v1.2 é a resposta.
+
+### O achado que veio antes de qualquer feature
+
+A §6 do DATA_MODEL prometia, desde o M5, um backup automático antes de cada
+migration. A promessa foi conferida ao abrir a v1.2 — a primeira versão a migrar
+um `%APPDATA%` com **dados reais** — e era **falsa**: o `Db::open` ia do
+`quick_check` direto para o `run`. Corrigido antes de uma linha de SQL novo ser
+escrita (ADR-0069). A lição ficou registrada: uma linha de documentação não é uma
+garantia; toda afirmação de segurança deveria ter um teste com o nome dela.
+
+### A identidade (fase A)
+
+- **A marca é uma bússola** (ADR-0070). A metáfora do astrolábio estava certa e a
+  execução não sobrevivia a 32px. A geometria (centro 120, anel 96, pontas 76,
+  cintura 26) vive em três lugares com os mesmos números: `NexusMark.tsx`, o
+  `appicon.svg` do bundle e o splash cru do `index.html`.
+- **O fundo perdeu quatro camadas.** Era aurora + dot grid + astrolábio + grão +
+  anéis desfocados; virou uma aurora fraca e UM conjunto de aros finos fora de
+  centro, tingidos pela Esfera. O dot grid morreu junto com o `--dot-alpha`.
+- **Os empty states perderam o emblema.** O `AstrolabeGlyph` (anéis + limbo +
+  constelação em volta do ícone) virou `EmptyGlyph`: um círculo discreto e o
+  ícone Lucide que a tela já passava. A ornamentação abstrata era ruído.
+- **O calendário do app é nosso** (`design-system/DatePicker.tsx`). Os quatro
+  `<input type="date">` do app abriam o dropdown do Windows — o único lugar onde
+  a plataforma vazava para dentro da tela.
+
+### O direito de excluir (fase B)
+
+O que mais incomodou em uso real: *"não poder excluir coisas que eu criei"*. A
+auditoria achou **12 entidades sem nenhuma via de exclusão** na UI, e uma
+(`archiveSubject`) com backend e IPC prontos e nenhum chamador. O gesto armado —
+que já era o padrão do app, escrito em prosa em cinco arquivos — virou um
+componente só (`design-system/ArmedDelete.tsx`), com desarme por tempo, por Esc e
+por clique fora. Espalhar o gesto por uma dúzia de telas não podia significar uma
+dúzia de cópias novas.
+
+### As metas ganham tipo (fase C)
+
+Ver o **ADR-0071**. O ponto de arquitetura: os DEGRAUS de uma meta não pediram
+tabela nenhuma. Um sub-desafio já é um `milestone` — node ordenado, `parent_id` =
+a meta, `nodes.status='done'` como o checkbox — e uma escada "Básico → Fluente" é
+uma lista ordenada deles. O contador alimentado por hábito (`kind='counter'` com
+`habit_id` e `counts_from`) **existia inteiro no schema desde o M3** e era
+inalcançável pela UI, que só sabia criar `simple`.
+
+### A migration 0016, em batch
+
+A regra de olhar o roadmap inteiro antes de tocar no schema (ADR-0029/0036/0045/
+0058) rendeu **uma migration só** para as três fases que pedem banco: o tipo das
+metas (C), a trilha das matérias (D) e o check-in mensal de habilidade (E).
+**Nenhum `kind` novo, nenhum `link_type` novo** — logo, nenhuma recriação de
+`nodes` e nenhuma das três armadilhas do 12-step. A única reconstrução é a de
+`goal_details`, que é barata justamente por não ter nenhuma delas.
+

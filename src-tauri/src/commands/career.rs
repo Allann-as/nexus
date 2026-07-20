@@ -93,3 +93,24 @@ pub fn skills_evolving(
 ) -> Result<Vec<crate::application::ports::Skill>> {
     state.career.skills_evolving(&area_id)
 }
+
+/// Exclui uma competência (BÚSSOLA, fase B). O node sai; a trilha de níveis
+/// permanece no ledger (ADR-0056).
+#[tauri::command]
+pub fn delete_skill(state: State<'_, AppState>, id: String) -> Result<()> {
+    state.career.delete_skill(&id)
+}
+
+/// Retrata um marco de carreira (BÚSSOLA, fase B).
+///
+/// Não é um DELETE, e o nome diz isso de propósito: um marco não tem estado, só
+/// o evento (ADR-0032), e o ledger é append-only. A operação APENDA uma
+/// retratação com o mesmo `entityId`; o painel para de mostrar o marco e a
+/// história dos dois fatos fica. Ver `CareerService::delete_milestone`.
+#[tauri::command]
+pub fn delete_career_milestone(
+    state: State<'_, AppState>,
+    entity_id: String,
+) -> Result<LedgerEntry> {
+    state.career.delete_milestone(&entity_id)
+}

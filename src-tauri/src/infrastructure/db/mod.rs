@@ -50,6 +50,61 @@ fn configure(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// A rede de segurança que faltava: um snapshot do banco ANTES de qualquer
+/// migration tocá-lo.
+///
+/// A §6 do DATA_MODEL prometia "toda migration precedida de backup automático do
+/// arquivo" desde o M5, mas a promessa nunca virou código — o `Db::open` ia do
+/// `quick_check` direto para o `run`. Com dados reais no `%APPDATA%`, a diferença
+/// entre um upgrade que dá errado e um upgrade que dá errado E leva anos de
+/// história junto é exatamente este arquivo.
+///
+/// Decisões, e o porquê de cada uma:
+///
+/// * **`VACUUM INTO`, não uma cópia de arquivo.** Sob WAL, o `nexus.db` sozinho
+///   não é o banco — as escritas mais recentes moram no `-wal`. Copiar o arquivo
+///   é copiar um estado velho; o `VACUUM INTO` escreve um banco íntegro e
+///   autocontido a partir de uma leitura consistente. É o mesmo motor do
+///   `BackupEngine::create`, que aqui não dá para usar: ele precisa de um `Arc<Db>`
+///   que ainda não existe neste ponto do boot.
+///
+/// * **`.db` cru, não `.zip`.** Este snapshot não é um backup do usuário: é uma
+///   apólice para o desenvolvedor e para o suporte. Ficando fora do padrão de
+///   nome `nexus-*.zip`, ele não aparece na lista da UI e — o que importa — a
+///   **retenção nunca o poda**. Migrations são raras (15 na vida do projeto);
+///   estes arquivos não se acumulam de forma relevante, e o preço de guardar um a
+///   mais é irrisório perto do de não ter.
+///
+/// * **Falhar aqui não impede o boot.** Se a pasta estiver cheia ou somente
+///   leitura, o app ainda tem de abrir. O aviso vai para o log; o que não pode
+///   acontecer é o NEXUS se recusar a iniciar por causa da própria apólice.
+fn snapshot_before_migrating(conn: &Connection, paths: &Paths) {
+    match migrations::is_upgrade_pending(conn) {
+        Ok(false) => return,
+        Ok(true) => {}
+        Err(e) => {
+            tracing::warn!(error = %e, "não foi possível saber se há migration pendente; seguindo sem snapshot");
+            return;
+        }
+    }
+
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let dest = paths.backups.join(format!("pre-migration-{stamp}.db"));
+    if let Err(e) = std::fs::create_dir_all(&paths.backups) {
+        tracing::warn!(error = %e, "pasta de backups indisponível; migrando sem snapshot");
+        return;
+    }
+    let _ = std::fs::remove_file(&dest);
+
+    // Caminho app-controlado, mas a aspa simples é escapada por higiene: o
+    // `VACUUM INTO` não aceita bind de parâmetro em toda versão do SQLite.
+    let lit = dest.to_string_lossy().replace('\'', "''");
+    match conn.execute_batch(&format!("VACUUM main INTO '{lit}'")) {
+        Ok(()) => tracing::info!(path = %dest.display(), "snapshot pré-migration gravado"),
+        Err(e) => tracing::warn!(error = %e, "snapshot pré-migration falhou; migrando assim mesmo"),
+    }
+}
+
 pub struct Db {
     write: Mutex<Connection>,
     read: ReadPool,
@@ -65,6 +120,7 @@ impl Db {
         configure(&writer)?;
 
         Self::quick_check(&writer)?;
+        snapshot_before_migrating(&writer, paths);
         migrations::run(&mut writer)?;
 
         let manager = SqliteConnectionManager::file(&paths.db)
@@ -143,6 +199,77 @@ impl Db {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Quantos snapshots pré-migration existem na pasta de backups.
+    fn snapshots(paths: &Paths) -> usize {
+        std::fs::read_dir(&paths.backups)
+            .map(|d| {
+                d.flatten()
+                    .filter(|e| {
+                        e.file_name()
+                            .to_string_lossy()
+                            .starts_with("pre-migration-")
+                    })
+                    .count()
+            })
+            .unwrap_or(0)
+    }
+
+    #[test]
+    fn a_brand_new_database_is_not_snapshotted() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::at(dir.path().to_path_buf()).unwrap();
+
+        // Primeira abertura: 0 -> última versão. Não havia nada a perder.
+        let db = Db::open(&paths).unwrap();
+        assert_eq!(snapshots(&paths), 0, "banco novo não gera snapshot");
+
+        // Reabrir um banco já em dia também não gera — nada vai ser alterado.
+        drop(db);
+        let _db = Db::open(&paths).unwrap();
+        assert_eq!(snapshots(&paths), 0, "banco em dia não gera snapshot");
+    }
+
+    #[test]
+    fn a_database_behind_the_schema_is_snapshotted_before_migrating() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::at(dir.path().to_path_buf()).unwrap();
+
+        // Um banco com dado do usuário, fingindo estar atrás do schema corrente.
+        let conn = Connection::open(&paths.db).unwrap();
+        configure(&conn).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE historia (id INTEGER PRIMARY KEY, o_que TEXT);
+             INSERT INTO historia (o_que) VALUES ('cinco anos de vida');
+             PRAGMA user_version = 1;",
+        )
+        .unwrap();
+
+        snapshot_before_migrating(&conn, &paths);
+        assert_eq!(snapshots(&paths), 1, "o snapshot foi gravado");
+
+        // E o snapshot é um banco ÍNTEGRO com os dados dentro — não um arquivo
+        // truncado que só parece um backup.
+        let snap = std::fs::read_dir(&paths.backups)
+            .unwrap()
+            .flatten()
+            .find(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .starts_with("pre-migration-")
+            })
+            .unwrap()
+            .path();
+        let restored = Connection::open(&snap).unwrap();
+        let verdict: String = restored
+            .query_row("PRAGMA quick_check", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(verdict, "ok", "o snapshot passa no quick_check");
+        let saved: String = restored
+            .query_row("SELECT o_que FROM historia", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(saved, "cinco anos de vida", "os dados estão no snapshot");
+    }
 
     #[test]
     fn pragmas_are_applied_to_a_real_file() {

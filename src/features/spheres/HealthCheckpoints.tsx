@@ -16,7 +16,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Flame, Plus } from "lucide-react";
+import { CircleCheckBig, Flame, Plus } from "lucide-react";
 
 import { Checkbox } from "../../design-system/Checkbox";
 import { Button, EmptyState, cx } from "../../design-system/primitives";
@@ -68,7 +68,7 @@ export function HealthCheckpoints({ areaId }: { areaId: string }) {
     return (
       <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--border-subtle)] py-16">
         <EmptyState
-          icon={Plus}
+          icon={CircleCheckBig}
           title="Nenhum checkpoint ainda"
           hint="Os checkpoints são hábitos desta Esfera: beber água, treinar, tomar sol. Crie um aqui e ele vira uma caixa do dia — com anel, streak e XP a cada check."
           action={

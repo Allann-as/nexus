@@ -7,7 +7,7 @@ use crate::application::ports::{
     Checkpoint, Goal, Milestone, NewGoal, NewGoalDetails, NewMilestone,
 };
 use crate::application::use_cases::goals::GoalWithProgress;
-use crate::domain::entities::{Direction, MilestoneKind, ProgressSource};
+use crate::domain::entities::{Direction, GoalKind, MilestoneKind, ProgressSource};
 use crate::domain::errors::Result;
 use crate::state::AppState;
 
@@ -18,15 +18,30 @@ pub struct NewGoalDto {
     pub title: String,
     #[serde(default)]
     pub area_id: Option<String>,
-    pub metric_name: String,
-    pub start_value: f64,
-    pub target_value: f64,
-    pub unit: String,
-    pub direction: Direction,
+    /// O tipo. O padrão é 'quantitative' — é o único tipo que existia antes da
+    /// 0016, e é o que o formulário oferece primeiro.
+    #[serde(default = "quantitative")]
+    pub goal_kind: GoalKind,
+    /// Os cinco campos da métrica, todos opcionais NO DTO: uma conquista não
+    /// manda nenhum. Quem exige os cinco na quantitativa — e proíbe os cinco nas
+    /// outras — é o `GoalService::create`, onde o erro sai em português.
+    #[serde(default)]
+    pub metric_name: Option<String>,
+    #[serde(default)]
+    pub start_value: Option<f64>,
+    #[serde(default)]
+    pub target_value: Option<f64>,
+    #[serde(default)]
+    pub unit: Option<String>,
+    /// Ausente = deduzida de `startValue` vs `targetValue`. O formulário não
+    /// precisa mais mandá-la; se mandar, tem que concordar com os números.
+    #[serde(default)]
+    pub direction: Option<Direction>,
     #[serde(default)]
     pub deadline: Option<i64>,
     /// Qual barra manda. O padrão é a métrica: é o que a coluna da 0007 faz com
-    /// as metas que já existiam.
+    /// as metas que já existiam. Numa meta sem métrica o serviço a força para
+    /// 'milestones'.
     #[serde(default = "metric")]
     pub progress_source: ProgressSource,
 }
@@ -35,12 +50,17 @@ fn metric() -> ProgressSource {
     ProgressSource::Metric
 }
 
+fn quantitative() -> GoalKind {
+    GoalKind::Quantitative
+}
+
 #[tauri::command]
 pub fn create_goal(state: State<'_, AppState>, goal: NewGoalDto) -> Result<Goal> {
     state.goals.create(&NewGoal {
         title: goal.title,
         area_id: goal.area_id,
         details: NewGoalDetails {
+            goal_kind: goal.goal_kind,
             metric_name: goal.metric_name,
             start_value: goal.start_value,
             target_value: goal.target_value,

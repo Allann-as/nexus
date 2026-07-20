@@ -22,8 +22,15 @@ import { CountUp } from "../../design-system/cards";
 import { ProgressBar, ProgressRing, Sparkline } from "../../design-system/charts";
 import { Button, cx } from "../../design-system/primitives";
 import { metricDecimals } from "../../lib/format";
-import type { GoalWithProgress, MilestoneView, ProgressSource } from "../../lib/ipc";
+import type { GoalKind, GoalWithProgress, MilestoneView, ProgressSource } from "../../lib/ipc";
 import { NodeLinkSection } from "../links/NodeLinkSection";
+
+/** O subtítulo de uma meta SEM métrica — onde a quantitativa mostra o que mede. */
+const KIND_LABEL: Record<GoalKind, string> = {
+  quantitative: "",
+  binary: "Conquista",
+  staged: "Por etapas",
+};
 
 export function GoalCard({
   goal,
@@ -45,17 +52,34 @@ export function GoalCard({
   const [formula, setFormula] = useState(false);
   const done = goal.milestones.filter((m) => m.ratio >= 1).length;
 
+  /* Uma meta só tem MÉTRICA se for quantitativa (ADR-0071). Para a conquista e
+     para a escada, os cinco campos são NULL por invariante do banco — então tudo
+     que os lê (o número grande, a sparkline, a projeção, o checkpoint) some da
+     tela em vez de renderizar "null / null undefined". O `startValue` é a guarda
+     que o TypeScript cobra; o `goalKind` é a que diz a VERDADE, e é por ela que
+     o componente decide. */
+  const quantitative =
+    goal.goalKind === "quantitative" &&
+    goal.startValue !== null &&
+    goal.targetValue !== null;
+
   // A série viva dos checkpoints, normalizada 0..1 do começo ao alvo (C5). O sinal
   // do span já cuida da direção: 82→72 tem span negativo, então medir 72 dá 1. O
   // ponto 0 do começo abre a linha, para um único checkpoint já desenhar a subida.
-  const norm = (v: number) => {
-    const span = goal.targetValue - goal.startValue;
-    return span === 0 ? 0 : Math.max(0, Math.min(1, (v - goal.startValue) / span));
-  };
-  const series = [
-    0,
-    ...[...goal.checkpoints].sort((a, b) => a.notedAt - b.notedAt).map((c) => norm(c.value)),
-  ];
+  const series = quantitative
+    ? (() => {
+        const start = goal.startValue as number;
+        const span = (goal.targetValue as number) - start;
+        const norm = (v: number) =>
+          span === 0 ? 0 : Math.max(0, Math.min(1, (v - start) / span));
+        return [
+          0,
+          ...[...goal.checkpoints]
+            .sort((a, b) => a.notedAt - b.notedAt)
+            .map((c) => norm(c.value)),
+        ];
+      })()
+    : [];
 
   return (
     <article
@@ -79,27 +103,54 @@ export function GoalCard({
               {goal.title}
             </h3>
             <p className="mt-0.5 text-[11px] text-[var(--text-tertiary)]">
-              {goal.metricName}
+              {goal.metricName ?? KIND_LABEL[goal.goalKind]}
               {goal.deadline && ` · até ${new Date(goal.deadline).toLocaleDateString("pt-BR")}`}
             </p>
           </div>
 
-          <SourceToggle source={goal.progressSource} onChange={onSetSource} />
+          {/* O toggle só existe onde há DUAS medidas discordando (§5.6 do
+              DATA_MODEL). Sem métrica há uma só, o banco força
+              `progress_source='milestones'`, e oferecer a escolha seria oferecer
+              um botão que o backend recusa. */}
+          {quantitative && <SourceToggle source={goal.progressSource} onChange={onSetSource} />}
         </header>
 
-        {/* ===== o dado é o herói: número grande à esquerda, anel à direita ===== */}
+        {/* ===== o dado é o herói: o número (ou o degrau) à esquerda, o anel à direita =====
+            Cada tipo tem o SEU herói. A quantitativa mostra a métrica; a escada
+            mostra em que degrau se está, que é a única pergunta que ela responde;
+            a conquista não tem número nenhum, e fingir um seria pior que não ter. */}
         <div className="mb-3 flex items-center justify-between gap-4">
-          <div className="flex items-baseline gap-2">
-            <span className="tabular text-[34px] leading-none font-semibold text-[var(--text-primary)]">
-              <CountUp
-                to={goal.currentValue ?? goal.startValue}
-                decimals={metricDecimals(goal.currentValue ?? goal.startValue)}
-              />
+          {quantitative ? (
+            <div className="flex items-baseline gap-2">
+              <span className="tabular text-[34px] leading-none font-semibold text-[var(--text-primary)]">
+                <CountUp
+                  to={goal.currentValue ?? (goal.startValue as number)}
+                  decimals={metricDecimals(goal.currentValue ?? (goal.startValue as number))}
+                />
+              </span>
+              <span className="tabular text-[15px] text-[var(--text-tertiary)]">
+                / {goal.targetValue} {goal.unit}
+              </span>
+            </div>
+          ) : goal.goalKind === "staged" && goal.progress.stageTotal ? (
+            <div className="flex items-baseline gap-2">
+              <span className="tabular text-[34px] leading-none font-semibold text-[var(--text-primary)]">
+                <CountUp to={goal.progress.stageCurrent ?? 0} decimals={0} />
+              </span>
+              <span className="tabular text-[15px] text-[var(--text-tertiary)]">
+                / {goal.progress.stageTotal} degraus
+              </span>
+              {goal.progress.stageLabel && (
+                <span className="truncate text-[13px] font-medium text-[var(--sphere)]">
+                  {goal.progress.stageLabel}
+                </span>
+              )}
+            </div>
+          ) : (
+            <span className="text-[13px] text-[var(--text-secondary)]">
+              {done}/{goal.milestones.length || 0} degraus até a linha de chegada
             </span>
-            <span className="tabular text-[15px] text-[var(--text-tertiary)]">
-              / {goal.targetValue} {goal.unit}
-            </span>
-          </div>
+          )}
           <ProgressRing value={goal.progress.ratio} size={64} thickness={6} color="var(--sphere)">
             <span className="tabular text-[13px] font-semibold text-[var(--text-primary)]">
               {Math.round(goal.progress.ratio * 100)}%
@@ -109,7 +160,7 @@ export function GoalCard({
 
         {/* A trajetória: a série dos checkpoints como sparkline (C5). Sem medições,
             cai na barra grossa com glow — sempre há um elemento vivo. */}
-        {goal.checkpoints.length >= 1 ? (
+        {quantitative && goal.checkpoints.length >= 1 ? (
           <Sparkline data={series} color="var(--sphere)" width={420} height={44} className="w-full" />
         ) : (
           <div className="relative">
@@ -126,7 +177,12 @@ export function GoalCard({
           </div>
         )}
 
-        {/* ===== a projeção, com a fórmula a um clique ===== */}
+        {/* ===== a projeção, com a fórmula a um clique =====
+            Só a quantitativa projeta: mínimos quadrados sobre checkpoints precisa
+            de uma métrica para regredir. Numa conquista ou numa escada o backend
+            devolve `projection: null` de propósito, e a linha "registre N
+            checkpoints" não faz sentido nenhuma delas — some inteira. */}
+        {quantitative && (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-secondary)]">
           {goal.projection ? (
             <>
@@ -162,6 +218,7 @@ export function GoalCard({
             </span>
           )}
         </div>
+        )}
 
         {formula && goal.projection && (
           <p className="mt-2 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-3 py-2 text-[11px] leading-[18px] text-[var(--text-tertiary)]">
@@ -184,9 +241,15 @@ export function GoalCard({
 
         <footer className="mt-4 flex items-center gap-2 border-t border-[var(--border-subtle)] pt-3">
           <span className="text-[11px] text-[var(--text-tertiary)]">
-            {done}/{goal.milestones.length} sub-desafios
+            {done}/{goal.milestones.length}{" "}
+            {goal.goalKind === "staged" ? "degraus" : "sub-desafios"}
           </span>
-          <CheckpointButton unit={goal.unit} onSubmit={onCheckpoint} />
+          {/* O checkpoint mede a MÉTRICA. Sem métrica o backend recusa a escrita
+              (e faz bem), então o botão não pode existir para prometer o que não
+              vai acontecer. */}
+          {quantitative && (
+            <CheckpointButton unit={goal.unit as string} onSubmit={onCheckpoint} />
+          )}
         </footer>
 
         {/* Os vínculos: esta meta "conta para" uma Meta Anual ou um item de

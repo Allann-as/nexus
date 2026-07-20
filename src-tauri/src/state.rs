@@ -166,6 +166,7 @@ impl AppState {
 
         let fin_goals = FinGoalService {
             fin_goals: fin_goal_repo,
+            nodes: node_repo.clone(),
             areas: area_repo.clone(),
             ids: ids.clone(),
             clock: clock.clone(),
@@ -180,6 +181,7 @@ impl AppState {
 
         let career = CareerService {
             skills: Arc::new(SqliteSkillRepository::new(db.clone())),
+            nodes: node_repo.clone(),
             areas: area_repo.clone(),
             ledger: ledger.clone(),
             ids: ids.clone(),
@@ -304,6 +306,7 @@ impl AppState {
         // As temporadas/desafios (§2.2): nodes 'challenge' com placar computado.
         let challenges = ChallengeService {
             challenges: Arc::new(SqliteChallengeRepository::new(db.clone())),
+            nodes: node_repo.clone(),
             areas: area_repo.clone(),
             habits: habit_repo.clone(),
             ids: ids.clone(),

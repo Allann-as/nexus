@@ -840,16 +840,35 @@ export type ProgressSource = "metric" | "milestones";
 
 export type MilestoneKind = "simple" | "counter";
 
+/**
+ * O TIPO de uma meta. Espelha o CHECK de `goal_details.goal_kind` (0016).
+ *
+ * - `quantitative` — a meta de sempre: métrica, hoje, alvo e unidade.
+ * - `binary` — a CONQUISTA ("conseguir um emprego"). Só título e prazo.
+ * - `staged` — a ESCADA de níveis nomeados ("Básico -> Fluente").
+ *
+ * Não se confunde com `AnnualGoalKind`, que é da meta ANUAL e só tem dois
+ * valores.
+ */
+export type GoalKind = "quantitative" | "binary" | "staged";
+
 export interface Goal {
   id: string;
   title: string;
   areaId: string | null;
   status: string;
-  metricName: string;
-  startValue: number;
-  targetValue: number;
-  unit: string;
-  direction: Direction;
+  goalKind: GoalKind;
+  /**
+   * Os cinco campos da métrica saem em BLOCO: preenchidos numa
+   * 'quantitative', `null` em bloco numa 'binary' ou 'staged'. Uma conquista
+   * não mede nada, e um alvo fingido desenharia uma barra que ninguém
+   * alimenta.
+   */
+  metricName: string | null;
+  startValue: number | null;
+  targetValue: number | null;
+  unit: string | null;
+  direction: Direction | null;
   deadline: number | null;
   progressSource: ProgressSource;
 }
@@ -893,6 +912,15 @@ export interface GoalProgress {
   source: ProgressSource;
   /** A conta por extenso — o "ⓘ como calculamos". */
   formula: string;
+  /**
+   * Os três campos da ESCADA. Só vêm preenchidos numa meta 'staged' — `null`
+   * nas outras duas, porque "0 de 0 degraus" não é uma leitura honesta de uma
+   * meta que não é uma escada.
+   */
+  stageCurrent: number | null;
+  stageTotal: number | null;
+  /** O título do último degrau concluído. `null` = ainda no chão. */
+  stageLabel: string | null;
 }
 
 /**
@@ -915,18 +943,39 @@ export interface GoalWithProgress extends Goal {
   /** `null` = nunca mediu. Não é o mesmo que ter medido o valor inicial. */
   currentValue: number | null;
   checkpoints: GoalCheckpoint[];
+  /** Numa meta 'staged' estes SÃO os degraus, já em `sortOrder`. */
   milestones: MilestoneView[];
+  /**
+   * `null` com menos de 2 checkpoints — e SEMPRE `null` numa meta 'binary' ou
+   * 'staged': uma reta precisa de um alvo numérico, e inventar uma data sobre
+   * um alvo que não existe seria um chute.
+   */
   projection: Projection | null;
 }
 
+/**
+ * Cria uma meta.
+ *
+ * O `goalKind` manda no resto: uma 'quantitative' EXIGE `metricName`, `unit`,
+ * `startValue` e `targetValue` (com alvo diferente da partida); uma 'binary' ou
+ * 'staged' exige que os cinco campos de métrica fiquem de fora — o backend
+ * recusa com "uma meta de conquista não tem métrica".
+ *
+ * `direction` não precisa mais ser mandada: o backend a deduz de `startValue`
+ * vs `targetValue`. Se for mandada, tem que concordar com os números.
+ *
+ * `progressSource` é ignorada fora da 'quantitative': uma meta sem alvo só pode
+ * medir pelos degraus, e o backend força 'milestones'.
+ */
 export const createGoal = (g: {
   title: string;
   areaId?: string | null;
-  metricName: string;
-  startValue: number;
-  targetValue: number;
-  unit: string;
-  direction: Direction;
+  goalKind?: GoalKind;
+  metricName?: string | null;
+  startValue?: number | null;
+  targetValue?: number | null;
+  unit?: string | null;
+  direction?: Direction | null;
   deadline?: number | null;
   progressSource?: ProgressSource;
 }) => call<Goal>("create_goal", { goal: g });
@@ -1114,6 +1163,16 @@ export const recentContributions = (limit = 50) =>
 /** Exclui um aporte lançado por engano — corrige o estado; o ledger fica. */
 export const deleteContribution = (id: string) =>
   call<void>("delete_contribution", { id });
+
+/**
+ * Exclui uma caixinha (BÚSSOLA, fase B).
+ *
+ * Os depósitos saem junto pelo CASCADE do schema. O ledger guarda que ela
+ * existiu e que foi removida — o estado é corrigido, a história nunca
+ * (ADR-0056).
+ */
+export const deleteFinGoal = (id: string) =>
+  call<void>("delete_fin_goal", { id });
 
 /** Todo o dashboard das Finanças, numa chamada. */
 export const financeOverview = () => call<FinanceOverview>("finance_overview");
@@ -1501,6 +1560,21 @@ export const recordCareerMilestone = (m: {
 /** Os marcos de carreira, do mais recente ao mais antigo. */
 export const careerMilestones = () => call<LedgerEntry[]>("career_milestones");
 
+/**
+ * RETRATA um marco de carreira (BÚSSOLA, fase B).
+ *
+ * O nome diz "delete" mas a operação é um APPEND, e a diferença é estrutural:
+ * um marco não tem estado, ele é só o evento (ADR-0032), e o ledger é
+ * append-only por gatilho. Então "excluir" é apendar uma retratação com o mesmo
+ * `entityId` — o painel para de mostrar o marco, e o ledger guarda os dois
+ * fatos, ambos verdadeiros no seu instante (ADR-0056).
+ *
+ * Devolve a linha da retratação, para a UI atualizar sem refetch. Chamar duas
+ * vezes é inofensivo: o segundo clique devolve a mesma retratação.
+ */
+export const deleteCareerMilestone = (entityId: string) =>
+  call<LedgerEntry>("delete_career_milestone", { entityId });
+
 /** Uma competência da Carreira (§2.6). `level` é o estado atual; a trilha vem de `skillTrack`. */
 export interface Skill {
   id: string;
@@ -1542,6 +1616,12 @@ export const listSkills = (areaId: string | null) =>
 
 /** A trilha de evolução: (dia, nível). Um ponto só = competência nova. */
 export const skillTrack = (id: string) => call<SkillPoint[]>("skill_track", { id });
+
+/**
+ * Exclui uma competência (BÚSSOLA, fase B). O node sai; as subidas de nível
+ * permanecem no ledger — o XP é derivado dele (ADR-0037/0056).
+ */
+export const deleteSkill = (id: string) => call<void>("delete_skill", { id });
 
 /** As competências que subiram de nível nos últimos 90 dias — "em evolução". */
 export const skillsEvolving = (areaId: string) =>
@@ -1823,6 +1903,16 @@ export const abandonChallenge = (id: string) =>
 
 export const syncChallenges = () =>
   call<CompletedChallenge[]>("sync_challenges");
+
+/**
+ * EXCLUI uma temporada (BÚSSOLA, fase B).
+ *
+ * Diferente de `abandonChallenge`: abandonar é o fato "tentei e larguei", e a
+ * temporada continua na lista marcada 'dropped'; excluir é tirar da existência
+ * uma que nunca deveria estar lá (duplicata, erro de digitação).
+ */
+export const deleteChallenge = (id: string) =>
+  call<void>("delete_challenge", { id });
 
 /* ===== M4.5 — metas anuais ===== */
 

@@ -18,6 +18,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, MapPin, Plus } from "lucide-react";
 
+import { DatePicker } from "../../design-system/DatePicker";
 import { Button, Card, EmptyState, cx } from "../../design-system/primitives";
 import { createEvent, eventsByCategory, type Occurrence } from "../../lib/ipc";
 import { useToasts } from "../../stores/toasts";
@@ -142,11 +143,10 @@ function ExamForm({ areaId, onDone }: { areaId: string; onDone: () => void }) {
 
       <div className="mt-4 grid grid-cols-3 gap-2">
         <Field label="Dia">
-          <input
-            type="date"
+          <DatePicker
             value={day}
-            onChange={(e) => setDay(e.target.value)}
-            className="tabular w-full rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-2 py-1.5 text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--sphere)]"
+            onChange={(d) => setDay(d ?? "")}
+            ariaLabel="Dia do exame"
           />
         </Field>
         <Field label="Hora">

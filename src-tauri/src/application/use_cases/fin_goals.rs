@@ -8,7 +8,7 @@ use serde_json::json;
 
 use crate::application::ports::{
     AreaRepository, Clock, FinGoal, FinGoalDeposit, FinGoalRepository, IdGen, NewFinGoal,
-    NewFinGoalDeposit, NewNode,
+    NewFinGoalDeposit, NewNode, NodeRepository,
 };
 use crate::domain::entities::{validate_title, Kind};
 use crate::domain::errors::{NexusError, Result};
@@ -36,6 +36,9 @@ pub struct DepositOutcome {
 
 pub struct FinGoalService {
     pub fin_goals: Arc<dyn FinGoalRepository>,
+    /// Para EXCLUIR: uma caixinha é um node, e apagar um node é a mesma
+    /// operação para todos eles (ADR-0056). Ver `FinGoalService::delete`.
+    pub nodes: Arc<dyn NodeRepository>,
     pub areas: Arc<dyn AreaRepository>,
     pub ids: Arc<dyn IdGen>,
     pub clock: Arc<dyn Clock>,
@@ -209,6 +212,38 @@ impl FinGoalService {
 
     pub fn deposits(&self, goal_id: &str) -> Result<Vec<FinGoalDeposit>> {
         self.fin_goals.deposits(goal_id)
+    }
+
+    /// Exclui uma caixinha (BÚSSOLA, fase B).
+    ///
+    /// O que o usuário criou, ele tem que poder desfazer. A regra é a mesma do
+    /// ADR-0056: apaga o ESTADO, e o ledger fica. O evento `Deleted` entra na
+    /// MESMA transação do DELETE (`delete_with_event`), então ou a história e o
+    /// estado andam juntos ou nenhum dos dois anda.
+    ///
+    /// Os DEPÓSITOS saem junto pelo CASCADE encadeado do schema:
+    /// `nodes` -> `fin_goal_details(node_id)` -> `fin_goal_deposits(goal_id)`,
+    /// os dois `ON DELETE CASCADE` da 0011, com `PRAGMA foreign_keys = ON`
+    /// aplicado em toda conexão. Nada a apagar à mão aqui — e o teste
+    /// `deleting_a_caixinha_takes_its_deposits_with_it` é quem garante isso.
+    pub fn delete(&self, id: &str) -> Result<()> {
+        // Lê pelo repositório da caixinha, não pelo de nodes: assim um id de
+        // tarefa ou de hábito não é apagado por um command chamado
+        // `delete_fin_goal`. O `NotFound` vem daqui.
+        let goal = self.fin_goals.get(id)?;
+        let event = NewLedgerEvent {
+            ts: self.clock.now_ms(),
+            day: self.clock.today_local(),
+            entity_id: id.to_string(),
+            entity_kind: LedgerEntityKind::Node(Kind::FinGoal),
+            event_type: EventType::Deleted,
+            payload: json!({
+                "targetCents": goal.target_cents,
+                "savedCents": goal.saved_cents,
+            }),
+            title_snapshot: goal.title.clone(),
+        };
+        self.nodes.delete_with_event(id, &event)
     }
 }
 

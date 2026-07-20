@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 
+import { DatePicker } from "../../design-system/DatePicker";
 import { Modal } from "../../design-system/Modal";
 import { Button, cx } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
@@ -105,11 +106,10 @@ export function RecordMilestoneModal({
             </Field>
 
             <Field label="Quando">
-              <input
-                type="date"
+              <DatePicker
                 value={happenedOn}
-                onChange={(e) => setHappenedOn(e.target.value)}
-                className="h-10 w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-3 text-[13px] text-[var(--text-primary)] outline-none focus:border-[var(--sphere)]"
+                onChange={(d) => setHappenedOn(d ?? happenedOn)}
+                ariaLabel="Quando o marco aconteceu"
               />
             </Field>
 
