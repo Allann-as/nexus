@@ -94,6 +94,55 @@ pub fn skills_evolving(
     state.career.skills_evolving(&area_id)
 }
 
+/* ===== O check-in mensal (BÚSSOLA, fase E) ===== */
+
+/// Registra (ou CORRIGE) o check-in mensal de uma competência.
+///
+/// `month` ausente = o mês corrente; um mês futuro é recusado. Reinformar o mês
+/// corrige o retrato e acrescenta OUTRA linha ao ledger — o estado se corrige, a
+/// história não se reescreve.
+#[tauri::command]
+pub fn record_skill_checkin(
+    state: State<'_, AppState>,
+    skill_id: String,
+    month: Option<String>,
+    studied: bool,
+    applied: i64,
+    stars: i64,
+) -> Result<crate::application::ports::SkillCheckin> {
+    state
+        .career
+        .record_skill_checkin(&skill_id, month, studied, applied, stars)
+}
+
+/// Os check-ins de uma competência, do mês mais antigo ao mais recente.
+#[tauri::command]
+pub fn skill_checkins(
+    state: State<'_, AppState>,
+    skill_id: String,
+) -> Result<Vec<crate::application::ports::SkillCheckin>> {
+    state.career.skill_checkins(&skill_id)
+}
+
+/// A régua 1-10 CALCULADA, mês a mês. Vazia enquanto não houver check-in.
+#[tauri::command]
+pub fn skill_level_history(
+    state: State<'_, AppState>,
+    skill_id: String,
+) -> Result<Vec<crate::application::use_cases::career::SkillLevelPoint>> {
+    state.career.skill_level_history(&skill_id)
+}
+
+/// O nível calculado de hoje com a FÓRMULA por extenso — o "ⓘ como calculamos".
+/// `null` quando ainda não há check-in nenhum.
+#[tauri::command]
+pub fn skill_computed_level(
+    state: State<'_, AppState>,
+    skill_id: String,
+) -> Result<Option<crate::domain::skill_level::ComputedLevel>> {
+    state.career.skill_computed_level(&skill_id)
+}
+
 /// Exclui uma competência (BÚSSOLA, fase B). O node sai; a trilha de níveis
 /// permanece no ledger (ADR-0056).
 #[tauri::command]

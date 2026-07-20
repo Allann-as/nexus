@@ -637,9 +637,128 @@ impl AssetClass {
     }
 }
 
+/// A TRILHA de uma matéria (BÚSSOLA, fase D).
+///
+/// Espelha o CHECK de `subject_details.track` (0016). É o discriminante das
+/// seções de Estudos: Idiomas, Faculdade e Cursos eram o MESMO componente
+/// rodando a MESMA query, e nada gravava a qual seção o item pertencia — por
+/// isso o Inglês criado em Idiomas aparecia dentro de Faculdade.
+///
+/// Fechado e do SISTEMA, ao contrário de `category`, que é texto livre e é do
+/// USUÁRIO ("Semestre 1", "Optativas"). Sobrecarregar `category` como
+/// discriminante faria a UI competir com o usuário pelo mesmo campo, e um
+/// renome inocente ("Faculdade" -> "UFRJ") sumiria com a matéria da tela.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SubjectTrack {
+    /// A matéria avulsa — a aba "Matérias" de sempre. O default do schema
+    /// (`track TEXT NOT NULL DEFAULT 'livre'`), dito também aqui.
+    #[default]
+    Livre,
+    /// Um idioma. O nível atual dele é a meta `staged` em `level_goal_id`.
+    Idioma,
+    /// Uma disciplina da faculdade.
+    Faculdade,
+    /// Um curso, com estágio (`course_stage`) e previsão de fim.
+    Curso,
+}
+
+impl SubjectTrack {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SubjectTrack::Livre => "livre",
+            SubjectTrack::Idioma => "idioma",
+            SubjectTrack::Faculdade => "faculdade",
+            SubjectTrack::Curso => "curso",
+        }
+    }
+
+    pub fn parse(s: &str) -> Result<Self> {
+        Ok(match s {
+            "livre" => SubjectTrack::Livre,
+            "idioma" => SubjectTrack::Idioma,
+            "faculdade" => SubjectTrack::Faculdade,
+            "curso" => SubjectTrack::Curso,
+            other => {
+                return Err(NexusError::Validation(format!(
+                    "trilha de matéria desconhecida: {other} (esperado 'livre', 'idioma', 'faculdade' ou 'curso')"
+                )))
+            }
+        })
+    }
+}
+
+/// O ESTÁGIO de um curso (BÚSSOLA, fase D3).
+///
+/// Espelha o CHECK de `subject_details.course_stage` (0016). Só faz sentido na
+/// trilha `curso` — um idioma com "concluído" seria uma mentira na coluna.
+///
+/// Não é `nodes.status` porque 'active'/'archived' já significam outra coisa (a
+/// matéria está viva ou arquivada), e "quero fazer" não é nenhuma das duas: é um
+/// curso ativo que ainda não começou.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CourseStage {
+    QueroFazer,
+    Fazendo,
+    Concluido,
+}
+
+impl CourseStage {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CourseStage::QueroFazer => "quero_fazer",
+            CourseStage::Fazendo => "fazendo",
+            CourseStage::Concluido => "concluido",
+        }
+    }
+
+    pub fn parse(s: &str) -> Result<Self> {
+        Ok(match s {
+            "quero_fazer" => CourseStage::QueroFazer,
+            "fazendo" => CourseStage::Fazendo,
+            "concluido" => CourseStage::Concluido,
+            other => {
+                return Err(NexusError::Validation(format!(
+                    "estágio de curso desconhecido: {other} (esperado 'quero_fazer', 'fazendo' ou 'concluido')"
+                )))
+            }
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn subject_track_round_trips() {
+        // Estas strings estão no CHECK da 0016 e no banco do usuário.
+        for t in [
+            SubjectTrack::Livre,
+            SubjectTrack::Idioma,
+            SubjectTrack::Faculdade,
+            SubjectTrack::Curso,
+        ] {
+            assert_eq!(SubjectTrack::parse(t.as_str()).unwrap(), t);
+        }
+        assert_eq!(SubjectTrack::default(), SubjectTrack::Livre);
+        assert!(SubjectTrack::parse("idiomas").is_err());
+    }
+
+    #[test]
+    fn course_stage_round_trips() {
+        for s in [
+            CourseStage::QueroFazer,
+            CourseStage::Fazendo,
+            CourseStage::Concluido,
+        ] {
+            assert_eq!(CourseStage::parse(s.as_str()).unwrap(), s);
+        }
+        // Sem acento e com underscore, exatamente como o CHECK da 0016.
+        assert_eq!(CourseStage::Concluido.as_str(), "concluido");
+        assert!(CourseStage::parse("concluído").is_err());
+    }
 
     #[test]
     fn kind_round_trips() {

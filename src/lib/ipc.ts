@@ -1359,6 +1359,25 @@ export const readingStats = (areaId?: string | null) =>
 
 /* ===== Estudos: matérias e sessões (item 7) ===== */
 
+/**
+ * A TRILHA de uma matéria (BÚSSOLA, fase D) — espelha `domain::entities::SubjectTrack`.
+ *
+ * É o discriminante das seções de Estudos. Idiomas, Faculdade e Cursos eram o
+ * MESMO componente rodando a MESMA query, e nada gravava a qual seção o item
+ * pertencia — por isso o Inglês criado em Idiomas aparecia em Faculdade.
+ *
+ * Fechado e do SISTEMA. `category` continua sendo o texto livre do USUÁRIO
+ * ("Semestre 1", "Optativas") — os dois convivem e não competem.
+ */
+export type SubjectTrack = "livre" | "idioma" | "faculdade" | "curso";
+
+/**
+ * O ESTÁGIO de um curso (BÚSSOLA, fase D3) — espelha `domain::entities::CourseStage`.
+ *
+ * Só existe na trilha `curso`; o backend recusa em qualquer outra.
+ */
+export type CourseStage = "quero_fazer" | "fazendo" | "concluido";
+
 /** Uma matéria (`subject`). O progresso é COMPUTADO das sessões (ver SubjectProgress). */
 export interface Subject {
   id: string;
@@ -1367,6 +1386,14 @@ export interface Subject {
   status: Status;
   category: string | null;
   targetMinutes: number | null;
+  /** A seção de Estudos a que ela pertence. */
+  track: SubjectTrack;
+  /** Só num curso; `null` em toda outra trilha. */
+  courseStage: CourseStage | null;
+  /** A previsão de conclusão, dia local 'YYYY-MM-DD'. */
+  expectedEnd: string | null;
+  /** A meta 'staged' que descreve o nível de um idioma. `null` = sem escada. */
+  levelGoalId: string | null;
   createdAt: number;
 }
 
@@ -1419,6 +1446,11 @@ export const createSubject = (s: {
   areaId?: string | null;
   category?: string | null;
   targetMinutes?: number | null;
+  /** Ausente = 'livre' (a aba "Matérias"). */
+  track?: SubjectTrack | null;
+  /** Só aceito quando `track` é 'curso'; o backend recusa nas outras. */
+  courseStage?: CourseStage | null;
+  expectedEnd?: string | null;
 }) =>
   call<Subject>("create_subject", {
     subject: {
@@ -1426,11 +1458,38 @@ export const createSubject = (s: {
       areaId: s.areaId ?? null,
       category: s.category ?? null,
       targetMinutes: s.targetMinutes ?? null,
+      track: s.track ?? null,
+      courseStage: s.courseStage ?? null,
+      expectedEnd: s.expectedEnd ?? null,
     },
   });
 
-export const listSubjects = (areaId: string | null) =>
-  call<Subject[]>("list_subjects", { areaId });
+/**
+ * As matérias de uma Esfera e/ou de uma TRILHA.
+ *
+ * `track = null` devolve TODAS — é assim que a aba "Matérias" continua
+ * funcionando. Cada seção (Idiomas, Faculdade, Cursos) passa a sua trilha e vê
+ * só o que é dela.
+ */
+export const listSubjects = (areaId: string | null, track: SubjectTrack | null = null) =>
+  call<Subject[]>("list_subjects", { areaId, track });
+
+/** Muda o estágio de um CURSO. Recusado em qualquer outra trilha. */
+export const setCourseStage = (id: string, stage: CourseStage | null) =>
+  call<Subject>("set_course_stage", { id, stage });
+
+/** Ajusta a previsão de conclusão ('YYYY-MM-DD'). Pode ser futura; `null` remove. */
+export const setSubjectExpectedEnd = (id: string, day: string | null) =>
+  call<Subject>("set_subject_expected_end", { id, day });
+
+/**
+ * Liga a matéria (tipicamente um IDIOMA) à meta que descreve o nível dela.
+ *
+ * A meta precisa ser do tipo 'staged' — a escada de níveis nomeados
+ * ("Básico -> Fluente"). O backend recusa qualquer outro tipo. `null` desfaz.
+ */
+export const setSubjectLevelGoal = (subjectId: string, goalId: string | null) =>
+  call<Subject>("set_subject_level_goal", { subjectId, goalId });
 
 export const setSubjectTarget = (id: string, targetMinutes: number | null) =>
   call<Subject>("set_subject_target", { id, targetMinutes });
@@ -1575,16 +1634,72 @@ export const careerMilestones = () => call<LedgerEntry[]>("career_milestones");
 export const deleteCareerMilestone = (entityId: string) =>
   call<LedgerEntry>("delete_career_milestone", { entityId });
 
-/** Uma competência da Carreira (§2.6). `level` é o estado atual; a trilha vem de `skillTrack`. */
+/**
+ * Uma competência da Carreira (§2.6) — espelha `application::ports::Skill`.
+ *
+ * **Dois níveis convivem aqui, de propósito** (BÚSSOLA, fase E):
+ *
+ * - `level` é o número GRAVADO, subido pelo clique manual (`levelUpSkill`). Foi
+ *   o único nível até a v1.1.
+ * - `computedLevel` é o nível DERIVADO do histórico de check-ins mensais
+ *   (ADR-0037). A partir da v1.2 é ele que manda.
+ *
+ * A coluna não foi apagada porque toda competência criada antes da v1.2 tem um
+ * nível gravado e ZERO check-ins: apagá-la zeraria, na atualização, um número
+ * que o usuário construiu clique a clique.
+ *
+ * **A regra da UI:** mostre `computedLevel` quando ele não for `null`; caia em
+ * `level` quando for. `null` quer dizer "ainda não há check-in" — e não um nível
+ * 1 inventado, porque o app não inventa números.
+ */
 export interface Skill {
   id: string;
   title: string;
   areaId: string | null;
   status: Status;
   level: number;
+  /** O nível derivado dos check-ins. `null` = sem check-in; use `level`. */
+  computedLevel: number | null;
   category: string | null;
   maxLevel: number | null;
   createdAt: number;
+}
+
+/** Um check-in mensal — espelha `application::ports::SkillCheckin`. */
+export interface SkillCheckin {
+  skillId: string;
+  /** 'YYYY-MM' local. */
+  month: string;
+  studied: boolean;
+  applied: number;
+  /** 1..5. */
+  stars: number;
+  notedAt: number;
+}
+
+/**
+ * Um ponto da régua de evolução CALCULADA — espelha
+ * `use_cases::career::SkillLevelPoint`.
+ */
+export interface SkillLevelPoint {
+  /** 'YYYY-MM' local. */
+  month: string;
+  /** 1..10. */
+  level: number;
+  weightedAvg: number;
+  sampleSize: number;
+}
+
+/**
+ * O nível calculado com a fórmula por extenso — espelha
+ * `domain::skill_level::ComputedLevel`. O `formula` é o texto do
+ * "ⓘ como calculamos".
+ */
+export interface ComputedSkillLevel {
+  level: number;
+  weightedAvg: number;
+  sampleSize: number;
+  formula: string;
 }
 
 /** Um ponto da trilha de evolução de uma competência. */
@@ -1626,6 +1741,42 @@ export const deleteSkill = (id: string) => call<void>("delete_skill", { id });
 /** As competências que subiram de nível nos últimos 90 dias — "em evolução". */
 export const skillsEvolving = (areaId: string) =>
   call<Skill[]>("skills_evolving", { areaId });
+
+/**
+ * Registra (ou CORRIGE) o check-in mensal de uma competência (BÚSSOLA, fase E).
+ *
+ * Três perguntas, uma vez por mês: estudou? quantas vezes aplicou? quantas
+ * estrelas de evolução (1..5)? O nível 1-10 é DERIVADO disto (ADR-0037).
+ *
+ * `month = null` é o mês corrente; um mês FUTURO é recusado. Reinformar o mesmo
+ * mês CORRIGE o retrato em vez de empilhar — mas cada resposta (inclusive a
+ * correção) vira uma linha no ledger, que é append-only.
+ */
+export const recordSkillCheckin = (
+  skillId: string,
+  month: string | null,
+  studied: boolean,
+  applied: number,
+  stars: number,
+) => call<SkillCheckin>("record_skill_checkin", { skillId, month, studied, applied, stars });
+
+/** Os check-ins de uma competência, do mês mais antigo ao mais recente. */
+export const skillCheckins = (skillId: string) =>
+  call<SkillCheckin[]>("skill_checkins", { skillId });
+
+/**
+ * A régua 1-10 CALCULADA, mês a mês desde o primeiro check-in — o gráfico de
+ * evolução. Volta VAZIA enquanto não houver check-in nenhum.
+ */
+export const skillLevelHistory = (skillId: string) =>
+  call<SkillLevelPoint[]>("skill_level_history", { skillId });
+
+/**
+ * O nível calculado de hoje com a fórmula por extenso — o "ⓘ como calculamos".
+ * `null` quando ainda não há check-in.
+ */
+export const skillComputedLevel = (skillId: string) =>
+  call<ComputedSkillLevel | null>("skill_computed_level", { skillId });
 
 /* ===== Links entre nodes (M4.6) ===== */
 

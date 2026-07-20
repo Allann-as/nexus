@@ -531,6 +531,86 @@ node, exatamente como a sessão de estudo (§5.12). Ver o **ADR do Modo Foco**.
   remove a linha (recomputa XP e estatísticas); o evento no ledger permanece
   (append-only), como desmarcar um hábito.
 
+## 5.14 A BÚSSOLA — tipo de meta, trilha de matéria, check-in de habilidade (0016, v1.2)
+
+Uma migration só para as três fases que pediam schema — a regra de batch dos
+ADR-0029/0036/0045/0058, cobrada antes de escrever qualquer SQL. **Nenhum `kind`
+novo, nenhum `link_type` novo**, e isso É o resultado do levantamento, registrado
+para não se recriar `nodes` por reflexo. Logo: nenhuma recriação de `nodes`, e as
+três armadilhas do 12-step não se aplicam a nada aqui.
+
+### `goal_details` reconstruída — a meta ganha TIPO (ADR-0071)
+
+Ela nasceu na 0001 assumindo que toda meta é quantitativa: `metric_name`,
+`start_value`, `target_value`, `unit` e `direction` **todos NOT NULL**. "Conseguir
+um emprego" não tem nenhum dos cinco, e o formulário não podia sequer oferecer o
+tipo — o banco recusaria a linha.
+
+- `goal_kind` — `'quantitative'` | `'binary'` | `'staged'`, default `'quantitative'`
+  (é o que toda linha anterior é).
+- As cinco colunas de métrica viram **nullable**, e o NOT NULL é substituído por um
+  **CHECK POR TIPO**: quantitativa exige os cinco; binária e por etapas proíbem os
+  cinco. Nullable não pode virar opcional — uma quantitativa sem alvo é uma barra
+  que ninguém alimenta, e uma conquista com `target_value` é uma meta que finge ter
+  número.
+- Um segundo CHECK garante `progress_source='milestones'` quando não há métrica:
+  pedir uma divisão por um alvo inexistente é o caminho silencioso para um NaN.
+
+**Os degraus não pediram tabela.** A escada de uma meta `staged` e os sub-desafios
+de qualquer meta são os `milestone` da 0007 (§5.6): node ordenado, `parent_id` = a
+meta, `nodes.status='done'` como o checkbox. O degrau atual é a contagem dos
+concluídos. O contador alimentado por hábito (`kind='counter'` + `habit_id` +
+`counts_from`) já existia implementado e testado desde o M3 — só nunca tinha sido
+exposto na UI.
+
+A reconstrução é barata **porque `goal_details` não tem as armadilhas de `nodes`**:
+nenhum gatilho de FTS a menciona, nada indexa o rowid dela, e quem a referencia
+(`goal_checkpoints`) aponta para a PK, que volta idêntica. Provado por teste sobre
+um banco semeado na 0015, com `foreign_key_check` explícito depois.
+
+### `subject_details` cresce — a matéria ganha TRILHA (ADR-0072)
+
+- `track` — `'livre'|'idioma'|'faculdade'|'curso'`, NOT NULL default `'livre'`. É o
+  discriminante das seções de Estudos, **fechado e do sistema**. `category` continua
+  livre e do USUÁRIO; sobrecarregá-la faria a UI competir com ele pelo mesmo campo.
+  As matérias anteriores à 0016 nascem em `'livre'` — nenhuma aparece por engano
+  numa das seções novas.
+- `course_stage` — `'quero_fazer'|'fazendo'|'concluido'`, nullable. Não é
+  `nodes.status`: *"quero fazer"* é um curso ATIVO que ainda não começou.
+- `expected_end` — dia local, como todo dia do schema.
+- `level_goal_id` — a meta `staged` que dá o nível do idioma. Guarda-se só QUAL é,
+  para a tela achá-la sem varrer `links`.
+- Índice `idx_subject_track`: a seção abre filtrando por trilha.
+
+Nota de SQLite: `ALTER TABLE ADD COLUMN` **aceita** `CHECK` de coluna (verificado
+antes de escrever a migration), então nada aqui exigiu reconstrução.
+
+### `skill_checkins` — o fato mensal que vira nível (ADR-0073)
+
+```sql
+CREATE TABLE skill_checkins (
+    skill_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    month    TEXT NOT NULL,                        -- 'YYYY-MM' local
+    studied  INTEGER NOT NULL CHECK (studied IN (0,1)),
+    applied  INTEGER NOT NULL CHECK (applied >= 0),
+    stars    INTEGER NOT NULL CHECK (stars BETWEEN 1 AND 5),
+    noted_at INTEGER NOT NULL,
+    PRIMARY KEY (skill_id, month)
+) WITHOUT ROWID;
+```
+
+Um LOG, não um node — como `contributions`, `study_sessions` e `focus_sessions`.
+`WITHOUT ROWID` pela mesma razão de `habit_ticks`: a leitura que a fórmula faz é
+"todos os check-ins desta competência em ordem", que vira range scan sequencial.
+Reinformar o mês CORRIGE (`INSERT OR REPLACE`), como `portfolio_snapshots` — um mês
+tem um retrato só; a história de ter respondido fica no ledger, append-only.
+
+O nível 1–10 é **derivado** por `domain::skill_level` (função pura, 20 testes), com
+janela de 12 meses, decaimento `0,85^k` e a fórmula sempre exibível. Sem check-in
+nenhum o resultado é `None`, nunca 1 — inventar número para quem não respondeu é o
+que a constituição proíbe. `skill_details.level` (o +1 manual do M4.6) sobrevive
+como fallback para as competências criadas antes da v1.2.
+
 ## 6. Integridade e migrations
 
 - `user_version` gerenciado pelo `rusqlite_migration`.

@@ -25,6 +25,7 @@ use nexus_lib::domain::schedule::{format_day, parse_day};
 use nexus_lib::infrastructure::clock::{SystemClock, Uuid7Gen};
 use nexus_lib::infrastructure::db::Db;
 use nexus_lib::infrastructure::paths::Paths;
+use nexus_lib::infrastructure::repositories::skill_checkin_repo::SqliteSkillCheckinRepository;
 use nexus_lib::infrastructure::repositories::{
     area_repo::SqliteAreaRepository, challenge_repo::SqliteChallengeRepository,
     fin_goal_repo::SqliteFinGoalRepository, goal_repo::SqliteGoalRepository,
@@ -78,6 +79,7 @@ fn setup() -> World {
         },
         career: CareerService {
             skills: Arc::new(SqliteSkillRepository::new(db.clone())),
+            checkins: Arc::new(SqliteSkillCheckinRepository::new(db.clone())),
             nodes: node_repo,
             areas: area_repo,
             ledger: ledger.clone(),

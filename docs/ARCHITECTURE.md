@@ -506,6 +506,30 @@ uma lista ordenada deles. O contador alimentado por hábito (`kind='counter'` co
 `habit_id` e `counts_from`) **existia inteiro no schema desde o M3** e era
 inalcançável pela UI, que só sabia criar `simple`.
 
+### Estudos deixa de ser três cascas iguais (fase D)
+
+Ver o **ADR-0072**. O relato era "vazamento de filtro entre seções"; a causa era a
+**ausência** de filtro. Idiomas, Faculdade e Cursos eram o mesmo componente rodando
+a mesma query sob a mesma chave de cache, e o `label` que os distinguia estava
+documentado no próprio código como "muda só a cópia". Não havia onde guardar a que
+seção um item pertencia — e é exatamente isso que torna a migração dos dados
+antigos impossível de automatizar: o Painel de Estudos passa a PERGUNTAR a trilha
+dos itens de antes da v1.2, dizendo por que não sabe responder sozinho.
+
+As três seções passam a ser `subject` — o kind que já trazia sessões de estudo,
+progresso computado e o tracker de hábito. **D2 (Faculdade) saiu reduzido** de
+propósito, conforme o corte definido pelo dono: provas e entregas ficam para a
+v1.2.1.
+
+### O nível de uma habilidade vira derivação (fase E)
+
+Ver o **ADR-0073**. O `level` que subia +1 por clique media quantas vezes o usuário
+havia clicado. Agora o FATO é um check-in mensal (estudou / quantas vezes aplicou /
+auto-avaliação 1–5) e o NÍVEL 1–10 é calculado por `domain::skill_level` — função
+pura, 20 testes, janela de 12 meses, decaimento `0,85^k`, fórmula exibível. Meses
+sem check-in **depois do primeiro** contam zero: abandonar faz o nível cair, que é
+o comportamento honesto. Sem check-in nenhum o nível é `None`, nunca 1.
+
 ### A migration 0016, em batch
 
 A regra de olhar o roadmap inteiro antes de tocar no schema (ADR-0029/0036/0045/

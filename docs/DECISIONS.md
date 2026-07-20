@@ -2413,3 +2413,104 @@ que reusa *o padrão* de goal, não a tabela.
 **Consequência.** O formulário passa a perguntar o tipo primeiro, e cada Esfera pode sugerir o seu
 (fase C3) sem uma linha de código por Esfera — é catálogo, não `if`. A individualidade que o dono
 pediu sai de configuração; o schema só precisou parar de assumir que toda meta é um número.
+
+## ADR-0072 — Idiomas/Faculdade/Cursos são MATÉRIAS numa trilha; o bug não era vazamento, era ausência
+
+**Data:** 2026-07-20 · **Status:** aceito · **v1.2 (BÚSSOLA), fase D** · **migration 0016 §2**
+
+**Contexto.** O relato foi: *"o Inglês criado em Idiomas aparece dentro de Faculdade"*, descrito como
+vazamento de filtro entre seções. **Não era.** As três abas eram o MESMO componente
+(`StudyProjectsTab`), com um `label` que o próprio código documentava como *"muda só a cópia"*,
+rodando a MESMA query — `kind='project'` + `area_id` + `status='active'` — sob a MESMA chave de
+React Query (`["nodes","project",areaId]`, idêntica nas três).
+
+Não havia filtro a vazar: **não havia filtro**. E não havia onde guardar um: `nodes` não tem
+subtipo, `project` não tem satélite, e `createNode(kind, title, areaId)` não recebe discriminante
+nenhum. A informação "isto é um idioma" nunca foi escrita em lugar algum.
+
+**Decisão.** As três seções deixam de ser `project` e passam a ser **`subject`** — o kind que a 0013
+criou exatamente para *"algo que se estuda e cujo progresso se computa"*.
+
+1. **Nenhum kind novo.** `subject` já traz de graça tudo o que o D1/D2/D3 pediria em matéria de
+   tempo e constância: sessões de estudo ligadas (`study_sessions.subject_id`), progresso COMPUTADO
+   (`subject_progress`), meta em minutos e o `HabitTracker` plugável (ADR-0058). Recriar `nodes` para
+   inventar `language`/`course` teria sido pagar o 12-step por três sinônimos de matéria.
+
+2. **`track` é coluna NOVA, e não o `category` que já existia.** A tentação era reusar `category` —
+   o comentário da 0013 até cita "Faculdade" como exemplo de valor. Mas `category` é texto livre e é
+   do **usuário** (ele agrupa como quiser: "Semestre 1", "Optativas"). Sobrecarregá-la como
+   discriminante de seção faria a UI competir com o usuário pelo mesmo campo, e um renome inocente
+   ("Faculdade" → "UFRJ") faria a matéria sumir da tela. `track` é fechado por CHECK, é do SISTEMA, e
+   os dois convivem sem se pisar.
+
+3. **`course_stage` não é `nodes.status`.** "Quero fazer / fazendo / concluído" não cabe em
+   `active`/`done`: *"quero fazer"* é um curso **ativo que ainda não começou**. Forçá-lo em `status`
+   colapsaria dois eixos diferentes num só.
+
+4. **O nível de um idioma é a meta 'staged' do ADR-0071**, não uma coluna. `level_goal_id` guarda
+   apenas QUAL é essa meta, para a tela do idioma achá-la sem varrer `links`. A escada "Básico →
+   Fluente" é a mesma escada de qualquer meta por etapas — um mecanismo, dois lugares.
+
+5. **O dado que já existe não pode sumir, e não pode ser adivinhado.** O dono já criou itens como
+   `project` nessas abas. Migrar automaticamente é impossível *por definição*: a seção de origem
+   nunca foi gravada — é esse o bug. Então a migração é do USUÁRIO: o Painel de Estudos lista os
+   itens de antes da v1.2 e pede a trilha, item a item, dizendo com todas as letras por que o app não
+   sabe responder sozinho. Escolher cria a matéria e **arquiva** o projeto (não apaga: ele pode
+   carregar tarefas). Quando não sobra nenhum, a seção some sozinha.
+
+**Consequência.** Cada seção filtra por `track` e tem chave de cache própria — a chave compartilhada
+era metade do bug original. A aba "Matérias", que chama `list_subjects` sem trilha, continua vendo
+tudo. **D2 (Faculdade) saiu reduzido de propósito**: provas, entregas e checklists por matéria ficam
+para a v1.2.1, como o próprio dono definiu no corte.
+
+## ADR-0073 — O nível de uma habilidade é CALCULADO a partir de check-ins mensais
+
+**Data:** 2026-07-20 · **Status:** aceito · **v1.2 (BÚSSOLA), fase E** · **migration 0016 §3**
+
+**Contexto.** A ideia era boa e a execução, rasa: uma competência tinha um `level` que subia +1 num
+clique armado. O número não significava nada — era quantas vezes o usuário havia clicado. Não
+respondia "estou melhorando?", que é a única pergunta que uma trilha de habilidade existe para
+responder.
+
+**Decisão.** O nível vai de **1 a 10 e é DERIVADO** de um histórico de check-ins mensais — a mesma
+filosofia do XP, da Saúde Financeira e do contador de sub-desafio (ADR-0037/0028). O usuário informa
+o FATO; o sistema calcula o número.
+
+1. **O check-in é o fato, e mora numa tabela de log** (`skill_checkins`), como `contributions` e
+   `study_sessions` — não é node. Três perguntas por mês: estudou (0/1), quantas vezes aplicou na
+   prática (contagem), auto-avaliação da evolução (1–5). PK `(skill_id, month)` com `WITHOUT ROWID`:
+   a leitura que a fórmula faz é "todos os check-ins desta competência em ordem", que assim é um
+   range scan sequencial (a decisão de `habit_ticks`).
+
+2. **Reinformar o mês CORRIGE, não empilha** (`INSERT OR REPLACE`), como `portfolio_snapshots`: um
+   mês tem um retrato só. A HISTÓRIA de ter respondido vai para o ledger, que é append-only —
+   corrigir o estado nunca reescreve o que aconteceu.
+
+3. **A fórmula é pura, documentada e exibível** (`domain::skill_level`, 20 testes):
+
+   ```
+   s(mês) = 0,35·estudou + 0,35·min(aplicou/4, 1) + 0,30·(estrelas−1)/4
+   peso(k meses atrás) = 0,85^k          janela = 12 meses
+   nível = 1 + arredonda(9 · Σ(peso·s) / Σ(peso))        limitado a 1..10
+   ```
+
+   O teto em `aplicou/4` impede que um mês prolífico domine o ano. O decaimento é o ponto: meses SEM
+   check-in, **depois do primeiro**, contam como `s = 0` — abandonar uma habilidade faz o nível cair
+   sozinho, que é o comportamento honesto. Meses ANTERIORES ao primeiro check-in são excluídos: não
+   se pune uma competência por não ter existido ainda.
+
+4. **Sem check-in nenhum, o nível é `None` — não 1.** Inventar um número para quem nunca respondeu
+   seria o app fabricando dado, o que a constituição proíbe. Um teste prende isso, e outro prende a
+   consequência que só apareceu escrevendo os testes: uma habilidade com check-in **antigo** (fora da
+   janela) dá nível **1**, não `None` — porque os 12 meses considerados existem e todos valem zero.
+   `None` é reservado a "nunca houve check-in algum".
+
+5. **A coluna `level` e o `level_up_skill` sobrevivem.** Competências criadas antes da v1.2 têm um
+   nível construído clique a clique e ZERO check-ins; apagar a coluna zeraria esse número no
+   upgrade. A regra da UI, documentada nos dois lados: **prefira `computed_level`; caia para `level`
+   só quando ele for `null`.** Assim que a competência tem check-ins, o calculado é a verdade e o +1
+   manual sai da tela — dois números discordando na mesma linha seria pior que qualquer um dos dois.
+
+**Consequência.** O card mostra o nível 1–10, o "ⓘ como calculamos" com a fórmula e os números reais,
+e a régua de evolução ao longo dos meses (SVG, ADR-0018 — nada de engine de gráfico para isso). O
+convite ao check-in aparece no card quando o mês vira, sem modal bloqueante: o app pede, não cobra.

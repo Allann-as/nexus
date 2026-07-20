@@ -15,10 +15,10 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::application::ports::{
-    AreaRepository, Clock, IdGen, NewNode, NewStudySession, NewSubject, StudySession,
-    StudySessionRepository, Subject, SubjectRepository,
+    AreaRepository, Clock, GoalRepository, IdGen, NewNode, NewStudySession, NewSubject,
+    StudySession, StudySessionRepository, Subject, SubjectRepository,
 };
-use crate::domain::entities::{validate_title, Kind};
+use crate::domain::entities::{validate_title, CourseStage, GoalKind, Kind, SubjectTrack};
 use crate::domain::errors::{NexusError, Result};
 use crate::domain::ledger::{EventType, LedgerEntityKind, NewLedgerEvent};
 use crate::domain::schedule::{format_day, parse_day};
@@ -32,6 +32,9 @@ pub struct StudyService {
     pub subjects: Arc<dyn SubjectRepository>,
     pub sessions: Arc<dyn StudySessionRepository>,
     pub areas: Arc<dyn AreaRepository>,
+    /// Para VALIDAR o vínculo de um idioma com a meta que descreve o nível dele
+    /// (`set_subject_level_goal`): a meta precisa existir e ser `staged`.
+    pub goals: Arc<dyn GoalRepository>,
     pub ids: Arc<dyn IdGen>,
     pub clock: Arc<dyn Clock>,
 }
@@ -87,14 +90,37 @@ pub struct StudyStats {
 impl StudyService {
     /* ===== Matérias ===== */
 
+    /// Cria uma matéria numa TRILHA (BÚSSOLA, fase D).
+    ///
+    /// A trilha é o que diz a qual seção de Estudos a matéria pertence. Sem ela,
+    /// Idiomas, Faculdade e Cursos rodavam a mesma query e mostravam os mesmos
+    /// itens. `None` vira `Livre` — a aba "Matérias" de sempre.
+    #[allow(clippy::too_many_arguments)]
     pub fn create_subject(
         &self,
         title: &str,
         area_id: Option<String>,
         category: Option<String>,
         target_minutes: Option<i64>,
+        track: Option<SubjectTrack>,
+        course_stage: Option<CourseStage>,
+        expected_end: Option<String>,
     ) -> Result<Subject> {
         let title = validate_title(title)?;
+        let track = track.unwrap_or_default();
+        // Um estágio de curso numa matéria que não é curso seria um idioma
+        // carregando "concluído" em silêncio. Ver `set_course_stage`.
+        if course_stage.is_some() && track != SubjectTrack::Curso {
+            return Err(NexusError::Validation(
+                "só um curso tem estágio ('quero fazer', 'fazendo', 'concluído')".into(),
+            ));
+        }
+        // O dia é normalizado agora, para o banco nunca guardar 'AAAA-M-D'. Uma
+        // previsão de conclusão PODE ser futura — é para isso que ela existe.
+        let expected_end = match expected_end {
+            Some(d) => Some(format_day(parse_day(&d)?)),
+            None => None,
+        };
         if let Some(a) = &area_id {
             if !self.areas.exists(a)? {
                 return Err(NexusError::NotFound(format!("esfera {a}")));
@@ -115,7 +141,7 @@ impl StudyService {
             entity_id: id.clone(),
             entity_kind: LedgerEntityKind::Node(Kind::Subject),
             event_type: EventType::Created,
-            payload: json!({ "category": category }),
+            payload: json!({ "category": category, "track": track.as_str() }),
             title_snapshot: title.clone(),
         };
         self.subjects.create_with_event(
@@ -131,13 +157,80 @@ impl StudyService {
                 area_id: None,
                 category,
                 target_minutes,
+                track,
+                course_stage,
+                expected_end,
             },
             &event,
         )
     }
 
-    pub fn subjects(&self, area_id: Option<String>) -> Result<Vec<Subject>> {
-        self.subjects.list(area_id.as_deref())
+    /// As matérias de uma Esfera e/ou de uma TRILHA.
+    ///
+    /// `track = None` devolve todas — a aba "Matérias" sempre listou tudo e
+    /// continua listando. Cada seção nova (Idiomas, Faculdade, Cursos) passa a
+    /// sua trilha e vê só o que é dela.
+    pub fn subjects(
+        &self,
+        area_id: Option<String>,
+        track: Option<SubjectTrack>,
+    ) -> Result<Vec<Subject>> {
+        self.subjects.list(area_id.as_deref(), track)
+    }
+
+    /// Muda o estágio de um CURSO — configuração, não fato (ADR-0023).
+    ///
+    /// Recusa em qualquer outra trilha: um idioma com `course_stage` gravado
+    /// carregaria um status de curso em silêncio, e a tela de Idiomas — que nem
+    /// tem esse campo — nunca daria ao usuário como corrigi-lo.
+    pub fn set_course_stage(&self, id: &str, stage: Option<CourseStage>) -> Result<Subject> {
+        let subject = self.subjects.get(id)?;
+        if subject.track != SubjectTrack::Curso {
+            return Err(NexusError::Validation(format!(
+                "'{}' não é um curso: só um curso tem estágio ('quero fazer', 'fazendo', 'concluído')",
+                subject.title
+            )));
+        }
+        self.subjects
+            .set_course_stage(id, stage, self.clock.now_ms())
+    }
+
+    /// Ajusta a previsão de conclusão. O futuro é BEM-VINDO aqui (ao contrário
+    /// do dia de uma sessão): uma previsão que já passou não previa nada.
+    pub fn set_subject_expected_end(&self, id: &str, day: Option<String>) -> Result<Subject> {
+        let day = match day {
+            Some(d) => Some(format_day(parse_day(&d)?)),
+            None => None,
+        };
+        self.subjects
+            .set_expected_end(id, day.as_deref(), self.clock.now_ms())
+    }
+
+    /// Liga uma matéria (tipicamente um IDIOMA) à meta que descreve o nível dela.
+    ///
+    /// A meta tem que ser `staged` — a ESCADA de níveis nomeados ("Básico ->
+    /// Fluente"), cujo progresso é o degrau atual sobre o total. Uma meta
+    /// quantitativa ou uma conquista não têm degraus nomeados para mostrar, e o
+    /// card do idioma ficaria pedindo um nível que a meta não sabe dizer.
+    ///
+    /// `None` desfaz o vínculo.
+    pub fn set_subject_level_goal(&self, id: &str, goal_id: Option<String>) -> Result<Subject> {
+        // A matéria precisa existir antes de qualquer coisa.
+        self.subjects.get(id)?;
+        if let Some(g) = &goal_id {
+            // `GoalRepository::get` faz JOIN com `goal_details`: um id que não é
+            // uma meta já volta NotFound aqui.
+            let goal = self.goals.get(g)?;
+            if goal.goal_kind != GoalKind::Staged {
+                return Err(NexusError::Validation(format!(
+                    "'{}' não é uma meta por etapas: o nível de um idioma só pode \
+                     apontar para uma meta do tipo escada (Básico -> Fluente)",
+                    goal.title
+                )));
+            }
+        }
+        self.subjects
+            .set_level_goal(id, goal_id.as_deref(), self.clock.now_ms())
     }
 
     /// Ajusta a meta de minutos (configuração — não grava no ledger, ADR-0023).

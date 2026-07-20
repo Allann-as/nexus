@@ -52,6 +52,13 @@ pub enum EventType {
     /// anterior. A série destes eventos por chave É a história daquele recorde.
     /// Ver ADR-0060.
     RecordBroken,
+    /// Um check-in mensal de competência (BÚSSOLA, fase E). `entity_id` é o node
+    /// 'skill' e o payload traz o mês e as três respostas. É um FATO da vida do
+    /// usuário — o nível 1-10 é DERIVAÇÃO dele (`domain::skill_level`), não o
+    /// contrário. Reinformar o mês CORRIGE o estado em `skill_checkins`, mas
+    /// acrescenta OUTRA linha aqui: o ledger é append-only, e a história de ter
+    /// respondido (e corrigido) nunca é reescrita.
+    SkillCheckin,
 }
 
 impl EventType {
@@ -78,6 +85,7 @@ impl EventType {
             EventType::StudySessionLogged => "study_session_logged",
             EventType::FocusSessionLogged => "focus_session_logged",
             EventType::RecordBroken => "record_broken",
+            EventType::SkillCheckin => "skill_checkin",
         }
     }
 }
@@ -127,6 +135,12 @@ pub enum LedgerEntityKind {
     /// por ele que se sabe que a semana já foi revisada (idempotência). O evento só
     /// entra quando os 6 passos fecham — uma revisão abandonada não vira fato.
     WeeklyReview,
+    /// Um check-in mensal de competência (BÚSSOLA, fase E) — um fato de baixa
+    /// frequência que vive em `skill_checkins`, não em `nodes`. O `entity_id` é o
+    /// node 'skill' a que o check-in se refere (e não a linha do check-in, que
+    /// não tem id próprio: a PK é (skill_id, month)), para a Timeline e a tela da
+    /// competência acharem a história pelo `idx_ledger_entity`.
+    SkillCheckin,
 }
 
 impl LedgerEntityKind {
@@ -141,6 +155,7 @@ impl LedgerEntityKind {
             LedgerEntityKind::FocusSession => "focus_session",
             LedgerEntityKind::WeeklyReview => "weekly_review",
             LedgerEntityKind::PersonalRecord => "personal_record",
+            LedgerEntityKind::SkillCheckin => "skill_checkin",
         }
     }
 }
@@ -207,5 +222,7 @@ mod tests {
             EventType::FocusSessionLogged.as_str(),
             "focus_session_logged"
         );
+        assert_eq!(EventType::SkillCheckin.as_str(), "skill_checkin");
+        assert_eq!(LedgerEntityKind::SkillCheckin.as_str(), "skill_checkin");
     }
 }

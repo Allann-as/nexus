@@ -40,6 +40,10 @@ fn map_skill(row: &Row) -> rusqlite::Result<Skill> {
         area_id: row.get(2)?,
         status: row.get(3)?,
         level: row.get(4)?,
+        // O nível DERIVADO não sai daqui: ele vem da fórmula sobre os check-ins
+        // (`domain::skill_level`), e quem os junta é o `CareerService`. O
+        // repositório de competências não conhece a tabela de check-ins.
+        computed_level: None,
         category: row.get(5)?,
         max_level: row.get(6)?,
         created_at: row.get(7)?,

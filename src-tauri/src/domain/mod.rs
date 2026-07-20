@@ -20,6 +20,7 @@ pub mod recurrence;
 pub mod savings;
 pub mod schedule;
 pub mod score;
+pub mod skill_level;
 pub mod streak;
 pub mod wikilink;
 pub mod xp;

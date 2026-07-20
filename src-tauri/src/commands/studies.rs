@@ -5,6 +5,7 @@ use tauri::State;
 
 use crate::application::ports::{StudySession, Subject};
 use crate::application::use_cases::studies::{StudyStats, SubjectProgress};
+use crate::domain::entities::{CourseStage, SubjectTrack};
 use crate::domain::errors::Result;
 use crate::state::AppState;
 
@@ -18,6 +19,13 @@ pub struct NewSubjectDto {
     pub category: Option<String>,
     #[serde(default)]
     pub target_minutes: Option<i64>,
+    /// A seção de Estudos (BÚSSOLA, fase D). Ausente = 'livre'.
+    #[serde(default)]
+    pub track: Option<SubjectTrack>,
+    #[serde(default)]
+    pub course_stage: Option<CourseStage>,
+    #[serde(default)]
+    pub expected_end: Option<String>,
 }
 
 #[tauri::command]
@@ -27,12 +35,51 @@ pub fn create_subject(state: State<'_, AppState>, subject: NewSubjectDto) -> Res
         subject.area_id,
         subject.category,
         subject.target_minutes,
+        subject.track,
+        subject.course_stage,
+        subject.expected_end,
     )
 }
 
+/// As matérias de uma Esfera e/ou trilha. `track` ausente = todas (a aba
+/// "Matérias"); com trilha, a seção vê só o que é dela.
 #[tauri::command]
-pub fn list_subjects(state: State<'_, AppState>, area_id: Option<String>) -> Result<Vec<Subject>> {
-    state.studies.subjects(area_id)
+pub fn list_subjects(
+    state: State<'_, AppState>,
+    area_id: Option<String>,
+    track: Option<SubjectTrack>,
+) -> Result<Vec<Subject>> {
+    state.studies.subjects(area_id, track)
+}
+
+/// Muda o estágio de um CURSO. Recusa em qualquer outra trilha.
+#[tauri::command]
+pub fn set_course_stage(
+    state: State<'_, AppState>,
+    id: String,
+    stage: Option<CourseStage>,
+) -> Result<Subject> {
+    state.studies.set_course_stage(&id, stage)
+}
+
+/// Ajusta a previsão de conclusão ('YYYY-MM-DD'). `null` remove.
+#[tauri::command]
+pub fn set_subject_expected_end(
+    state: State<'_, AppState>,
+    id: String,
+    day: Option<String>,
+) -> Result<Subject> {
+    state.studies.set_subject_expected_end(&id, day)
+}
+
+/// Liga a matéria à meta 'staged' que descreve o nível dela (um idioma).
+#[tauri::command]
+pub fn set_subject_level_goal(
+    state: State<'_, AppState>,
+    subject_id: String,
+    goal_id: Option<String>,
+) -> Result<Subject> {
+    state.studies.set_subject_level_goal(&subject_id, goal_id)
 }
 
 #[tauri::command]

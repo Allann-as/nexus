@@ -11,19 +11,25 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::application::ports::{
-    AreaRepository, Clock, IdGen, LedgerRepository, NewNode, NewSkill, NodeRepository, Skill,
-    SkillRepository,
+    AreaRepository, Clock, IdGen, LedgerRepository, NewNode, NewSkill, NewSkillCheckin,
+    NodeRepository, Skill, SkillCheckin, SkillCheckinRepository, SkillRepository,
 };
 use crate::domain::entities::{validate_title, CareerMilestoneKind, Kind};
 use crate::domain::errors::{NexusError, Result};
 use crate::domain::ledger::{EventType, LedgerEntityKind, LedgerEntry, NewLedgerEvent};
 use crate::domain::schedule::{format_day, parse_day};
+use crate::domain::skill_level::{
+    compute_level, format_month, month_of_day, parse_month, ComputedLevel, MonthlyCheckin,
+};
 
 /// Quantos marcos o painel da Carreira mostra por vez.
 const MILESTONE_LIMIT: i64 = 50;
 
 pub struct CareerService {
     pub skills: Arc<dyn SkillRepository>,
+    /// Os check-ins mensais (BÚSSOLA, fase E) — a matéria-prima do nível
+    /// calculado. Ver `Skill::computed_level`.
+    pub checkins: Arc<dyn SkillCheckinRepository>,
     /// Para EXCLUIR uma competência: ela é um node, e apagar um node é a mesma
     /// operação para todos eles (ADR-0056). Ver `CareerService::delete_skill`.
     pub nodes: Arc<dyn NodeRepository>,
@@ -40,6 +46,20 @@ pub struct SkillPoint {
     /// 'YYYY-MM-DD' local.
     pub day: String,
     pub level: i64,
+}
+
+/// Um ponto da régua de evolução CALCULADA (BÚSSOLA, fase E): o nível que a
+/// fórmula daria naquele mês, olhando só o que já havia acontecido até ali.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillLevelPoint {
+    /// 'YYYY-MM' local.
+    pub month: String,
+    /// 1..=10.
+    pub level: i64,
+    /// A média ponderada daquele mês, para o "ⓘ como calculamos" do gráfico.
+    pub weighted_avg: f64,
+    pub sample_size: i64,
 }
 
 impl CareerService {
@@ -245,12 +265,177 @@ impl CareerService {
             payload: json!({}),
             title_snapshot: current.title,
         };
-        self.skills.level_up_with_event(id, now, &event)
+        let mut skill = self.skills.level_up_with_event(id, now, &event)?;
+        // O clique manual segue existindo (v1.1 e antes); o nível calculado vem
+        // junto para a UI poder preferi-lo quando houver check-ins.
+        self.fill_computed_level(&mut skill)?;
+        Ok(skill)
     }
 
-    /// As competências de uma Esfera (ou todas).
+    /// As competências de uma Esfera (ou todas), já com o nível CALCULADO.
     pub fn skills(&self, area_id: Option<String>) -> Result<Vec<Skill>> {
-        self.skills.list(area_id.as_deref())
+        let mut skills = self.skills.list(area_id.as_deref())?;
+        for s in &mut skills {
+            self.fill_computed_level(s)?;
+        }
+        Ok(skills)
+    }
+
+    /* ===== O check-in mensal e o nível calculado (BÚSSOLA, fase E) ===== */
+
+    /// Registra (ou CORRIGE) o check-in mensal de uma competência — um FATO no
+    /// ledger. O nível 1-10 é derivado dele (ADR-0037), nunca escolhido.
+    ///
+    /// `month = None` é o mês corrente. Um mês FUTURO é recusado, pela mesma
+    /// razão que o `counts_from` de um sub-desafio o recusa: não se informa o que
+    /// ainda não aconteceu, e um mês adiantado envenenaria a média ponderada
+    /// (ele viraria a referência, e todos os meses de verdade decairiam).
+    pub fn record_skill_checkin(
+        &self,
+        skill_id: &str,
+        month: Option<String>,
+        studied: bool,
+        applied: i64,
+        stars: i64,
+    ) -> Result<SkillCheckin> {
+        // Pelo repositório de competências: um id de outro kind não ganha
+        // check-in por um command chamado `record_skill_checkin`.
+        let skill = self.skills.get(skill_id)?;
+
+        let current_month = month_of_day(&self.clock.today_local())?;
+        let month = match month {
+            Some(m) => {
+                // Valida o formato E normaliza (o parse recusa 'AAAA-M').
+                let idx = parse_month(&m)?;
+                if idx > parse_month(&current_month)? {
+                    return Err(NexusError::Validation(
+                        "não dá para fazer o check-in de um mês que ainda não aconteceu".into(),
+                    ));
+                }
+                format_month(idx)
+            }
+            None => current_month,
+        };
+
+        if applied < 0 {
+            return Err(NexusError::Validation(
+                "o número de vezes que você aplicou não pode ser negativo".into(),
+            ));
+        }
+        if !(1..=5).contains(&stars) {
+            return Err(NexusError::Validation(
+                "a auto-avaliação vai de 1 a 5 estrelas".into(),
+            ));
+        }
+
+        let now = self.clock.now_ms();
+        let event = NewLedgerEvent {
+            ts: now,
+            day: self.clock.today_local(),
+            entity_id: skill_id.to_string(),
+            entity_kind: LedgerEntityKind::SkillCheckin,
+            event_type: EventType::SkillCheckin,
+            payload: json!({
+                "month": month,
+                "studied": studied,
+                "applied": applied,
+                "stars": stars,
+            }),
+            title_snapshot: skill.title,
+        };
+        self.checkins.upsert_with_event(
+            &NewSkillCheckin {
+                skill_id: skill_id.to_string(),
+                month,
+                studied,
+                applied,
+                stars,
+            },
+            &event,
+        )
+    }
+
+    /// Os check-ins de uma competência, do mês mais antigo ao mais recente.
+    pub fn skill_checkins(&self, skill_id: &str) -> Result<Vec<SkillCheckin>> {
+        self.skills.get(skill_id)?;
+        self.checkins.list_for_skill(skill_id)
+    }
+
+    /// A régua de evolução CALCULADA: o nível mês a mês, do primeiro check-in ao
+    /// mês corrente.
+    ///
+    /// Cada ponto é a fórmula rodada com aquele mês como referência, vendo só o
+    /// que já havia acontecido até ali — por isso o gráfico mostra tanto a subida
+    /// quanto o decaimento de quem parou de fazer check-in. Sem check-in nenhum,
+    /// a lista volta VAZIA (não um nível 1 inventado).
+    pub fn skill_level_history(&self, skill_id: &str) -> Result<Vec<SkillLevelPoint>> {
+        self.skills.get(skill_id)?;
+        let history = self.to_monthly(skill_id)?;
+        let Some(first) = history.first() else {
+            return Ok(Vec::new());
+        };
+
+        let from = parse_month(&first.month)?;
+        // Até o mês corrente — nunca antes do último check-in (o relógio do
+        // usuário pode estar atrás de um check-in retroagido para "este mês").
+        let today_month = parse_month(&month_of_day(&self.clock.today_local())?)?;
+        let last = history
+            .iter()
+            .map(|c| parse_month(&c.month))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .max()
+            .unwrap_or(from);
+        let to = today_month.max(last);
+
+        let mut points = Vec::with_capacity((to - from + 1).max(0) as usize);
+        for idx in from..=to {
+            let month = format_month(idx);
+            if let Some(c) = compute_level(&history, &month)? {
+                points.push(SkillLevelPoint {
+                    month,
+                    level: c.level,
+                    weighted_avg: c.weighted_avg,
+                    sample_size: c.sample_size,
+                });
+            }
+        }
+        Ok(points)
+    }
+
+    /// O nível calculado de HOJE, com a fórmula por extenso — o que o "ⓘ como
+    /// calculamos" da tela da competência mostra. `None` = ainda sem check-in.
+    pub fn skill_computed_level(&self, skill_id: &str) -> Result<Option<ComputedLevel>> {
+        self.skills.get(skill_id)?;
+        let history = self.to_monthly(skill_id)?;
+        compute_level(&history, &month_of_day(&self.clock.today_local())?)
+    }
+
+    /// Os check-ins do banco, no formato que o domínio puro entende.
+    fn to_monthly(&self, skill_id: &str) -> Result<Vec<MonthlyCheckin>> {
+        Ok(self
+            .checkins
+            .list_for_skill(skill_id)?
+            .into_iter()
+            .map(|c| MonthlyCheckin {
+                month: c.month,
+                studied: c.studied,
+                applied: c.applied,
+                stars: c.stars,
+            })
+            .collect())
+    }
+
+    /// Preenche `computed_level` a partir dos check-ins.
+    ///
+    /// Fica `None` quando não há check-in — e é aí que a UI cai no `level`
+    /// gravado, que é tudo que uma competência anterior à v1.2 tem. Ver a nota
+    /// do struct `Skill`.
+    fn fill_computed_level(&self, skill: &mut Skill) -> Result<()> {
+        let history = self.to_monthly(&skill.id)?;
+        let month = month_of_day(&self.clock.today_local())?;
+        skill.computed_level = compute_level(&history, &month)?.map(|c| c.level);
+        Ok(())
     }
 
     /// A trilha de evolução de uma competência: (dia, nível). Um ponto só = nova.
@@ -291,6 +476,10 @@ impl CareerService {
     pub fn skills_evolving(&self, area_id: &str) -> Result<Vec<Skill>> {
         let today = parse_day(&self.clock.today_local())?;
         let since = format_day(today - chrono::Duration::days(90));
-        self.skills.evolving_since(area_id, &since)
+        let mut skills = self.skills.evolving_since(area_id, &since)?;
+        for s in &mut skills {
+            self.fill_computed_level(s)?;
+        }
+        Ok(skills)
     }
 }

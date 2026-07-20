@@ -27,6 +27,7 @@ import { coverStyle, bookInitials } from "./bookCover";
 import { computePace, SetGoalInline } from "./readingGoal";
 import { StudyStatsPanel } from "./StudyStatsPanel";
 import { LogSessionModal } from "./LogSessionModal";
+import { LegacyStudyProjects } from "./LegacyStudyProjects";
 import { formatMinutes, shortDay } from "./studyFormat";
 
 export function StudiesDashboard({ areaId }: { areaId: string }) {
@@ -97,6 +98,12 @@ export function StudiesDashboard({ areaId }: { areaId: string }) {
           Registrar sessão
         </Button>
       </div>
+
+      {/* ===== O legado por classificar =====
+          Só aparece enquanto sobrar algum projeto da era em que as três seções
+          dividiam a mesma lista. Fica no topo porque é uma pendência, não um
+          relatório — e some sozinho quando o último for classificado. */}
+      <LegacyStudyProjects areaId={areaId} />
 
       {/* ===== O ritmo de estudo ===== */}
       {hasSessions && st ? (

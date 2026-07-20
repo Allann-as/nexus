@@ -1,11 +1,22 @@
 /**
  * A trilha de competências da Carreira (M4.6, item 6).
  *
- * Uma competência tem um NÍVEL que sobe. Subir de nível é um FATO que entra no
- * ledger para sempre e vale XP (ADR-0037/0045) — por isso o botão pede uma
- * confirmação leve (um clique arma, o segundo confirma; nada de modal). A trilha
- * de evolução vem da série do ledger; uma competência nova (um ponto só) NÃO
- * desenha sparkline — o padrão "número real, omitido sem dado" vale para gráfico.
+ * Uma competência tem um NÍVEL de 1 a 10 que, desde a v1.2, o sistema CALCULA a
+ * partir de um CHECK-IN MENSAL (ADR-0037): estudou? aplicou quantas vezes? como
+ * avalia a evolução? O cartão convida o check-in do mês corrente enquanto ele
+ * não vier — um convite no próprio cartão, nunca uma modal na cara de quem abriu
+ * a tela para outra coisa. O nível calculado carrega o "ⓘ como calculamos", como
+ * todo número derivado deste app.
+ *
+ * O "subir de nível" manual é a herança pré-v1.2 e continua vivo APENAS para a
+ * competência que nunca teve check-in — nela o nível gravado ainda é a única
+ * verdade, e o gesto segue armado em dois cliques. No instante em que o primeiro
+ * check-in chega, a conta passa a mandar e o botão manual sai do cartão: dois
+ * donos do mesmo número seria a contradição.
+ *
+ * A trilha de evolução vem da régua calculada (ou da série legada do ledger, na
+ * competência sem check-in); com menos de dois pontos NÃO desenha sparkline — o
+ * padrão "número real, omitido sem dado" vale para gráfico.
  *
  * A competência também pode ser APAGADA (v1.2): uma trilha criada por engano não
  * é uma trilha, é ruído. Apagar corrige o ESTADO — os níveis que já subiram
@@ -18,10 +29,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Award, Plus, ChevronsUp, Check } from "lucide-react";
+import { Award, Plus, ChevronsUp, Check, CalendarCheck } from "lucide-react";
 
 import { Button, Card, EmptyState, cx } from "../../design-system/primitives";
 import { ArmedDelete } from "../../design-system/ArmedDelete";
+import { Formula } from "../../design-system/Formula";
 import { Sparkline } from "../../design-system/charts";
 import { useToasts } from "../../stores/toasts";
 import {
@@ -29,9 +41,14 @@ import {
   deleteSkill,
   levelUpSkill,
   listSkills,
+  skillCheckins,
+  skillComputedLevel,
+  skillLevelHistory,
   skillTrack,
   type Skill,
 } from "../../lib/ipc";
+import { SkillCheckinModal } from "./SkillCheckinModal";
+import { currentMonth, monthName } from "./skillMonth";
 
 export function SkillsTrack({ areaId }: { areaId: string }) {
   const client = useQueryClient();
@@ -72,7 +89,7 @@ export function SkillsTrack({ areaId }: { areaId: string }) {
         <div>
           <h2 className="text-[16px] font-semibold text-[var(--text-primary)]">Competências</h2>
           <p className="mt-0.5 text-[12px] text-[var(--text-tertiary)]">
-            Suba de nível quando evoluir de verdade — cada nível é um marco no seu histórico.
+            Um check-in por mês — estudou, aplicou, evoluiu. O nível de 1 a 10 sai daí.
           </p>
         </div>
         <Button variant="primary" size="sm" icon={Plus} onClick={() => setCreating((v) => !v)}>
@@ -113,7 +130,7 @@ export function SkillsTrack({ areaId }: { areaId: string }) {
         <EmptyState
           icon={Award}
           title="Nenhuma competência ainda"
-          hint="Uma competência é uma capacidade que você desenvolve — System Design, inglês, liderança. Suba de nível conforme evolui, e a trilha guarda a jornada."
+          hint="Uma competência é uma capacidade que você desenvolve — System Design, inglês, liderança. Um check-in por mês responde três perguntas, e o nível de 1 a 10 vem delas."
           action={
             <Button variant="primary" size="sm" icon={Plus} onClick={() => setCreating(true)}>
               Nova competência
@@ -136,11 +153,33 @@ function SkillCard({ skill, areaId }: { skill: Skill; areaId: string }) {
   const push = useToasts((s) => s.push);
   const pushError = useToasts((s) => s.pushError);
   const [armed, setArmed] = useState(false);
+  const [checkinOpen, setCheckinOpen] = useState(false);
   const armedTimer = useRef<number | null>(null);
 
+  const checkins = useQuery({
+    queryKey: ["skill-checkins", skill.id],
+    queryFn: () => skillCheckins(skill.id),
+  });
+  const hasCheckins = (checkins.data?.length ?? 0) > 0;
+
+  // As três consultas do nível calculado só existem para quem TEM check-in.
+  // Numa competência legada elas voltariam vazias — não vale a viagem.
+  const computed = useQuery({
+    queryKey: ["skill-level", skill.id],
+    queryFn: () => skillComputedLevel(skill.id),
+    enabled: hasCheckins,
+  });
+  const history = useQuery({
+    queryKey: ["skill-level-history", skill.id],
+    queryFn: () => skillLevelHistory(skill.id),
+    enabled: hasCheckins,
+  });
+  // A trilha legada (níveis subidos no clique) só desenha para quem nunca fez
+  // check-in; a partir do primeiro, a régua calculada é a história verdadeira.
   const track = useQuery({
     queryKey: ["skill-track", skill.id],
     queryFn: () => skillTrack(skill.id),
+    enabled: checkins.isSuccess && !hasCheckins,
   });
 
   const levelUp = useMutation({
@@ -185,9 +224,25 @@ function SkillCard({ skill, areaId }: { skill: Skill; areaId: string }) {
   }, [armed]);
 
   const atMax = skill.maxLevel != null && skill.level >= skill.maxLevel;
-  const points = track.data ?? [];
-  // Um ponto só = competência nova: omitir o sparkline (não desenhar um ponto solto).
-  const series = points.length >= 2 ? normalize(points.map((p) => p.level)) : null;
+
+  // A REGRA da v1.2: o nível calculado manda; o gravado só existe enquanto não
+  // houver check-in nenhum. `null` é "ainda não perguntamos" — nunca um 1 inventado.
+  const showsComputed = skill.computedLevel != null;
+  const shownLevel = skill.computedLevel ?? skill.level;
+  const scale = showsComputed ? "/ 10" : skill.maxLevel != null ? `/ ${skill.maxLevel}` : "nível";
+
+  // A série vem da régua calculada quando ela existe; da trilha legada quando não.
+  // Menos de dois pontos: sem gráfico (o padrão "número real, omitido sem dado").
+  const levels = showsComputed
+    ? (history.data ?? []).map((p) => p.level)
+    : (track.data ?? []).map((p) => p.level);
+  const series = levels.length >= 2 ? normalize(levels) : null;
+
+  const month = currentMonth();
+  const monthDone = (checkins.data ?? []).some((c) => c.month === month);
+  // O convite só aparece quando já sabemos a resposta — piscar "pendente" durante
+  // o carregamento seria cobrar do usuário uma coisa que talvez ele já tenha feito.
+  const monthPending = checkins.isSuccess && !monthDone;
 
   const onLevelUp = () => {
     if (atMax || levelUp.isPending) return;
@@ -219,47 +274,96 @@ function SkillCard({ skill, areaId }: { skill: Skill; areaId: string }) {
       <div className="flex items-end justify-between gap-3">
         <div className="flex items-baseline gap-1.5">
           <span className="font-mono text-[26px] leading-none font-semibold tabular-nums text-[var(--text-primary)]">
-            {skill.level}
+            {shownLevel}
           </span>
-          <span className="text-[11px] text-[var(--text-tertiary)]">
-            {skill.maxLevel != null ? `/ ${skill.maxLevel}` : "nível"}
-          </span>
+          <span className="text-[11px] text-[var(--text-tertiary)]">{scale}</span>
         </div>
         {series && (
           <Sparkline data={series} width={84} height={28} className="shrink-0" />
         )}
       </div>
 
-      {skill.maxLevel != null && <LevelPips level={skill.level} max={skill.maxLevel} />}
+      {showsComputed ? (
+        <LevelPips level={shownLevel} max={10} />
+      ) : (
+        skill.maxLevel != null && <LevelPips level={skill.level} max={skill.maxLevel} />
+      )}
 
+      {/* O convite do mês: um chamado claro no cartão, nunca uma modal que
+          atravessa a frente do app. Quem já fez o check-in do mês vê só a
+          confirmação discreta — e o caminho para corrigir, se errou. */}
       <button
-        onClick={onLevelUp}
-        disabled={atMax || levelUp.isPending}
+        onClick={() => setCheckinOpen(true)}
         className={cx(
           "flex h-9 items-center justify-center gap-1.5 rounded-[var(--radius-md)] text-[12.5px] font-medium",
           "transition-[background-color,color,border-color] duration-[var(--dur-fast)] ease-[var(--ease)]",
           "border",
-          atMax
-            ? "cursor-default border-transparent bg-[var(--bg-raised)] text-[var(--text-tertiary)]"
-            : armed
-              ? "border-[var(--sphere)] bg-[color-mix(in_srgb,var(--sphere)_18%,transparent)] text-[var(--text-primary)]"
-              : "border-[color-mix(in_srgb,var(--sphere)_35%,transparent)] bg-[color-mix(in_srgb,var(--sphere)_10%,transparent)] text-[var(--sphere)] hover:bg-[color-mix(in_srgb,var(--sphere)_16%,transparent)]",
+          monthPending
+            ? "border-[color-mix(in_srgb,var(--sphere)_35%,transparent)] bg-[color-mix(in_srgb,var(--sphere)_10%,transparent)] text-[var(--sphere)] hover:bg-[color-mix(in_srgb,var(--sphere)_16%,transparent)]"
+            : "border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]",
         )}
       >
-        {atMax ? (
-          "Nível máximo"
-        ) : armed ? (
+        {monthPending ? (
+          <>
+            <CalendarCheck size={14} strokeWidth={2.2} />
+            Check-in de {monthName(month)} pendente
+          </>
+        ) : monthDone ? (
           <>
             <Check size={14} strokeWidth={2.4} />
-            Confirmar · nível {skill.level} → {skill.level + 1}
+            Check-in de {monthName(month)} feito · corrigir
           </>
         ) : (
           <>
-            <ChevronsUp size={14} strokeWidth={2.2} />
-            Subir de nível
+            <CalendarCheck size={14} strokeWidth={2.2} />
+            Check-in mensal
           </>
         )}
       </button>
+
+      {/* O nível é derivado: ele DEVE saber explicar-se (§2, zero IA). */}
+      {computed.data && <Formula>{computed.data.formula}</Formula>}
+
+      {/* O "subir de nível" manual é a herança pré-v1.2. Enquanto não há
+          check-in, ele ainda é o único jeito de a competência andar — e segue
+          armado em dois cliques. Assim que o primeiro check-in chega, o nível
+          passa a ser calculado e um +1 na mão contradiria a conta: o botão sai. */}
+      {!hasCheckins && checkins.isSuccess && (
+        <button
+          onClick={onLevelUp}
+          disabled={atMax || levelUp.isPending}
+          className={cx(
+            "flex h-9 items-center justify-center gap-1.5 rounded-[var(--radius-md)] text-[12.5px] font-medium",
+            "transition-[background-color,color,border-color] duration-[var(--dur-fast)] ease-[var(--ease)]",
+            "border",
+            atMax
+              ? "cursor-default border-transparent bg-[var(--bg-raised)] text-[var(--text-tertiary)]"
+              : armed
+                ? "border-[var(--sphere)] bg-[color-mix(in_srgb,var(--sphere)_18%,transparent)] text-[var(--text-primary)]"
+                : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-glow)]",
+          )}
+        >
+          {atMax ? (
+            "Nível máximo"
+          ) : armed ? (
+            <>
+              <Check size={14} strokeWidth={2.4} />
+              Confirmar · nível {skill.level} → {skill.level + 1}
+            </>
+          ) : (
+            <>
+              <ChevronsUp size={14} strokeWidth={2.2} />
+              Subir de nível (manual)
+            </>
+          )}
+        </button>
+      )}
+
+      {hasCheckins && (
+        <p className="text-[11px] leading-[15px] text-[var(--text-tertiary)]">
+          O nível agora vem dos check-ins — por isso o "subir de nível" manual saiu daqui.
+        </p>
+      )}
 
       {/* O rodapé destrutivo. Ele mora FORA do botão de nível, atrás de uma
           hairline, e usa a cor de perigo — nada nele parece um passo adiante.
@@ -280,6 +384,14 @@ function SkillCard({ skill, areaId }: { skill: Skill; areaId: string }) {
           ariaLabel={`Excluir a competência ${skill.title}`}
         />
       </div>
+
+      {checkinOpen && (
+        <SkillCheckinModal
+          skill={skill}
+          areaId={areaId}
+          onClose={() => setCheckinOpen(false)}
+        />
+      )}
     </Card>
   );
 }

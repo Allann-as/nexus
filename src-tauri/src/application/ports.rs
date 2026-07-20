@@ -5,8 +5,8 @@
 //! estes traits de novo, sem tocar em uma linha de regra de negócio.
 
 use crate::domain::entities::{
-    AnnualGoalKind, Area, AssetClass, BookStatus, ChallengeMetric, Direction, GoalKind, Kind,
-    MilestoneKind, Node, ProgressSource, Status, Template,
+    AnnualGoalKind, Area, AssetClass, BookStatus, ChallengeMetric, CourseStage, Direction,
+    GoalKind, Kind, MilestoneKind, Node, ProgressSource, Status, SubjectTrack, Template,
 };
 use crate::domain::errors::Result;
 use crate::domain::ledger::{LedgerEntry, NewLedgerEvent};
@@ -1364,8 +1364,22 @@ pub struct NewSkill {
     pub max_level: Option<i64>,
 }
 
-/// Uma competência: o node 'skill' + o satélite. `level` é o estado ATUAL; a
-/// trilha de evolução é a série de eventos `skill_level_up` no ledger.
+/// Uma competência: o node 'skill' + o satélite.
+///
+/// **Por que DOIS níveis convivem aqui** (BÚSSOLA, fase E):
+///
+/// * `level` é a coluna GRAVADA, incrementada pelo clique "subir de nível"
+///   (`level_up_skill`). Foi o único nível até a v1.1.
+/// * `computed_level` é o nível DERIVADO do histórico de check-ins mensais
+///   (`domain::skill_level`, ADR-0037) — a partir da v1.2, é ele que manda.
+///
+/// A coluna não foi apagada porque **toda competência criada antes da v1.2 tem
+/// um nível gravado e ZERO check-ins**: apagá-la seria zerar, na atualização, um
+/// número que o usuário construiu clique a clique. Enquanto não houver check-in,
+/// `computed_level` vem `None` — e a UI cai no `level` gravado. Assim que o
+/// primeiro check-in entrar, `computed_level` passa a existir e a UI o prefere.
+/// Não se inventa um nível para quem nunca fez check-in (por isso `Option`, e
+/// não um 1 fabricado).
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Skill {
@@ -1374,6 +1388,9 @@ pub struct Skill {
     pub area_id: Option<String>,
     pub status: String,
     pub level: i64,
+    /// O nível derivado dos check-ins mensais. `None` = ainda sem check-in
+    /// nenhum; a UI usa `level` como fallback. Ver a nota do struct.
+    pub computed_level: Option<i64>,
     pub category: Option<String>,
     pub max_level: Option<i64>,
     pub created_at: i64,
@@ -1424,6 +1441,13 @@ pub struct NewSubject {
     pub area_id: Option<String>,
     pub category: Option<String>,
     pub target_minutes: Option<i64>,
+    /// A SEÇÃO de Estudos a que ela pertence (BÚSSOLA, fase D). Default `Livre`
+    /// — a aba "Matérias" de sempre.
+    pub track: SubjectTrack,
+    /// Só para `track = Curso`; recusado nas outras trilhas pelo caso de uso.
+    pub course_stage: Option<CourseStage>,
+    /// A previsão de conclusão de um curso, dia local 'YYYY-MM-DD'.
+    pub expected_end: Option<String>,
 }
 
 /// Uma matéria: o node 'subject' + o satélite. O progresso não mora aqui — ele é
@@ -1437,6 +1461,16 @@ pub struct Subject {
     pub status: String,
     pub category: Option<String>,
     pub target_minutes: Option<i64>,
+    /// A TRILHA — o discriminante das seções de Estudos (0016). Fechado e do
+    /// SISTEMA; `category` continua sendo o texto livre do USUÁRIO.
+    pub track: SubjectTrack,
+    /// O estágio de um curso; `None` em toda outra trilha.
+    pub course_stage: Option<CourseStage>,
+    /// A previsão de conclusão, dia local 'YYYY-MM-DD'.
+    pub expected_end: Option<String>,
+    /// A meta `staged` que descreve o nível atual de um idioma. `None` = a
+    /// escada ainda não foi montada.
+    pub level_goal_id: Option<String>,
     pub created_at: i64,
 }
 
@@ -1453,7 +1487,12 @@ pub trait SubjectRepository: Send + Sync {
     fn get(&self, id: &str) -> Result<Subject>;
 
     /// As matérias de uma Esfera (ou todas). As arquivadas somem.
-    fn list(&self, area_id: Option<&str>) -> Result<Vec<Subject>>;
+    ///
+    /// `track = Some(t)` é o que ISOLA as seções de Estudos umas das outras — a
+    /// ausência desse filtro é que fazia o Inglês de Idiomas aparecer dentro de
+    /// Faculdade. `track = None` devolve TUDO, e é assim que a aba "Matérias"
+    /// (que sempre listou todas) continua funcionando.
+    fn list(&self, area_id: Option<&str>, track: Option<SubjectTrack>) -> Result<Vec<Subject>>;
 
     /// Ajusta a meta de minutos — CONFIGURAÇÃO, não fato: não grava no ledger
     /// (ADR-0023). `None` remove a meta.
@@ -1468,6 +1507,68 @@ pub trait SubjectRepository: Send + Sync {
     /// vinculados" (uma meta de carreira, um livro) que o `contributes_to` liga
     /// (ADR-0046). Barato; omitido na UI quando é zero.
     fn linked_count(&self, id: &str) -> Result<i64>;
+
+    /// Grava o estágio de um curso. CONFIGURAÇÃO, não fato (ADR-0023). O caso de
+    /// uso é que garante que a matéria está na trilha `curso` — o repositório só
+    /// escreve. `None` limpa o estágio.
+    fn set_course_stage(
+        &self,
+        id: &str,
+        stage: Option<CourseStage>,
+        updated_at: i64,
+    ) -> Result<Subject>;
+
+    /// Grava a previsão de conclusão ('YYYY-MM-DD' já validado). `None` remove.
+    fn set_expected_end(&self, id: &str, day: Option<&str>, updated_at: i64) -> Result<Subject>;
+
+    /// Aponta a matéria para a meta `staged` que descreve o nível dela. `None`
+    /// desfaz o vínculo. O caso de uso é que valida que o alvo é uma meta e que
+    /// ela é `staged`.
+    fn set_level_goal(&self, id: &str, goal_id: Option<&str>, updated_at: i64) -> Result<Subject>;
+}
+
+/* ===== Carreira: o check-in mensal da competência (BÚSSOLA, fase E) ===== */
+
+/// Um check-in mensal a gravar. Três perguntas, uma vez por mês, por competência.
+#[derive(Debug, Clone)]
+pub struct NewSkillCheckin {
+    pub skill_id: String,
+    /// 'YYYY-MM' local, já validado (bem formado e não futuro).
+    pub month: String,
+    pub studied: bool,
+    pub applied: i64,
+    pub stars: i64,
+}
+
+/// Um check-in mensal como ele está gravado.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillCheckin {
+    pub skill_id: String,
+    pub month: String,
+    pub studied: bool,
+    pub applied: i64,
+    pub stars: i64,
+    pub noted_at: i64,
+}
+
+pub trait SkillCheckinRepository: Send + Sync {
+    /// Grava (ou CORRIGE) o check-in do mês E acrescenta o evento ao ledger, na
+    /// mesma transação.
+    ///
+    /// `INSERT OR REPLACE`: reinformar o mesmo mês CORRIGE, não empilha — um mês
+    /// só tem um retrato, como `portfolio_snapshots`. O ledger, esse, é
+    /// append-only: cada resposta (inclusive a correção) vira uma linha, porque
+    /// corrigir o estado nunca reescreve o que aconteceu.
+    fn upsert_with_event(
+        &self,
+        new: &NewSkillCheckin,
+        event: &NewLedgerEvent,
+    ) -> Result<SkillCheckin>;
+
+    /// Todos os check-ins de uma competência, do mês mais antigo ao mais recente
+    /// — a ordem que a fórmula do nível e a régua de evolução leem.
+    fn list_for_skill(&self, skill_id: &str) -> Result<Vec<SkillCheckin>>;
 }
 
 /// Uma sessão de estudo a registrar. As três ligações são independentes e

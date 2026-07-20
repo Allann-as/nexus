@@ -55,9 +55,10 @@ use crate::infrastructure::repositories::{
     link_repo::SqliteLinkRepository, node_repo::SqliteNodeRepository,
     note_repo::SqliteNoteRepository, period_repo::SqlitePeriodStatsRepository,
     records_repo::SqliteRecordsRepository, retrospective_repo::SqliteRetrospectiveRepository,
-    skill_repo::SqliteSkillRepository, sphere_repo::SqliteSphereRepository,
-    study_session_repo::SqliteStudySessionRepository, subject_repo::SqliteSubjectRepository,
-    task_repo::SqliteTaskRepository, timeline_repo::SqliteTimelineRepository,
+    skill_checkin_repo::SqliteSkillCheckinRepository, skill_repo::SqliteSkillRepository,
+    sphere_repo::SqliteSphereRepository, study_session_repo::SqliteStudySessionRepository,
+    subject_repo::SqliteSubjectRepository, task_repo::SqliteTaskRepository,
+    timeline_repo::SqliteTimelineRepository,
 };
 use crate::infrastructure::security::SecurityService;
 use crate::infrastructure::settings::SettingsStore;
@@ -150,7 +151,7 @@ impl AppState {
         };
 
         let goals = GoalService {
-            goals: goal_repo,
+            goals: goal_repo.clone(),
             nodes: node_repo.clone(),
             areas: area_repo.clone(),
             ids: ids.clone(),
@@ -181,6 +182,7 @@ impl AppState {
 
         let career = CareerService {
             skills: Arc::new(SqliteSkillRepository::new(db.clone())),
+            checkins: Arc::new(SqliteSkillCheckinRepository::new(db.clone())),
             nodes: node_repo.clone(),
             areas: area_repo.clone(),
             ledger: ledger.clone(),
@@ -194,6 +196,7 @@ impl AppState {
             subjects: Arc::new(SqliteSubjectRepository::new(db.clone())),
             sessions: Arc::new(SqliteStudySessionRepository::new(db.clone())),
             areas: area_repo.clone(),
+            goals: goal_repo.clone(),
             ids: ids.clone(),
             clock: clock.clone(),
         };

@@ -33,6 +33,7 @@ use nexus_lib::domain::streak::TickStatus;
 use nexus_lib::infrastructure::clock::{SystemClock, Uuid7Gen};
 use nexus_lib::infrastructure::db::Db;
 use nexus_lib::infrastructure::paths::Paths;
+use nexus_lib::infrastructure::repositories::skill_checkin_repo::SqliteSkillCheckinRepository;
 use nexus_lib::infrastructure::repositories::{
     annual_goal_repo::SqliteAnnualGoalRepository, area_repo::SqliteAreaRepository,
     book_repo::SqliteBookRepository, challenge_repo::SqliteChallengeRepository,
@@ -119,6 +120,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ledger_repo: Arc<dyn LedgerRepository> = Arc::new(SqliteLedgerRepository::new(db.clone()));
     let career = CareerService {
         skills: Arc::new(SqliteSkillRepository::new(db.clone())),
+        checkins: Arc::new(SqliteSkillCheckinRepository::new(db.clone())),
         nodes: node_repo.clone(),
         areas: area_repo.clone(),
         ledger: ledger_repo,
