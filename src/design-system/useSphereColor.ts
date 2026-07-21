@@ -39,6 +39,29 @@ export function useSphereColor(areaId: string | null | undefined): string {
 }
 
 /**
+ * O RESOLVEDOR — `(areaId) => cor`, para quem pinta uma LISTA.
+ *
+ * `useSphereColor` resolve UMA Esfera, e um hook não pode ser chamado dentro de
+ * um `map`. Toda tela que lista itens de Esferas diferentes (o horizonte, a
+ * timeline, a busca) precisava então montar o próprio `find` — exatamente a
+ * divergência que este arquivo existe para impedir. Aqui a regra do fallback e a
+ * inclusão das arquivadas ficam idênticas às de `useSphereColor`, porque são
+ * literalmente o mesmo código.
+ */
+export function useSphereColorResolver(): (areaId: string | null | undefined) => string {
+  const { data: areas } = useQuery({
+    queryKey: ["areas", "all"],
+    queryFn: () => listAreas(true),
+    staleTime: 5 * 60_000,
+  });
+
+  return (areaId) => {
+    if (!areaId) return "var(--accent)";
+    return areas?.find((a) => a.id === areaId)?.color ?? "var(--accent)";
+  };
+}
+
+/**
  * O `style` pronto para pendurar num container.
  *
  * Define `--sphere`, e a partir daí aurora, ícone, gráfico, checkbox e barra se

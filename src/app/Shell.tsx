@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 
 import { TheNexo } from "./TheNexo";
 import { Topbar } from "./Topbar";
+import { CockpitRail } from "./CockpitRail";
 import { useKeyboard } from "./useKeyboard";
 import { useBootTasks } from "./useBootTasks";
 import { CommandPalette } from "../features/command-palette/CommandPalette";
@@ -56,6 +57,11 @@ export function Shell() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--bg-void)]">
+      {/* A rail do Cockpit (§2.1): a telemetria das Esferas parada à esquerda.
+          O NEXO (hambúrguer) segue como o mapa global + busca; a rail cobre o
+          dia a dia. */}
+      <CockpitRail />
+
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
           onOpenNav={() => setNavOpen(true)}

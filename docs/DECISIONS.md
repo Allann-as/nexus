@@ -2610,3 +2610,45 @@ cerimônia, e gravar a cada tecla escreveria no disco uma dúzia de vezes para d
 **Consequência.** A saudação do Hub consome o nome nesta fase; a da tela de bloqueio consome o MESMO
 hook na fase 6. A quatro faixas do dia (madrugada/manhã/tarde/noite) que o Hub já tinha desde o M2.5
 foi preservada na centralização — centralizar não podia ser a desculpa para a nuance se perder.
+
+## ADR-0076 — A rail volta como TELEMETRIA, e o Hub vira Command Deck (o velocímetro morre)
+
+**Data:** 2026-07-21 · **Status:** aceito · **v1.3 (COCKPIT), fase 2**
+
+**Contexto.** O M4.6 matou a sidebar de 240px e mudou tudo para o NEXO (o overlay do hambúrguer). A
+decisão estava certa para o MAPA global, e errada para o dia a dia: o NEXO é um gesto — ele some
+quando você solta. Não havia superfície PARADA dizendo como cada Esfera está agora. Em paralelo, o
+Hub foi reprovado em três pontos: o VELOCÍMETRO (ponteiro, leitura por estimativa de ângulo), os
+ESPAÇOS VAZIOS (cards soltos numa página larga) e a LINHA DO DIA no rodapé.
+
+**Decisão.**
+
+1. **A rail volta, mas não como lista de links — como INSTRUMENTO.** Cada Esfera é um LED + nome +
+   contagem de hoje + SegBar de progresso. Olhar a rail responde "o que está no vermelho?" antes de
+   qualquer clique. O LED distingue os três estados que importam: cumprido (cor da Esfera), parcial
+   (âmbar), nada feito HAVENDO o que fazer (vermelho) — e **apagado quando não havia nada agendado**,
+   porque zero-de-zero não é falha (a regra do Score, ADR-0014). Recolhida, a coluna de LEDs
+   sobrevive: a telemetria é o que menos pode sumir no colapso.
+2. **O NEXO continua**, e agora com um papel limpo: mapa global + busca. A rail cobre o trajeto
+   repetido; o NEXO cobre o salto. Os dois deixam de competir.
+3. **O Score perde o ponteiro.** Número mono grande + SegBar de 40 segmentos + o delta contra ontem.
+   Um medidor segmentado se lê com precisão; um ponteiro pede que você estime o ângulo. O delta só
+   aparece com DOIS dias fechados — "▲0" no primeiro dia afirmaria uma estabilidade não medida.
+4. **Duas colunas.** Centro: você (saudação + nível em SegBar), seu dia (Score), seus números (grade
+   densa de StatTiles), suas Esferas. Direita: a agenda de hoje e os próximos marcos com D-dias.
+5. **A faixa "Hoje" vira COLUNA (`DayAgenda`) e a régua do Horizonte vira LISTA (`NextMilestones`).**
+   A régua horizontal foi reprovada com razão: dois eventos a 3 e 5 dias ficavam colados e ilegíveis,
+   e o eixo ocupava mais pixel que os marcos. **O que NÃO mudou: marcar na agenda é o tick de sempre**
+   — o Hub é a tela mais aberta, e obrigar um desvio para marcar um hábito o transformaria num
+   pôster. E o item concluído continua FICANDO no lugar, riscado (some-ao-marcar faz a linha seguinte
+   pular para debaixo do cursor, e o risco no texto É a recompensa).
+6. **`useSphereColorResolver`** nasce ao lado de `useSphereColor`: um hook não pode ser chamado dentro
+   de um `map`, e sem ele toda tela que lista itens de Esferas diferentes remontaria o próprio `find`
+   — a divergência que aquele arquivo existe para impedir.
+
+**Uma lição de método, registrada para não se repetir.** A coluna direita PARECIA cortada em todo
+screenshot da dirigida, e três "correções" de layout foram feitas atrás disso. Não havia bug: o script
+de captura media a janela em pixels ESCALADOS (Windows a 125%) e copiava a tela em pixels FÍSICOS, e a
+imagem saía cortada à direita — o campo de busca da topbar aparecia cortado em todas elas, que era a
+pista. `SetProcessDPIAware()` resolveu. **Uma ferramenta de observação com bug fabrica bugs no
+observado**; antes de corrigir o que a imagem mostra, vale conferir se a imagem está inteira.

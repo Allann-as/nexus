@@ -1,38 +1,60 @@
 /**
- * O HUB — a primeira tela do NEXUS.
+ * O HUB — o COMMAND DECK (v1.3 COCKPIT, §2.1).
  *
- * Substitui o Dashboard v1, que era uma tela sobre HOJE (hábitos + tarefas +
- * score). O Hub é uma tela sobre a VIDA: as Esferas, cada uma com sinal vital
- * próprio. O "hoje" não sumiu — virou a faixa de baixo e o gauge do topo.
+ * O Hub do Midnight respondia "como vai a vida?" com uma grade de Esferas grandes,
+ * um velocímetro e uma faixa "hoje" no rodapé. Três coisas foram reprovadas em uso
+ * real: o VELOCÍMETRO (ponteiro, imprecisão), os ESPAÇOS VAZIOS (cards soltos numa
+ * página larga) e a LINHA DO DIA no rodapé. O Command Deck reorganiza em duas
+ * colunas densas, e a rail à esquerda passa a carregar a telemetria das Esferas.
  *
- * Ordem de leitura, de propósito: saudação (você) → score (seu dia) → Esferas
- * (sua vida) → hoje (seu próximo passo). Quem abre o app às 7h quer o terceiro
- * e o quarto; quem abre às 23h quer o segundo.
+ * A leitura, agora:
  *
- * Custo: duas queries — `sphere_overview` (a grade) e `dashboard_today` (o gauge
- * e a faixa). Nenhuma delas cresce com o tamanho da história.
+ *   RAIL (fora daqui) → como cada Esfera está AGORA
+ *   CENTRO            → você (saudação + nível), seu dia (Score), seus números
+ *   DIREITA           → e agora? (agenda) e o que vem (marcos com D-dias)
+ *
+ * O Score perdeu o ponteiro e ganhou o que o plano pede: número mono grande +
+ * SegBar horizontal + o delta contra ontem. Um medidor segmentado se lê com
+ * precisão; um ponteiro pede que você estime o ângulo.
+ *
+ * Custo: sete queries, todas indexadas e nenhuma crescendo com o tamanho da
+ * história. As três novas (finanças, semanas perfeitas, horizonte) alimentam
+ * ladrilhos que o plano exige preenchidos — e o TanStack dedupa as que a rail e
+ * as outras telas já pedem.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Flame, Info, LayoutGrid, Plus, Settings, Trophy } from "lucide-react";
+import {
+  CalendarCheck,
+  Flame,
+  Info,
+  LayoutGrid,
+  Plus,
+  Trophy,
+  Wallet,
+} from "lucide-react";
 
 import {
   dashboardToday,
+  financeOverview,
   gamificationOverview,
   getInsights,
+  perfectWeekView,
   scoreHistory,
   sphereOverview,
   toNexusError,
   type Level,
 } from "../../lib/ipc";
-import { Button, cx } from "../../design-system/primitives";
-import { Gauge, Sparkline } from "../../design-system/charts";
+import { Button, PageContainer, cx } from "../../design-system/primitives";
+import { StatTile } from "../../design-system/cards";
+import { Sparkline } from "../../design-system/charts";
+import { SegBar, MonoLabel, Terminal } from "../../design-system/instruments";
 import { ScoreDetail } from "./ScoreDetail";
 import { SphereCard } from "./SphereCard";
-import { TodayStrip } from "./TodayStrip";
-import { HorizonBand } from "./HorizonBand";
+import { DayAgenda } from "./DayAgenda";
+import { NextMilestones } from "./NextMilestones";
 import { OnThisDay } from "../timeline/OnThisDay";
 import { greeting, useDisplayName } from "../../lib/greeting";
 
@@ -40,16 +62,15 @@ export function HubScreen() {
   const navigate = useNavigate();
   const [showMath, setShowMath] = useState(false);
   const displayName = useDisplayName();
+  const year = new Date().getFullYear();
 
   const spheres = useQuery({ queryKey: ["spheres", "overview"], queryFn: sphereOverview });
   const today = useQuery({ queryKey: ["dashboard", "today"], queryFn: dashboardToday });
   const gami = useQuery({ queryKey: ["gamification"], queryFn: gamificationOverview });
-  // A forma dos últimos 30 dias do Score, sob o gauge. O boot já congelou os
-  // dias fechados (useBootTasks); aqui só lemos.
   const scores = useQuery({ queryKey: ["score-history", 30], queryFn: () => scoreHistory(30) });
-  // O alerta de carga vem do CACHE dos insights (leitura instantânea, `null` no
-  // primeiro boot) — o Hub nunca recomputa. Só aparece quando dispara.
   const insights = useQuery({ queryKey: ["insights", "cache"], queryFn: getInsights });
+  const fin = useQuery({ queryKey: ["finance", "overview"], queryFn: financeOverview });
+  const pw = useQuery({ queryKey: ["perfect-weeks", year], queryFn: () => perfectWeekView(year) });
 
   const levelByArea = new Map<string, Level>(
     (gami.data?.spheres ?? []).map((s) => [s.areaId, s.level]),
@@ -86,225 +107,318 @@ export function HubScreen() {
   }
 
   const score = today.data?.score;
+  const points = scores.data ?? [];
+
+  // O delta contra ONTEM. Só existe com dois dias fechados — inventar "▲0" no
+  // primeiro dia seria afirmar uma estabilidade que não foi medida.
+  const delta = useMemo(() => {
+    if (points.length < 2 || score?.value == null) return null;
+    const prev = points[points.length - 2]?.value;
+    if (prev == null) return null;
+    return Math.round(score.value - prev);
+  }, [points, score?.value]);
 
   return (
     <div className="nx-page nx-enter h-full overflow-y-auto">
-      <div className="mx-auto max-w-[1100px] px-8 pt-10 pb-12">
-        {/* ===== saudação + score ===== */}
-        <header className="flex items-start justify-between gap-8">
-          <div className="pt-2">
-            <h1 className="text-[30px] leading-[36px] font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
-              {greeting()}, {displayName}
-            </h1>
-            <p className="mt-1 text-[13px] text-[var(--text-tertiary)]">
-              {today.data ? formatDay(today.data.day) : " "}
-            </p>
+      <PageContainer className="pt-8 pb-12">
+        {/* Duas colunas: o deck no centro, a coluna de "e agora?" à direita.
+            `minmax(0,1fr)` e não `1fr`: o padrão de uma trilha de grid é
+            `minmax(auto,1fr)`, e o `auto` faz a coluna respeitar o min-content
+            dos filhos — uma SegBar de 40 segmentos ou um número mono grande
+            empurrariam a coluna direita para fora. O zero explícito manda a
+            coluna poder encolher. Abaixo de `lg` as duas empilham. */}
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+          {/* ==================== CENTRO ==================== */}
+          <div className="min-w-0 space-y-5">
+            {/* ===== saudação + nível ===== */}
+            <header className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h1 className="text-[28px] leading-[34px] font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
+                  {greeting()}, {displayName}
+                </h1>
+                <p className="mt-0.5 text-[13px] text-[var(--text-tertiary)]">
+                  {today.data ? formatDay(today.data.day) : " "}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" size="sm" icon={Plus} onClick={() => navigate("/areas")}>
+                  Nova Esfera
+                </Button>
+              </div>
+            </header>
 
-            <div className="mt-5 flex items-center gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={Plus}
-                onClick={() => navigate("/areas")}
-              >
-                Nova Esfera
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={Settings}
-                onClick={() => navigate("/settings")}
-              >
-                Configurações
-              </Button>
-            </div>
-
+            {/* O nível geral em SegBar — o XP deixa de ser uma barrinha de 96px
+                perdida sob a saudação e vira uma linha de instrumento. */}
             {gami.data && (
               <button
                 onClick={() => navigate("/game")}
-                className="mt-4 flex items-center gap-2.5 text-[11px] text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
+                className="flex w-full items-center gap-3 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3.5 py-2.5 text-left transition-colors hover:border-[var(--border-glow)]"
               >
-                <Trophy size={13} className="text-[var(--accent)]" aria-hidden />
-                <span>
-                  Nível geral{" "}
-                  <strong className="tabular text-[var(--text-secondary)]">
-                    {gami.data.overall.level}
-                  </strong>
-                </span>
-                <span className="h-1 w-24 overflow-hidden rounded-full bg-[var(--bg-base)]">
-                  <span
-                    className="block h-full rounded-full bg-[var(--accent)]"
-                    style={{
-                      width: `${
-                        gami.data.overall.span > 0
-                          ? (gami.data.overall.intoLevel / gami.data.overall.span) * 100
-                          : 0
-                      }%`,
-                    }}
-                  />
-                </span>
-                <span className="tabular">{gami.data.overall.xp.toLocaleString("pt-BR")} XP</span>
-              </button>
-            )}
-          </div>
-
-          <div className="relative flex shrink-0 flex-col items-center">
-            <Gauge
-              value={score?.value ?? null}
-              size={140}
-              label="Nexus Score"
-              color={scoreColor(score?.value ?? null)}
-            />
-            {/* A tendência de 30 dias: o gauge diz "hoje", a linha diz "para onde".
-                Só desenha com dois dias fechados — antes disso não há forma. */}
-            {(() => {
-              const points = scores.data ?? [];
-              if (points.length < 2) return null;
-              const latest = points[points.length - 1].value;
-              return (
-                <div className="mt-2 flex flex-col items-center gap-0.5">
-                  <Sparkline
-                    data={points.map((p) => p.value / 100)}
-                    color={scoreColor(latest)}
-                    width={132}
-                    height={26}
-                  />
-                  <span className="text-[9px] font-medium tracking-[0.1em] text-[var(--text-tertiary)] uppercase">
-                    últimos {points.length} dias
-                  </span>
-                </div>
-              );
-            })()}
-            {score && (
-              <button
-                onClick={() => setShowMath((s) => !s)}
-                className={cx(
-                  "mt-1 flex items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[11px]",
-                  "transition-colors duration-[var(--dur-fast)]",
-                  showMath
-                    ? "bg-[var(--accent-muted)] text-[var(--accent)]"
-                    : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]",
-                )}
-              >
-                <Info size={10} />
-                como calculamos
-              </button>
-            )}
-            {showMath && score && (
-              <ScoreDetail score={score} onClose={() => setShowMath(false)} />
-            )}
-          </div>
-        </header>
-
-        {/* ===== alerta de carga (só quando dispara) ===== */}
-        {insights.data?.burnout?.alert && (
-          <button
-            onClick={() => navigate("/insights")}
-            className={cx(
-              "mt-6 flex w-full items-center gap-3 rounded-[var(--radius-lg)] border p-3.5 text-left",
-              "transition-colors duration-[var(--dur-fast)]",
-            )}
-            style={{
-              borderColor: "var(--warning)",
-              background: "color-mix(in srgb, var(--warning) 8%, var(--bg-surface))",
-            }}
-          >
-            <span
-              className="grid size-9 shrink-0 place-items-center rounded-full"
-              style={{
-                background: "color-mix(in oklab, var(--warning) 18%, transparent)",
-                color: "var(--warning)",
-              }}
-            >
-              <Flame size={17} aria-hidden />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[13px] font-semibold text-[var(--text-primary)]">
-                Sua carga está acima do normal
-              </span>
-              <span className="block text-[12px] text-[var(--text-secondary)]">
-                Esta semana está em{" "}
-                <strong className="tabular text-[var(--text-primary)]">
-                  {insights.data.burnout.ratio.toFixed(2)}×
-                </strong>{" "}
-                a média das últimas {insights.data.burnout.baselineWeeks} semanas. Ver nos
-                Insights →
-              </span>
-            </span>
-          </button>
-        )}
-
-        {/* ===== a grade de Esferas ===== */}
-        <section className="mt-8">
-          <SectionLabel>Suas Esferas</SectionLabel>
-
-          {spheres.isPending ? (
-            <SkeletonGrid />
-          ) : list.length === 0 ? (
-            <div className="mt-3 flex flex-col items-center gap-3 rounded-[var(--radius-lg)] border border-dashed border-[var(--border-subtle)] p-10 text-center">
-              <span className="grid size-12 place-items-center rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
-                <LayoutGrid size={20} className="text-[var(--text-tertiary)]" strokeWidth={1.75} aria-hidden />
-              </span>
-              <p className="text-[13px] text-[var(--text-tertiary)]">
-                Nenhuma Esfera ativa. Todas arquivadas?
-              </p>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => navigate("/areas")}
-              >
-                Gerenciar Esferas
-              </Button>
-            </div>
-          ) : (
-            <div className="mt-3 grid grid-cols-2 gap-4">
-              {list.map((sphere, i) => (
-                <SphereCard
-                  key={sphere.id}
-                  sphere={sphere}
-                  index={i}
-                  level={levelByArea.get(sphere.id)}
+                <Trophy size={14} className="shrink-0 text-[var(--accent)]" aria-hidden />
+                <MonoLabel>Nível {gami.data.overall.level}</MonoLabel>
+                <SegBar
+                  value={
+                    gami.data.overall.span > 0
+                      ? gami.data.overall.intoLevel / gami.data.overall.span
+                      : 0
+                  }
+                  color="var(--accent)"
+                  segments={28}
+                  height={8}
+                  className="min-w-0 flex-1"
                 />
-              ))}
+                <span className="tabular shrink-0 text-[11px] text-[var(--text-secondary)]">
+                  {gami.data.overall.xp.toLocaleString("pt-BR")} XP
+                </span>
+              </button>
+            )}
+
+            {/* ===== alerta de carga (só quando dispara) ===== */}
+            {insights.data?.burnout?.alert && (
+              <button
+                onClick={() => navigate("/insights")}
+                className="flex w-full items-center gap-3 rounded-[var(--radius-lg)] border p-3.5 text-left"
+                style={{
+                  borderColor: "var(--warning)",
+                  background: "color-mix(in srgb, var(--warning) 8%, var(--bg-surface))",
+                }}
+              >
+                <span
+                  className="grid size-9 shrink-0 place-items-center rounded-full"
+                  style={{
+                    background: "color-mix(in oklab, var(--warning) 18%, transparent)",
+                    color: "var(--warning)",
+                  }}
+                >
+                  <Flame size={17} aria-hidden />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-semibold text-[var(--text-primary)]">
+                    Sua carga está acima do normal
+                  </span>
+                  <span className="block text-[12px] text-[var(--text-secondary)]">
+                    Esta semana está em{" "}
+                    <strong className="tabular text-[var(--text-primary)]">
+                      {insights.data.burnout.ratio.toFixed(2)}×
+                    </strong>{" "}
+                    a média das últimas {insights.data.burnout.baselineWeeks} semanas. Ver nos
+                    Insights →
+                  </span>
+                </span>
+              </button>
+            )}
+
+            {/* ===== o Nexus Score, sem velocímetro ===== */}
+            <Terminal title="Nexus Score" icon={CalendarCheck} tone="phos">
+              <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+                <div className="flex items-baseline gap-2">
+                  {score?.value == null ? (
+                    <span className="tabular text-[52px] leading-none font-bold text-[var(--text-tertiary)]">
+                      —
+                    </span>
+                  ) : (
+                    <span
+                      className="tabular text-[52px] leading-none font-bold tracking-[-0.03em]"
+                      style={{ color: scoreColor(score.value) }}
+                    >
+                      {Math.round(score.value)}
+                    </span>
+                  )}
+                  <span className="text-[14px] text-[var(--text-tertiary)]">/100</span>
+                  {delta != null && delta !== 0 && (
+                    <span
+                      className="tabular ml-1 text-[12px] font-semibold"
+                      style={{ color: delta > 0 ? "var(--success)" : "var(--danger)" }}
+                    >
+                      {delta > 0 ? "▲" : "▼"}
+                      {Math.abs(delta)} <span className="font-normal text-[var(--text-tertiary)]">vs ontem</span>
+                    </span>
+                  )}
+                </div>
+
+                {points.length >= 2 && (
+                  <div className="flex flex-col gap-0.5">
+                    <Sparkline
+                      data={points.map((p) => p.value / 100)}
+                      color={scoreColor(points[points.length - 1].value)}
+                      width={150}
+                      height={30}
+                    />
+                    <MonoLabel>últimos {points.length} dias</MonoLabel>
+                  </div>
+                )}
+              </div>
+
+              <SegBar
+                value={(score?.value ?? 0) / 100}
+                color={scoreColor(score?.value ?? null)}
+                segments={40}
+                height={12}
+                className="mt-4"
+              />
+
+              {score && (
+                <button
+                  onClick={() => setShowMath((s) => !s)}
+                  className={cx(
+                    "mt-3 inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[11px] transition-colors",
+                    showMath
+                      ? "bg-[var(--accent-muted)] text-[var(--accent)]"
+                      : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]",
+                  )}
+                >
+                  <Info size={10} />
+                  como calculamos
+                </button>
+              )}
+              {showMath && score && <ScoreDetail score={score} onClose={() => setShowMath(false)} />}
+            </Terminal>
+
+            {/* ===== a grade densa de ladrilhos ===== */}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <StatTile
+                icon={Flame}
+                label="Sequência"
+                value={bestStreak(list)}
+                unit="dias"
+                hint={bestStreakTitle(list) ?? undefined}
+                tone="warning"
+              />
+              <StatTile
+                icon={CalendarCheck}
+                label="Hoje"
+                value={`${habitsDone(list)}/${habitsTotal(list)}`}
+                ring={habitsTotal(list) > 0 ? habitsDone(list) / habitsTotal(list) : 0}
+              />
+              <StatTile
+                icon={Wallet}
+                label="Patrimônio"
+                value={fin.data ? formatMoney(fin.data.portfolioCents ?? fin.data.totalContributedCents) : "—"}
+                spark={monthlySpark(fin.data?.monthly)}
+                tone="cyan"
+                onClick={() => navigate("/objectives")}
+              />
+              <StatTile
+                icon={Trophy}
+                label="Conquistas"
+                value={unlockedCount(gami.data?.achievements)}
+                seg={unlockedRatio(gami.data?.achievements)}
+                tone="violet"
+                onClick={() => navigate("/game")}
+              />
             </div>
-          )}
-        </section>
 
-        {/* ===== hoje ===== */}
-        <section className="mt-8">
-          <SectionLabel>Hoje</SectionLabel>
-          <TodayStrip data={today.data} isPending={today.isPending} />
-        </section>
+            {/* ===== as Esferas ===== */}
+            <section>
+              <MonoLabel>Suas Esferas</MonoLabel>
+              {spheres.isPending ? (
+                <SkeletonGrid />
+              ) : list.length === 0 ? (
+                <div className="mt-3 flex flex-col items-center gap-3 rounded-[var(--radius-lg)] border border-dashed border-[var(--border-subtle)] p-10 text-center">
+                  <span className="grid size-12 place-items-center rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                    <LayoutGrid
+                      size={20}
+                      className="text-[var(--text-tertiary)]"
+                      strokeWidth={1.75}
+                      aria-hidden
+                    />
+                  </span>
+                  <p className="text-[13px] text-[var(--text-tertiary)]">
+                    Nenhuma Esfera ativa. Todas arquivadas?
+                  </p>
+                  <Button variant="secondary" size="sm" onClick={() => navigate("/areas")}>
+                    Gerenciar Esferas
+                  </Button>
+                </div>
+              ) : (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {list.map((sphere, i) => (
+                    <SphereCard
+                      key={sphere.id}
+                      sphere={sphere}
+                      index={i}
+                      level={levelByArea.get(sphere.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
 
-        {/* ===== horizonte (só aparece quando há próximos marcos) ===== */}
-        <HorizonBand />
-
-        {/* ===== neste dia (só aparece quando há passado) ===== */}
-        <OnThisDay />
-      </div>
+          {/* ==================== COLUNA DIREITA ==================== */}
+          <aside className="min-w-0 space-y-4">
+            <DayAgenda data={today.data} isPending={today.isPending} />
+            <NextMilestones />
+            {/* A semana perfeita é um número pequeno e orgulhoso: cabe na coluna,
+                não merece um ladrilho da grade principal. */}
+            {pw.data && (
+              <button
+                onClick={() => navigate("/perfect-weeks")}
+                className="flex w-full items-center gap-3 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3.5 py-2.5 text-left transition-colors hover:border-[var(--border-glow)]"
+              >
+                <CalendarCheck size={14} className="shrink-0 text-[var(--accent)]" aria-hidden />
+                <MonoLabel>Semanas perfeitas</MonoLabel>
+                <span className="tabular ml-auto text-[15px] font-bold text-[var(--text-primary)]">
+                  {pw.data.totalYear}
+                </span>
+                <span className="text-[11px] text-[var(--text-tertiary)]">em {year}</span>
+              </button>
+            )}
+            <OnThisDay />
+          </aside>
+        </div>
+      </PageContainer>
     </div>
   );
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <h2 className="text-[10px] font-semibold tracking-[0.14em] text-[var(--text-tertiary)] uppercase">
-      {children}
-    </h2>
-  );
+/* ===== derivações de ladrilho — puras, sobre o que já veio ===== */
+
+type Sphere = { bestStreak: number; bestStreakTitle: string | null; habitsTodayDone: number; habitsTodayTotal: number };
+
+function bestStreak(list: Sphere[]): number {
+  return list.reduce((m, s) => Math.max(m, s.bestStreak), 0);
+}
+function bestStreakTitle(list: Sphere[]): string | null {
+  return list.reduce<Sphere | null>((b, s) => (b == null || s.bestStreak > b.bestStreak ? s : b), null)
+    ?.bestStreakTitle ?? null;
+}
+function habitsDone(list: Sphere[]): number {
+  return list.reduce((n, s) => n + s.habitsTodayDone, 0);
+}
+function habitsTotal(list: Sphere[]): number {
+  return list.reduce((n, s) => n + s.habitsTodayTotal, 0);
+}
+
+function unlockedCount(entries: Array<{ unlocked: boolean }> | undefined): number {
+  return (entries ?? []).filter((e) => e.unlocked).length;
+}
+function unlockedRatio(entries: Array<{ unlocked: boolean }> | undefined): number {
+  const all = entries ?? [];
+  return all.length > 0 ? unlockedCount(all) / all.length : 0;
+}
+
+/** Os aportes mensais normalizados em 0..1 para a sparkline do ladrilho. */
+function monthlySpark(monthly: Array<{ cents: number }> | undefined): number[] | undefined {
+  const rows = monthly ?? [];
+  if (rows.length < 2) return undefined;
+  const max = rows.reduce((m, r) => Math.max(m, r.cents), 0);
+  if (max <= 0) return undefined;
+  return rows.map((r) => r.cents / max);
+}
+
+function formatMoney(cents: number): string {
+  return (cents / 100).toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 }
 
 /** Placeholder com a forma final do card — o layout não pula quando os dados chegam. */
 function SkeletonGrid() {
   return (
-    <div className="mt-3 grid grid-cols-2 gap-4">
+    <div className="mt-3 grid gap-3 sm:grid-cols-2">
       {[0, 1, 2, 3].map((i) => (
         <div
           key={i}
-          className={cx(
-            "h-[196px] rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)]",
-            "animate-pulse",
-          )}
+          className="h-[172px] animate-pulse rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)]"
           style={{ animationDelay: `${i * 80}ms` }}
         />
       ))}
@@ -324,7 +438,6 @@ function formatDay(day: string): string {
 function scoreColor(v: number | null): string {
   if (v == null) return "var(--text-tertiary)";
   if (v >= 80) return "var(--success)";
-  if (v >= 50) return "var(--accent)";
-  if (v >= 25) return "var(--warning)";
+  if (v >= 50) return "var(--warning)";
   return "var(--danger)";
 }
