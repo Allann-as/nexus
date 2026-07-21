@@ -310,6 +310,44 @@ impl GoalService {
         )
     }
 
+    /// Apaga uma medição registrada por engano (v1.3, fase 3c).
+    ///
+    /// Uma medição errada não é um detalhe cosmético: ela entra na barra, na
+    /// sparkline e — o pior — nos mínimos quadrados da PROJEÇÃO, que passa a
+    /// anunciar uma data de chegada calculada sobre um número que nunca
+    /// aconteceu. Digitar 90 onde era 80 movia a meta para sempre.
+    ///
+    /// Nada precisa ser recalculado à mão: `ratio`, série e projeção são
+    /// DERIVADOS dos checkpoints a cada leitura (ADR-0037). Tirar a linha já
+    /// corrige os três — a mesma propriedade que faz `delete_contribution` não
+    /// mexer em saldo nenhum.
+    ///
+    /// O evento original PERMANECE no ledger e a correção é apendada: a história
+    /// diz que a medição foi removida, sem reescrever o passado (ADR-0056).
+    pub fn delete_checkpoint(&self, id: &str) -> Result<()> {
+        let cp = self.goals.get_checkpoint(id)?;
+        // O título da meta é o que a Timeline mostra — sem ele a correção seria
+        // "medição removida" sem dizer de quê.
+        let goal = self.goals.get(&cp.goal_id)?;
+
+        let event = NewLedgerEvent {
+            ts: self.clock.now_ms(),
+            day: self.clock.today_local(),
+            entity_id: cp.goal_id.clone(),
+            entity_kind: Kind::Goal.into(),
+            event_type: EventType::Deleted,
+            payload: json!({
+                "checkpointId": id,
+                "value": cp.value,
+                "unit": goal.unit,
+                "notedAt": cp.noted_at,
+            }),
+            title_snapshot: format!("Medição removida — {}", goal.title),
+        };
+
+        self.goals.delete_checkpoint_with_event(id, &event)
+    }
+
     /// Acrescenta um sub-desafio à meta.
     pub fn add_milestone(&self, m: &NewMilestone) -> Result<Milestone> {
         let title = validate_title(&m.title)?;

@@ -109,6 +109,7 @@ export function CaixinhasTab({ areaId }: { areaId: string }) {
               card={card}
               onDeposit={() => setDepositFor(card)}
               onDelete={() => remove.mutate(card.id)}
+              onChanged={refresh}
               deleting={remove.isPending && remove.variables === card.id}
             />
           ))}

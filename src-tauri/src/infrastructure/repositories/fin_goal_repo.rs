@@ -212,6 +212,34 @@ impl FinGoalRepository for SqliteFinGoalRepository {
         })
     }
 
+    fn get_deposit(&self, id: &str) -> Result<FinGoalDeposit> {
+        self.db.with_read(|c| {
+            c.query_row(
+                "SELECT id, goal_id, amount_cents, happened_on, note, created_at
+                   FROM fin_goal_deposits WHERE id = ?1",
+                params![id],
+                map_deposit,
+            )
+            .optional()?
+            .ok_or_else(|| NexusError::NotFound(format!("depósito {id}")))
+        })
+    }
+
+    fn delete_deposit_with_event(&self, id: &str, event: &NewLedgerEvent) -> Result<()> {
+        self.db.with_write(|conn| {
+            let tx = conn.transaction()?;
+            append_in_tx(&tx, event)?;
+
+            let changed = tx.execute("DELETE FROM fin_goal_deposits WHERE id = ?1", params![id])?;
+            if changed == 0 {
+                return Err(NexusError::NotFound(format!("depósito {id}")));
+            }
+
+            tx.commit()?;
+            Ok(())
+        })
+    }
+
     fn active_progress(&self) -> Result<Option<f64>> {
         self.db.with_read(|c| {
             // Uma linha por caixinha ativa, com o total guardado. A média do

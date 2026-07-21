@@ -118,6 +118,13 @@ pub fn add_goal_checkpoint(
     state.goals.add_checkpoint(&id, value, note, noted_at)
 }
 
+/// Apaga uma medição registrada por engano (fase 3c). Barra, série e projeção
+/// são derivadas dos checkpoints: tirar a linha já corrige as três.
+#[tauri::command]
+pub fn delete_goal_checkpoint(state: State<'_, AppState>, id: String) -> Result<()> {
+    state.goals.delete_checkpoint(&id)
+}
+
 /// Um sub-desafio vindo da UI.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

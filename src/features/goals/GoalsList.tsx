@@ -18,6 +18,7 @@ import {
   addGoalCheckpoint,
   addMilestone,
   createHabit,
+  deleteGoalCheckpoint,
   deleteNode,
   goalWithProgress,
   listAreas,
@@ -26,6 +27,7 @@ import {
   setGoalHabit,
   setGoalProgressSource,
   setMilestoneDone,
+  type GoalCheckpoint,
   type MilestoneView,
   type ProgressSource,
 } from "../../lib/ipc";
@@ -188,6 +190,20 @@ export function GoalsList({ areaId }: { areaId: string | null }) {
     onError: pushError,
   });
 
+  /* Apagar uma medição digitada errada (fase 3c). O `refresh` da meta basta e
+     não há nada a recalcular: barra, sparkline e projeção são DERIVADAS dos
+     checkpoints, então o `goal_with_progress` que volta já traz as três
+     corrigidas. É a mesma propriedade que faz o aporte excluído não precisar
+     mexer em saldo nenhum (ADR-0056). */
+  const removeCheckpoint = useMutation({
+    mutationFn: ({ c }: { c: GoalCheckpoint }) => deleteGoalCheckpoint(c.id),
+    onSuccess: (_r, { c }) => {
+      refresh(c.goalId);
+      push("success", "Medição excluída");
+    },
+    onError: pushError,
+  });
+
   /* Apagar a meta inteira. Aqui o `refresh` NÃO basta: uma meta a menos muda o
      que a Esfera mostra no Hub e o que a gamificação conta, e essas duas telas
      não são recarregadas por ninguém nesta rota. A chave da meta some junto —
@@ -268,6 +284,10 @@ export function GoalsList({ areaId }: { areaId: string | null }) {
           onDeleteMilestone={(m) => removeMilestone.mutate({ m })}
           deletingMilestoneId={
             removeMilestone.isPending ? (removeMilestone.variables?.m.id ?? null) : null
+          }
+          onDeleteCheckpoint={(c) => removeCheckpoint.mutate({ c })}
+          deletingCheckpointId={
+            removeCheckpoint.isPending ? (removeCheckpoint.variables?.c.id ?? null) : null
           }
           onAddDailyMilestone={(title, targetCount) =>
             addDaily.mutate({ goalId: goal.id, goalAreaId: goal.areaId, title, targetCount })

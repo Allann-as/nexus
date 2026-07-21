@@ -23,9 +23,10 @@ import { CountUp } from "../../design-system/cards";
 import { ProgressBar, ProgressRing, Sparkline } from "../../design-system/charts";
 import { Heatmap, type HeatCell } from "../../design-system/instruments";
 import { Button, cx } from "../../design-system/primitives";
-import { metricDecimals } from "../../lib/format";
+import { formatMetric, metricDecimals } from "../../lib/format";
 import type {
   Constancia,
+  GoalCheckpoint,
   GoalKind,
   GoalWithProgress,
   MilestoneView,
@@ -53,6 +54,8 @@ export function GoalCard({
   deleting,
   onDeleteMilestone,
   deletingMilestoneId,
+  onDeleteCheckpoint,
+  deletingCheckpointId,
   onLinkHabit,
   onAddDailyMilestone,
 }: {
@@ -68,12 +71,17 @@ export function GoalCard({
   onDeleteMilestone: (m: MilestoneView) => void;
   /** Qual degrau está em voo — só ele trava, e não a árvore inteira. */
   deletingMilestoneId: string | null;
+  /** Apaga uma medição digitada errada (fase 3c). */
+  onDeleteCheckpoint: (c: GoalCheckpoint) => void;
+  /** Qual medição está em voo — só ela trava, e não a série inteira. */
+  deletingCheckpointId: string | null;
   /** Religa o hábito de uma constância que ficou sem um (a 0018 zera o vínculo). */
   onLinkHabit: () => void;
   /** Cria o hábito diário E o sub-desafio contado que ele alimenta. */
   onAddDailyMilestone: (title: string, targetCount: number) => void;
 }) {
   const [formula, setFormula] = useState(false);
+  const [seriesOpen, setSeriesOpen] = useState(false);
   const done = goal.milestones.filter((m) => m.ratio >= 1).length;
 
   /* Uma meta só tem MÉTRICA se for quantitativa (ADR-0071). Para a conquista e
@@ -220,7 +228,26 @@ export function GoalCard({
         {c ? (
           <ConstanciaStrip c={c} unit={goal.unit} onLinkHabit={onLinkHabit} />
         ) : quantitative && goal.checkpoints.length >= 1 ? (
-          <Sparkline data={series} color="var(--sphere)" width={420} height={44} className="w-full" />
+          /* A sparkline abre a série. Até a fase 3c as medições SÓ existiam como
+             pontinhos aqui: não havia onde ler o número digitado, muito menos
+             onde apagá-lo. E uma medição errada não fica quieta — ela entra nos
+             mínimos quadrados da projeção, que passa a anunciar uma data de
+             chegada calculada sobre um número que nunca aconteceu. */
+          <button
+            type="button"
+            onClick={() => setSeriesOpen((s) => !s)}
+            aria-expanded={seriesOpen}
+            aria-label={seriesOpen ? "Fechar as medições" : "Ver as medições"}
+            className="block w-full rounded-[var(--radius-md)] transition-colors hover:bg-[color-mix(in_srgb,var(--sphere)_8%,transparent)]"
+          >
+            <Sparkline
+              data={series}
+              color="var(--sphere)"
+              width={420}
+              height={44}
+              className="w-full"
+            />
+          </button>
         ) : (
           <div className="relative">
             <ProgressBar value={goal.progress.ratio} height={12} />
@@ -277,6 +304,15 @@ export function GoalCard({
             </span>
           )}
         </div>
+        )}
+
+        {seriesOpen && quantitative && (
+          <CheckpointList
+            checkpoints={goal.checkpoints}
+            unit={goal.unit}
+            onDelete={onDeleteCheckpoint}
+            deletingId={deletingCheckpointId}
+          />
         )}
 
         {formula && goal.projection && (
@@ -772,6 +808,68 @@ function DailyMilestoneForm({
 }
 
 /** Registrar um checkpoint em ≤ 2 cliques a partir do card. */
+/**
+ * A série de medições, aberta pela sparkline (v1.3, fase 3c).
+ *
+ * Antes desta lista, uma medição registrada era **irreversível**: não havia
+ * command, não havia tela, e o número errado seguia pesando na barra e na
+ * projeção para sempre. Digitar 8,5 onde eram 85 movia a meta de lugar.
+ *
+ * Ordem do mais recente ao mais antigo — o erro que se quer desfazer costuma ser
+ * o que acabou de ser digitado. A sparkline acima continua em ordem
+ * cronológica: ela desenha a trajetória, esta lista responde "o que eu digitei".
+ */
+function CheckpointList({
+  checkpoints,
+  unit,
+  onDelete,
+  deletingId,
+}: {
+  checkpoints: GoalCheckpoint[];
+  unit: string | null;
+  onDelete: (c: GoalCheckpoint) => void;
+  deletingId: string | null;
+}) {
+  const recent = [...checkpoints].sort((a, b) => b.notedAt - a.notedAt);
+
+  /* `group/linha` NOMEADO, e não `group` solto: um `group-hover` anônimo casa
+     com QUALQUER ancestral marcado `group`, então basta um card virar `group`
+     amanhã para todas as linhas armarem a lixeira de uma vez — foi o que a
+     dirigida da fase 3c viu acontecer no extrato da caixinha. Nomear o escopo é
+     a diferença entre um acidente e uma regra. */
+  return (
+    <ul className="mt-2 divide-y divide-[var(--border-subtle)] rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-base)]">
+      {recent.map((c) => (
+        <li
+          key={c.id}
+          className="group/linha flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5"
+        >
+          <span className="tabular w-24 shrink-0 text-[11px] text-[var(--text-tertiary)]">
+            {new Date(c.notedAt).toLocaleDateString("pt-BR")}
+          </span>
+          <span className="tabular shrink-0 text-[12px] font-semibold text-[var(--text-primary)]">
+            {formatMetric(c.value)}
+            {unit && <span className="ml-1 font-normal text-[var(--text-secondary)]">{unit}</span>}
+          </span>
+          {c.note && (
+            <span className="truncate text-[11px] text-[var(--text-tertiary)]">{c.note}</span>
+          )}
+          {/* A mesma escolha da árvore de sub-desafios: o botão só aparece no
+              hover, porque o gesto comum aqui é LER, não apagar. O
+              `focus-within` segura a pergunta na tela depois de armada. */}
+          <ArmedDelete
+            onConfirm={() => onDelete(c)}
+            pending={deletingId === c.id}
+            question="Excluir esta medição?"
+            ariaLabel="Excluir medição"
+            className="ml-auto opacity-0 transition-opacity focus-within:opacity-100 group-hover/linha:opacity-100"
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function CheckpointButton({
   unit,
   onSubmit,

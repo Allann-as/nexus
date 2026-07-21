@@ -599,6 +599,119 @@ fn deleting_the_ladder_goal_of_a_language_leaves_the_language() {
     );
 }
 
+#[test]
+fn a_mistyped_measurement_can_be_taken_back_and_the_projection_forgets_it() {
+    // A segunda metade da fase 3c: além dos PAIS indeléveis, havia coisas que o
+    // usuário criava e não tinha como desfazer de jeito nenhum — não havia
+    // command. A medição era a pior delas, porque ela não fica quieta: entra na
+    // barra, na sparkline e nos mínimos quadrados da PROJEÇÃO, que passa a
+    // anunciar uma data de chegada calculada sobre um número que nunca existiu.
+    let w = setup();
+    let goal = w.goals.create(&quantitative("Perder 10 kg")).unwrap();
+    let now = w.goals.clock.now_ms();
+    const DAY_MS: i64 = 24 * 60 * 60 * 1_000;
+
+    w.goals
+        .add_checkpoint(&goal.id, 88.0, None, Some(now - 3 * DAY_MS))
+        .unwrap();
+    let typo = w
+        .goals
+        .add_checkpoint(&goal.id, 8.5, None, Some(now - DAY_MS))
+        .unwrap();
+    w.goals
+        .add_checkpoint(&goal.id, 85.0, None, Some(now))
+        .unwrap();
+
+    // Com o dedo gordo no meio, a meta se diz mais que cumprida.
+    let wrong = w.goals.get_with_progress(&goal.id).unwrap();
+    assert_eq!(wrong.checkpoints.len(), 3);
+
+    w.goals.delete_checkpoint(&typo.id).unwrap();
+
+    // O ESTADO se corrige sozinho: nada foi recalculado à mão porque barra,
+    // série e projeção são DERIVADAS dos checkpoints a cada leitura.
+    let fixed = w.goals.get_with_progress(&goal.id).unwrap();
+    assert_eq!(fixed.checkpoints.len(), 2);
+    assert_eq!(fixed.current_value, Some(85.0));
+    assert!(
+        (fixed.progress.ratio - 0.5).abs() < 1e-9,
+        "90 -> 80, medindo 85"
+    );
+
+    // E a HISTÓRIA fica: a medição errada continua no ledger, com a correção
+    // apendada por cima. O ledger nunca é reescrito (ADR-0056).
+    let events = w.events_of(&goal.id);
+    assert_eq!(
+        events.iter().filter(|e| *e == "goal_checkpoint").count(),
+        3,
+        "as três medições continuam na história"
+    );
+    assert!(events.contains(&"deleted".to_string()));
+}
+
+#[test]
+fn a_measurement_that_is_not_there_is_not_found_not_silence() {
+    let w = setup();
+    assert!(matches!(
+        w.goals.delete_checkpoint("nao-existe").unwrap_err(),
+        NexusError::NotFound(_)
+    ));
+}
+
+#[test]
+fn a_mistyped_deposit_can_be_taken_back_but_the_achievement_stays() {
+    // O aporte já podia ser excluído desde o ADR-0056; o DEPÓSITO de caixinha,
+    // não — e é o mesmo dinheiro, digitado com o mesmo teclado.
+    //
+    // O teste prende também o que NÃO é desfeito: se o depósito errado fechou a
+    // caixinha, a conquista continua contada. O ledger é append-only, e a
+    // conquista ACONTECEU no instante em que o número cruzou o alvo.
+    let w = setup();
+    let goal = w
+        .fin_goals
+        .create("Viagem", None, 100_000, None, None, None)
+        .unwrap();
+    w.fin_goals
+        .deposit(&goal.id, 20_000, Some(today(&w)), None)
+        .unwrap();
+    let fat_finger = w
+        .fin_goals
+        .deposit(&goal.id, 500_000, Some(today(&w)), None)
+        .unwrap();
+    assert!(fat_finger.completed, "R$ 5.000 numa meta de R$ 1.000 fecha");
+
+    w.fin_goals.delete_deposit(&fat_finger.deposit.id).unwrap();
+
+    // O saldo se corrige sozinho: `saved_cents` é a SOMA dos depósitos, feita na
+    // leitura — não há coluna a atualizar.
+    let deposits = w.fin_goals.deposits(&goal.id).unwrap();
+    assert_eq!(deposits.len(), 1);
+    assert_eq!(deposits[0].amount_cents, 20_000);
+    assert_eq!(
+        w.count(
+            "SELECT COALESCE(SUM(amount_cents), 0) FROM fin_goal_deposits WHERE goal_id = ?1",
+            &goal.id
+        ),
+        20_000
+    );
+
+    let events = w.events_of(&goal.id);
+    assert!(
+        events.contains(&"completed".to_string()),
+        "a conquista foi apagada da história: o ledger foi reescrito"
+    );
+    assert!(events.contains(&"deleted".to_string()));
+}
+
+#[test]
+fn a_deposit_that_is_not_there_is_not_found_not_silence() {
+    let w = setup();
+    assert!(matches!(
+        w.fin_goals.delete_deposit("nao-existe").unwrap_err(),
+        NexusError::NotFound(_)
+    ));
+}
+
 /* ===================================================================
 Fase C — metas com tipo, contra o CHECK de verdade
 =================================================================== */

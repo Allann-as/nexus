@@ -806,6 +806,13 @@ pub trait GoalRepository: Send + Sync {
     /// A série inteira, do mais antigo ao mais recente — a entrada da projeção.
     fn checkpoints(&self, goal_id: &str) -> Result<Vec<Checkpoint>>;
 
+    /// Lê uma medição sozinha — quem vai apagá-la precisa saber o que ela dizia
+    /// para escrever a correção no ledger.
+    fn get_checkpoint(&self, id: &str) -> Result<Checkpoint>;
+
+    /// Apaga a medição E apenda a correção, na mesma transação.
+    fn delete_checkpoint_with_event(&self, id: &str, event: &NewLedgerEvent) -> Result<()>;
+
     fn add_milestone_with_event(
         &self,
         id: &str,
@@ -1050,6 +1057,18 @@ pub trait FinGoalRepository: Send + Sync {
 
     /// Os depósitos de uma caixinha, do mais recente ao mais antigo.
     fn deposits(&self, goal_id: &str) -> Result<Vec<FinGoalDeposit>>;
+
+    /// Lê um depósito sozinho — quem vai apagá-lo precisa do valor e da caixinha
+    /// para escrever a correção no ledger.
+    fn get_deposit(&self, id: &str) -> Result<FinGoalDeposit>;
+
+    /// Apaga o depósito E apenda a correção, na mesma transação.
+    ///
+    /// O `saved_cents` da caixinha NÃO é atualizado aqui porque ele não existe
+    /// como coluna: é a soma dos depósitos, calculada na leitura (0011). Tirar a
+    /// linha já corrige o saldo — a mesma propriedade que faz `delete_contribution`
+    /// não precisar mexer em saldo nenhum.
+    fn delete_deposit_with_event(&self, id: &str, event: &NewLedgerEvent) -> Result<()>;
 
     /// A média de progresso (saved/target, 0..=1) das caixinhas ATIVAS, ou
     /// `None` quando não há nenhuma. Alimenta a parcela "Objetivos" da Saúde

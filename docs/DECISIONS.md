@@ -2995,3 +2995,61 @@ snapshot automático do ADR-0069 por cima do backup manual. `nodes` é recriada 
 0011, 0012, 0013, 0019): `rowid` preservado no INSERT e os três gatilhos de FTS recriados palavra por
 palavra — as duas armadilhas que falham em SILÊNCIO, cobertas por
 `the_search_index_still_points_at_the_right_row`.
+
+---
+
+## ADR-0082 — A medição e o depósito ganham saída; a conquista que um depósito errado gerou NÃO volta atrás
+
+**Data:** 2026-07-21 · **Status:** aceito · **v1.3 (COCKPIT), fase 3c**
+
+**Contexto.** A varredura da fase 3c tinha duas metades. A primeira eram os PAIS indeléveis
+(ADR-0081). A segunda: coisas que o usuário cria e para as quais **não existe command de exclusão
+nenhum** — nem botão morto, nem erro: simplesmente não há caminho. Passando os olhos por tudo que se
+cria, sobraram duas, e as duas são justamente onde um dedo gordo dói mais:
+
+| O que | O que acontecia |
+|---|---|
+| **Medição de meta** (`goal_checkpoints`) | Digitar 8,5 onde eram 85 kg movia a meta **para sempre**. E não fica quieto: a medição entra na barra, na sparkline e nos **mínimos quadrados da projeção**, que passa a anunciar uma data de chegada calculada sobre um número que nunca aconteceu. |
+| **Depósito de caixinha** (`fin_goal_deposits`) | Um R$ 5.000 onde eram R$ 500 seguia inflando o guardado e a projeção de quando a caixinha fecha. |
+
+O depósito é o caso mais difícil de defender: o **aporte** já podia ser excluído desde o ADR-0056, e
+é o mesmo dinheiro digitado no mesmo teclado. Pior, os depósitos não tinham **tela nenhuma** — o
+command `fin_goal_deposits` existia e nenhuma parte do front o chamava. Dava para lançar e nunca para
+ver.
+
+**Decisão 1 — as duas saídas, e nenhum recálculo.** `delete_goal_checkpoint` e
+`delete_fin_goal_deposit`, ambos no molde do `delete_contribution`: apaga o ESTADO, apenda a correção,
+o evento original fica. E nenhum dos dois recalcula nada, porque **não há nada a recalcular**:
+`savedCents` é a SOMA dos depósitos feita na leitura (0011), e barra/série/projeção saem dos
+checkpoints a cada `goal_with_progress`. Tirar a linha já corrige todos. É a mesma propriedade que
+faz o aporte excluído não mexer em saldo — derivação em vez de estado duplicado (ADR-0037) pagando
+juros anos depois.
+
+**Decisão 2 — o número que mostra o total é o que revela as parcelas.** A sparkline da meta abre a
+série de medições; o "R$ guardado" da caixinha abre o extrato. Nenhuma tela nova, nenhum modal: o
+lugar de listar as parcelas é embaixo do total que elas formam. A query do extrato mora no
+componente da lista, e não no card, para ser **preguiçosa** — doze caixinhas não podem disparar doze
+`fin_goal_deposits` no carregamento por causa de uma lista que ninguém abriu.
+
+**Decisão 3, a não-óbvia — apagar o depósito NÃO desfaz a conquista que ele gerou.** Se o R$ 5.000
+errado cruzou o alvo, o `Completed` continua no ledger e a conquista continua contada; o
+`nodes.status` também não volta a `'active'` sozinho. Isso parece inconsistente e não é: **o ledger é
+append-only** (ADR-0056), e a conquista ACONTECEU no instante em que o número cruzou o alvo. Desfazê-la
+seria reescrever o passado — exatamente o que o app inteiro se recusa a fazer. Reabrir uma caixinha é
+uma decisão do usuário, não um efeito colateral de apagar uma linha. O teste
+`a_mistyped_deposit_can_be_taken_back_but_the_achievement_stays` prende as duas metades para que uma
+"correção" futura não ache que está consertando um esquecimento.
+
+**Dois defeitos que só a dirigida achou, e que nenhum teste teria achado.**
+
+1. **`group-hover` anônimo casa com QUALQUER ancestral.** O card da caixinha já era um `group`; passar
+   o mouse nele armava a lixeira de **todas** as linhas do extrato ao mesmo tempo. Corrigido com
+   grupo NOMEADO (`group/linha`) nos dois lugares — o escopo passa a ser dito, não presumido.
+2. **A exclusão armada não cabia no card.** `ArmedDelete` é `shrink-0` e a pergunta por extenso
+   ("Excluir este lançamento?" + dois botões) ficava mais larga que uma caixinha numa grade de três
+   colunas: a linha empurrava o título e o valor **para fora da borda**. Corrigido com `flex-wrap` na
+   linha e pergunta curta. A regra do COCKPIT — *container central obrigatório, nada colando na
+   borda* — vale também para o que só aparece depois de um clique.
+
+Os dois são a razão de a régua ser *"nenhum 'pronto' sem screenshot"*: o gate estava verde nos dois
+casos.

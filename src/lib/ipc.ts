@@ -1093,6 +1093,15 @@ export const addGoalCheckpoint = (
     notedAt: notedAt ?? null,
   });
 
+/**
+ * Apaga uma medição registrada por engano (v1.3, fase 3c).
+ *
+ * Nada a recalcular do lado de cá: barra, sparkline e projeção saem dos
+ * checkpoints a cada leitura. Recarregar a meta já mostra a verdade.
+ */
+export const deleteGoalCheckpoint = (id: string) =>
+  call<void>("delete_goal_checkpoint", { id });
+
 export const addMilestone = (m: {
   goalId: string;
   title: string;
@@ -1356,6 +1365,16 @@ export const depositFinGoal = (deposit: {
 
 export const finGoalDeposits = (goalId: string) =>
   call<FinGoalDeposit[]>("fin_goal_deposits", { goalId });
+
+/**
+ * Apaga um depósito lançado por engano (v1.3, fase 3c).
+ *
+ * `savedCents` é a SOMA dos depósitos, feita na leitura — recarregar a caixinha
+ * já corrige saldo, barra e projeção. A conquista, se houve, permanece: o ledger
+ * é append-only (ADR-0056).
+ */
+export const deleteFinGoalDeposit = (id: string) =>
+  call<void>("delete_fin_goal_deposit", { id });
 
 /* ===== Biblioteca: os livros ===== */
 

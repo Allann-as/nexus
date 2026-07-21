@@ -234,6 +234,37 @@ impl GoalRepository for SqliteGoalRepository {
         })
     }
 
+    fn get_checkpoint(&self, id: &str) -> Result<Checkpoint> {
+        self.db.with_read(|c| {
+            c.query_row(
+                "SELECT id, goal_id, value, noted_at, note FROM goal_checkpoints WHERE id = ?1",
+                params![id],
+                map_checkpoint,
+            )
+            .optional()?
+            .ok_or_else(|| NexusError::NotFound(format!("medição {id}")))
+        })
+    }
+
+    fn delete_checkpoint_with_event(&self, id: &str, event: &NewLedgerEvent) -> Result<()> {
+        self.db.with_write(|conn| {
+            let tx = conn.transaction()?;
+
+            // A correção é apendada ANTES do DELETE, como em todo delete do app:
+            // depois a linha não existe mais para ser lida, e `ledger.entity_id`
+            // não tem FK justamente para o evento sobreviver a ela.
+            append_in_tx(&tx, event)?;
+
+            let changed = tx.execute("DELETE FROM goal_checkpoints WHERE id = ?1", params![id])?;
+            if changed == 0 {
+                return Err(NexusError::NotFound(format!("medição {id}")));
+            }
+
+            tx.commit()?;
+            Ok(())
+        })
+    }
+
     fn add_milestone_with_event(
         &self,
         id: &str,

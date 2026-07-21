@@ -7,6 +7,8 @@
  * montagem, como todo número do Midnight.
  */
 
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PiggyBank, Plus, Trophy } from "lucide-react";
 
 import { GoalIcon } from "./GoalIcon";
@@ -16,7 +18,8 @@ import { ProgressBar } from "../../design-system/charts";
 import { useCountUp } from "../../design-system/useCountUp";
 import { cx } from "../../design-system/primitives";
 import { formatMoney } from "../../lib/format";
-import type { FinGoalCard } from "../../lib/ipc";
+import { useToasts } from "../../stores/toasts";
+import { deleteFinGoalDeposit, finGoalDeposits, type FinGoalCard } from "../../lib/ipc";
 
 const MONTHS = [
   "jan", "fev", "mar", "abr", "mai", "jun",
@@ -34,14 +37,18 @@ export function CaixinhaCard({
   card,
   onDeposit,
   onDelete,
+  onChanged,
   deleting = false,
 }: {
   card: FinGoalCard;
   onDeposit: () => void;
   onDelete: () => void;
+  /** Um depósito saiu do extrato: a lista de caixinhas precisa recarregar. */
+  onChanged: () => void;
   /** A exclusão desta caixinha está em voo. */
   deleting?: boolean;
 }) {
+  const [statement, setStatement] = useState(false);
   const pct = card.targetCents > 0 ? card.savedCents / card.targetCents : 0;
   const done = card.status === "done" || pct >= 1;
   const animatedSaved = useCountUp(Math.max(0, card.savedCents), 700);
@@ -105,16 +112,29 @@ export function CaixinhaCard({
         </div>
       </header>
 
-      <div className="flex items-baseline justify-between gap-2">
+      {/* O número guardado abre o EXTRATO — a mesma ideia da sparkline da meta:
+          o que mostra o total é o que revela as parcelas dele. Até a fase 3c os
+          depósitos não tinham tela nenhuma: dava para lançar, nunca para ver nem
+          para desfazer. Um R$ 5.000 onde eram R$ 500 ficava inflando o guardado
+          e a projeção de quando a caixinha fecha. */}
+      <button
+        type="button"
+        onClick={() => setStatement((s) => !s)}
+        aria-expanded={statement}
+        aria-label={statement ? "Fechar o extrato" : "Ver o extrato"}
+        className="-mx-1 flex items-baseline justify-between gap-2 rounded-[var(--radius-md)] px-1 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--sphere)_10%,transparent)]"
+      >
         <span className="tabular text-[22px] font-bold tracking-[-0.02em] text-[var(--text-primary)]">
           {formatMoney(Math.round(animatedSaved))}
         </span>
         <span className="tabular text-[12px] text-[var(--text-tertiary)]">
           de {formatMoney(card.targetCents)}
         </span>
-      </div>
+      </button>
 
       <ProgressBar value={pct} height={10} />
+
+      {statement && <Statement goalId={card.id} onChanged={onChanged} />}
 
       <div className="flex items-center justify-between gap-2">
         <span className="text-[11.5px] text-[var(--text-secondary)]">
@@ -145,4 +165,98 @@ export function CaixinhaCard({
       </div>
     </div>
   );
+}
+
+/**
+ * O extrato de uma caixinha, com a saída de cada depósito (v1.3, fase 3c).
+ *
+ * A query mora AQUI, e não no card, para ser preguiçosa: uma tela com doze
+ * caixinhas não pode disparar doze `fin_goal_deposits` no carregamento por causa
+ * de uma lista que ninguém abriu. O componente só monta quando o extrato abre.
+ *
+ * Apagar um depósito não recalcula nada do lado de cá: `savedCents` é a SOMA dos
+ * depósitos, feita na leitura (0011). Recarregar a lista já corrige o número
+ * grande, a barra e a projeção — a mesma propriedade do aporte excluído
+ * (ADR-0056).
+ */
+function Statement({ goalId, onChanged }: { goalId: string; onChanged: () => void }) {
+  const client = useQueryClient();
+  const push = useToasts((s) => s.push);
+  const pushError = useToasts((s) => s.pushError);
+
+  const { data: deposits = [], isLoading } = useQuery({
+    queryKey: ["fin-goal-deposits", goalId],
+    queryFn: () => finGoalDeposits(goalId),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: string) => deleteFinGoalDeposit(id),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["fin-goal-deposits", goalId] });
+      onChanged();
+      push("success", "Depósito excluído");
+    },
+    onError: pushError,
+  });
+
+  if (isLoading) return null;
+
+  if (deposits.length === 0) {
+    return (
+      <p className="text-[11.5px] text-[var(--text-tertiary)]">
+        Nenhum depósito ainda — o primeiro abre o extrato.
+      </p>
+    );
+  }
+
+  /* `group/linha` NOMEADO, e não `group` solto: o card inteiro já é um `group`,
+     e um `group-hover` anônimo casa com QUALQUER ancestral que o tenha — passar
+     o mouse no card armava a lixeira de todas as linhas de uma vez. Visto na
+     dirigida da fase 3c, corrigido antes de virar hábito. */
+  return (
+    <ul className="divide-y divide-[var(--border-subtle)] rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-base)]">
+      {deposits.map((d) => (
+        <li
+          key={d.id}
+          className="group/linha flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5"
+        >
+          <span className="tabular w-20 shrink-0 text-[11px] text-[var(--text-tertiary)]">
+            {formatDay(d.happenedOn)}
+          </span>
+          {/* Um saque é um depósito NEGATIVO (0010/0011) — o sinal é a única
+              diferença, e a cor é o que a torna legível de relance. */}
+          <span
+            className={cx(
+              "tabular shrink-0 text-[12px] font-semibold",
+              d.amountCents < 0 ? "text-[var(--danger)]" : "text-[var(--text-primary)]",
+            )}
+          >
+            {d.amountCents < 0 ? "−" : "+"}
+            {formatMoney(Math.abs(d.amountCents))}
+          </span>
+          {d.note && (
+            <span className="truncate text-[11px] text-[var(--text-tertiary)]">{d.note}</span>
+          )}
+          {/* A pergunta é CURTA e a linha QUEBRA: a caixinha é um card estreito
+              numa grade de três colunas, e o `shrink-0` da exclusão armada não
+              cede. Com "Excluir este lançamento?" por extenso e sem quebra, a
+              linha ficava mais larga que o card e empurrava o título e o valor
+              para fora da borda — visto na dirigida da fase 3c. */}
+          <ArmedDelete
+            onConfirm={() => remove.mutate(d.id)}
+            pending={remove.isPending && remove.variables === d.id}
+            question="Excluir?"
+            ariaLabel="Excluir lançamento"
+            className="ml-auto opacity-0 transition-opacity focus-within:opacity-100 group-hover/linha:opacity-100"
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** 'AAAA-MM-DD' → '01/07'. O ano fica de fora: o extrato é curto e recente. */
+function formatDay(day: string): string {
+  const [, m, d] = day.split("-");
+  return `${d}/${m}`;
 }

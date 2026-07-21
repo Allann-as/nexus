@@ -214,6 +214,51 @@ impl FinGoalService {
         self.fin_goals.deposits(goal_id)
     }
 
+    /// Apaga um depósito lançado por engano (v1.3, fase 3c).
+    ///
+    /// O aporte já podia ser excluído desde o ADR-0056; o depósito de caixinha,
+    /// não — e é o mesmo dinheiro, digitado com o mesmo teclado. Um R$ 5.000
+    /// onde eram R$ 500 ficava lá, inflando o guardado e a projeção de quando a
+    /// caixinha fecha.
+    ///
+    /// `saved_cents` não é atualizado porque não existe como coluna: é a SOMA dos
+    /// depósitos, feita na leitura (0011). Tirar a linha já corrige o saldo, a
+    /// barra e a projeção.
+    ///
+    /// **O que NÃO é desfeito, de propósito:** se aquele depósito fechou a
+    /// caixinha, o `Completed` continua no ledger e a conquista continua contada.
+    /// O ledger é append-only (ADR-0056) — a conquista ACONTECEU no instante em
+    /// que o número cruzou o alvo. O `nodes.status` também não volta a 'active'
+    /// sozinho: reabrir uma caixinha é uma decisão do usuário, não um efeito
+    /// colateral de apagar uma linha.
+    pub fn delete_deposit(&self, id: &str) -> Result<()> {
+        let deposit = self.fin_goals.get_deposit(id)?;
+        let goal = self.fin_goals.get(&deposit.goal_id)?;
+
+        let reais = deposit.amount_cents.abs() as f64 / 100.0;
+        let verb = if deposit.amount_cents >= 0 {
+            "Depósito"
+        } else {
+            "Saque"
+        };
+
+        let event = NewLedgerEvent {
+            ts: self.clock.now_ms(),
+            day: self.clock.today_local(),
+            entity_id: deposit.goal_id.clone(),
+            entity_kind: LedgerEntityKind::Node(Kind::FinGoal),
+            event_type: EventType::Deleted,
+            payload: json!({
+                "depositId": id,
+                "amountCents": deposit.amount_cents,
+                "happenedOn": deposit.happened_on,
+            }),
+            title_snapshot: format!("{verb} de R$ {reais:.2} removido — {}", goal.title),
+        };
+
+        self.fin_goals.delete_deposit_with_event(id, &event)
+    }
+
     /// Exclui uma caixinha (BÚSSOLA, fase B).
     ///
     /// O que o usuário criou, ele tem que poder desfazer. A regra é a mesma do

@@ -78,6 +78,13 @@ pub fn fin_goal_deposits(
     state.fin_goals.deposits(&goal_id)
 }
 
+/// Apaga um depósito lançado por engano (fase 3c). O `saved_cents` é a soma dos
+/// depósitos, feita na leitura: tirar a linha já corrige saldo, barra e projeção.
+#[tauri::command]
+pub fn delete_fin_goal_deposit(state: State<'_, AppState>, id: String) -> Result<()> {
+    state.fin_goals.delete_deposit(&id)
+}
+
 /// Exclui uma caixinha (BÚSSOLA, fase B). Os depósitos saem junto pelo CASCADE
 /// do schema; o ledger guarda que ela existiu e que foi removida (ADR-0056).
 #[tauri::command]
