@@ -36,6 +36,7 @@ fn migration_set() -> Vec<M<'static>> {
         )),
         M::up(include_str!("../../../migrations/0015_focus_sessions.sql")),
         M::up(include_str!("../../../migrations/0016_compass.sql")),
+        M::up(include_str!("../../../migrations/0017_goal_engine.sql")),
     ]
 }
 
@@ -994,6 +995,316 @@ mod tests {
                 [],
             );
             assert!(bad.is_err(), "a auto-avaliação vive entre 1 e 5");
+        }
+    }
+
+    /// A 0017 (COCKPIT) reconstrói `goal_details` pela SEGUNDA vez, para admitir
+    /// o quarto tipo de meta — a CONSTÂNCIA. Como a 0016, a reconstrução
+    /// acontece sobre dados reais do usuário, então é provada do mesmo jeito: os
+    /// dados dos TRÊS tipos anteriores atravessam, as invariantes novas valem, e
+    /// quem referencia a tabela continua de pé.
+    ///
+    /// O que esta suíte NÃO precisa provar, e o porquê: a 0017 não toca em
+    /// `nodes` (o levantamento do ADR-0077 não achou `kind` novo), então CASCADE,
+    /// rowid do FTS e rename de gatilho não se aplicam a nada aqui.
+    mod goal_constancia {
+        use super::*;
+
+        /// Um banco no estado da 0016, com uma meta de CADA um dos três tipos que
+        /// existiam, mais o checkpoint que a FK prende a `goal_details`.
+        fn seeded_at_v16() -> Connection {
+            let mut conn = Connection::open_in_memory().unwrap();
+            conn.execute_batch("PRAGMA foreign_keys = OFF;").unwrap();
+            migrations().to_version(&mut conn, 16).unwrap();
+
+            conn.execute_batch(
+                "INSERT INTO areas (id, name) VALUES ('a1', 'Saude');
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('g1', 'goal', 'Perder 10 kg', 'a1', 100, 100);
+                 INSERT INTO goal_details
+                      (node_id, goal_kind, metric_name, start_value, target_value,
+                       unit, direction, progress_source)
+                      VALUES ('g1', 'quantitative', 'Peso', 90.0, 80.0, 'kg',
+                              'decrease', 'metric');
+                 INSERT INTO goal_checkpoints (id, goal_id, value, noted_at)
+                      VALUES ('c1', 'g1', 88.0, 200);
+
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('g2', 'goal', 'Ser promovido', 'a1', 100, 100);
+                 INSERT INTO goal_details (node_id, goal_kind, progress_source)
+                      VALUES ('g2', 'binary', 'milestones');
+
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('g3', 'goal', 'Ingles fluente', 'a1', 100, 100);
+                 INSERT INTO goal_details (node_id, goal_kind, progress_source)
+                      VALUES ('g3', 'staged', 'milestones');",
+            )
+            .unwrap();
+            conn
+        }
+
+        #[test]
+        fn the_three_older_kinds_survive_the_second_rebuild() {
+            let mut conn = seeded_at_v16();
+            migrations().to_latest(&mut conn).unwrap();
+
+            let mut stmt = conn
+                .prepare("SELECT node_id, goal_kind FROM goal_details ORDER BY node_id")
+                .unwrap();
+            let rows: Vec<(String, String)> = stmt
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+                .unwrap()
+                .map(|r| r.unwrap())
+                .collect();
+
+            assert_eq!(
+                rows,
+                vec![
+                    ("g1".to_string(), "quantitative".to_string()),
+                    ("g2".to_string(), "binary".to_string()),
+                    ("g3".to_string(), "staged".to_string()),
+                ],
+                "os três tipos anteriores atravessaram a reconstrução intactos"
+            );
+
+            // A métrica da quantitativa não se perdeu no caminho.
+            let (metric, target): (String, f64) = conn
+                .query_row(
+                    "SELECT metric_name, target_value FROM goal_details WHERE node_id = 'g1'",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!(metric, "Peso");
+            assert_eq!(target, 80.0);
+        }
+
+        #[test]
+        fn the_checkpoints_still_point_at_their_goal_after_the_second_rebuild() {
+            let mut conn = seeded_at_v16();
+            migrations().to_latest(&mut conn).unwrap();
+
+            let value: f64 = conn
+                .query_row(
+                    "SELECT value FROM goal_checkpoints WHERE id = 'c1'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(value, 88.0);
+
+            let mut stmt = conn.prepare("PRAGMA foreign_key_check").unwrap();
+            let mut rows = stmt.query([]).unwrap();
+            assert!(
+                rows.next().unwrap().is_none(),
+                "a segunda reconstrução não deixou referência órfã"
+            );
+        }
+
+        /// O banco de um usuário que já tinha metas: as colunas NOVAS chegam
+        /// vazias, e é isso que a UI espera ler numa meta anterior à v1.3.
+        fn latest_with_a_sphere_and_a_habit() -> Connection {
+            let mut conn = Connection::open_in_memory().unwrap();
+            migrations().to_latest(&mut conn).unwrap();
+            conn.execute_batch(
+                "INSERT INTO areas (id, name) VALUES ('a1', 'Financas');
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('h1', 'habit', 'Guardar 10 reais', 'a1', 100, 100);
+                 INSERT INTO habit_details (node_id, schedule_json)
+                      VALUES ('h1', '{\"kind\":\"daily\"}');",
+            )
+            .unwrap();
+            conn
+        }
+
+        #[test]
+        fn a_constancia_goal_is_now_possible_and_carries_its_habit() {
+            let conn = latest_with_a_sphere_and_a_habit();
+            conn.execute_batch(
+                "INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('g9', 'goal', 'Guardar R$ 10 por dia', 'a1', 100, 100);
+                 INSERT INTO goal_details
+                      (node_id, goal_kind, target_value, unit, direction,
+                       progress_source, habit_id, daily_target)
+                      VALUES ('g9', 'constancia', 3650.0, 'R$', 'increase',
+                              'metric', 'h1', 10.0);",
+            )
+            .unwrap();
+
+            let (habit, daily): (String, f64) = conn
+                .query_row(
+                    "SELECT habit_id, daily_target FROM goal_details WHERE node_id = 'g9'",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!(habit, "h1", "a constância sabe qual hábito a alimenta");
+            assert_eq!(daily, 10.0, "o alvo POR DIA ficou guardado");
+        }
+
+        #[test]
+        fn a_constancia_without_a_target_is_refused() {
+            let conn = latest_with_a_sphere_and_a_habit();
+            conn.execute_batch(
+                "INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('g9', 'goal', 'Guardar sem alvo', 'a1', 100, 100);",
+            )
+            .unwrap();
+
+            // Sem alvo/unidade/direção não há o que acumular NEM contra o que
+            // projetar — seria uma barra que nunca chega a lugar nenhum.
+            let bad = conn.execute(
+                "INSERT INTO goal_details (node_id, goal_kind, progress_source)
+                      VALUES ('g9', 'constancia', 'metric')",
+                [],
+            );
+            assert!(bad.is_err(), "uma constância sem alvo não entra");
+        }
+
+        #[test]
+        fn a_constancia_cannot_carry_a_metric_name_or_a_start_value() {
+            let conn = latest_with_a_sphere_and_a_habit();
+            conn.execute_batch(
+                "INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('g9', 'goal', 'Constancia torta', 'a1', 100, 100);",
+            )
+            .unwrap();
+
+            // Uma constância começa em ZERO por definição: ninguém já vinha
+            // guardando R$ 10 por dia antes de criar a meta.
+            let bad = conn.execute(
+                "INSERT INTO goal_details
+                      (node_id, goal_kind, start_value, target_value, unit,
+                       direction, progress_source)
+                      VALUES ('g9', 'constancia', 500.0, 3650.0, 'R$', 'increase', 'metric')",
+                [],
+            );
+            assert!(bad.is_err(), "constância não tem valor inicial");
+        }
+
+        #[test]
+        fn only_a_constancia_may_have_a_daily_target_or_a_habit() {
+            let conn = latest_with_a_sphere_and_a_habit();
+            conn.execute_batch(
+                "INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('g9', 'goal', 'Conquista', 'a1', 100, 100);
+                 INSERT INTO goal_details (node_id, goal_kind, progress_source)
+                      VALUES ('g9', 'binary', 'milestones');",
+            )
+            .unwrap();
+
+            // Um `daily_target` numa conquista é um número que nenhuma tela lê.
+            let bad = conn.execute(
+                "UPDATE goal_details SET daily_target = 10.0 WHERE node_id = 'g9'",
+                [],
+            );
+            assert!(bad.is_err(), "só a constância tem alvo diário");
+
+            let bad = conn.execute(
+                "UPDATE goal_details SET habit_id = 'h1' WHERE node_id = 'g9'",
+                [],
+            );
+            assert!(bad.is_err(), "só a constância liga um hábito");
+        }
+
+        #[test]
+        fn a_daily_target_of_zero_is_refused() {
+            let conn = latest_with_a_sphere_and_a_habit();
+            conn.execute_batch(
+                "INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('g9', 'goal', 'Guardar nada', 'a1', 100, 100);",
+            )
+            .unwrap();
+
+            // Um alvo diário de zero é uma meta que nunca sai do lugar.
+            let bad = conn.execute(
+                "INSERT INTO goal_details
+                      (node_id, goal_kind, target_value, unit, direction,
+                       progress_source, daily_target)
+                      VALUES ('g9', 'constancia', 3650.0, 'R$', 'increase', 'metric', 0)",
+                [],
+            );
+            assert!(bad.is_err(), "o alvo diário é positivo ou não existe");
+        }
+
+        #[test]
+        fn a_binary_goal_still_cannot_fake_a_metric() {
+            let conn = latest_with_a_sphere_and_a_habit();
+            conn.execute_batch(
+                "INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('g9', 'goal', 'Conquista', 'a1', 100, 100);",
+            )
+            .unwrap();
+
+            // A invariante da 0016 tem de sobreviver à reconstrução da 0017.
+            let bad = conn.execute(
+                "INSERT INTO goal_details
+                      (node_id, goal_kind, target_value, progress_source)
+                      VALUES ('g9', 'binary', 100.0, 'milestones')",
+                [],
+            );
+            assert!(bad.is_err(), "conquista não finge ter número");
+        }
+
+        #[test]
+        fn the_course_summary_and_the_delivery_notes_are_live() {
+            let mut conn = Connection::open_in_memory().unwrap();
+            migrations().to_latest(&mut conn).unwrap();
+            conn.execute_batch(
+                "INSERT INTO areas (id, name) VALUES ('a1', 'Estudos');
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('s1', 'subject', 'Excel', 'a1', 100, 100);
+                 INSERT INTO subject_details (node_id, track, course_stage, summary)
+                      VALUES ('s1', 'curso', 'fazendo', 'Planilhas, formulas e tabela dinamica');
+
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('e1', 'event', 'Prova de Calculo', 'a1', 100, 100);
+                 INSERT INTO event_details (node_id, starts_at, ends_at, category, notes)
+                      VALUES ('e1', 1000, 2000, 'prova', 'Trazer calculadora');",
+            )
+            .unwrap();
+
+            let summary: String = conn
+                .query_row(
+                    "SELECT summary FROM subject_details WHERE node_id = 's1'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert!(summary.starts_with("Planilhas"), "o curso diz o que ensina");
+
+            let notes: String = conn
+                .query_row(
+                    "SELECT notes FROM event_details WHERE node_id = 'e1'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(notes, "Trazer calculadora");
+
+            // A categoria do evento é TEXT LIVRE (o achado do ADR-0077): 'prova'
+            // e 'entrega' entram sem migration. Se um dia virar CHECK, este teste
+            // é o que avisa.
+            conn.execute(
+                "UPDATE event_details SET category = 'entrega' WHERE node_id = 'e1'",
+                [],
+            )
+            .unwrap();
+        }
+
+        /// A migration é idempotente na prática: rodar de novo num banco já em dia
+        /// não faz nada. É a garantia que o boot do app depende para não
+        /// reconstruir `goal_details` a cada abertura.
+        #[test]
+        fn running_the_goal_engine_twice_is_a_no_op() {
+            let mut conn = seeded_at_v16();
+            migrations().to_latest(&mut conn).unwrap();
+            migrations().to_latest(&mut conn).unwrap();
+
+            let n: i64 = conn
+                .query_row("SELECT COUNT(*) FROM goal_details", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(n, 3, "as metas não se multiplicaram nem sumiram");
         }
     }
 }

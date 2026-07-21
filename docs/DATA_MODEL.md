@@ -611,6 +611,65 @@ nenhum o resultado é `None`, nunca 1 — inventar número para quem não respon
 que a constituição proíbe. `skill_details.level` (o +1 manual do M4.6) sobrevive
 como fallback para as competências criadas antes da v1.2.
 
+## 5.15 O motor de metas — a CONSTÂNCIA (0017, v1.3)
+
+Uma migration só para as fases 3–6, precedida do levantamento em batch do
+**ADR-0077**. O resultado do levantamento **é** a decisão: **nenhum `kind` novo e
+nenhum `link_type` novo** — os 16 kinds e os 5 `link_type` cobrem tudo que as
+quatro fases pedem. Logo **`nodes` não é recriada**, e as três armadilhas do
+12-step não se aplicam a nada aqui.
+
+Dois achados do levantamento evitaram migration à toa:
+
+- **`event_details.category` é TEXT LIVRE** (sem CHECK) desde a 0007 — as provas e
+  entregas da Faculdade entram como categoria nova sem tocar no banco. Se fosse um
+  CHECK fechado (como `contributions.asset_class`), a fase 4 custaria uma reconstrução.
+- **`accounts.color` já existe** desde a 0005 com as cores dos seis bancos — o
+  BankTile do terminal de aporte lê a cor do BANCO, não de um mapa no frontend.
+
+### `goal_details` reconstruída (de novo) — o quarto tipo
+
+`goal_kind` passa a admitir `'constancia'`, ao lado de `quantitative`/`binary`/
+`staged`. A reconstrução é a mesma BARATA da 0016 (sem gatilho de FTS, sem rowid
+indexado, e `goal_checkpoints` aponta para a PK, que volta idêntica).
+
+O CHECK por tipo ganha um terceiro braço: a constância **exige** `target_value`,
+`unit` e `direction`, e **proíbe** `metric_name` e `start_value` — uma constância
+começa em zero por definição (ninguém já vinha guardando R$ 10 por dia antes de
+criar a meta), e o nome da métrica dela É o título.
+
+Duas colunas novas, exclusivas da constância (um terceiro CHECK garante isso):
+
+| Coluna | Papel |
+|---|---|
+| `habit_id` | O hábito que alimenta a meta. **Sem CASCADE**: apagar o hábito não pode apagar a META — a tela trata o órfão como "constância sem hábito ligado" e oferece religar, como `milestone_details.habit_id` desde a 0007. |
+| `daily_target` | O alvo POR DIA (o "R$ 10"). `NULL` quando a constância é binária ("30 dias sem fritura" — conta ter marcado, não quanto). `CHECK > 0`. |
+
+**A constância é um hábito por baixo, e isso é a decisão de desenho.** Ela precisa
+de marca por dia, valor opcional no dia, sequência, heatmap e presença nos
+Checkpoints do dia — e `habit_ticks` já é exatamente essa série (PK
+`(habit_id, day)` `WITHOUT ROWID`, `status`, `value REAL`), com `domain::streak`, o
+heatmap anual e `habits_today` sabendo lê-la. Uma tabela `goal_daily_marks`
+duplicaria a série mais consultada do BI e obrigaria a reimplementar sequência,
+heatmap e XP por fora. É a mesma filosofia do contador de sub-desafio (ADR-0071):
+*o mecanismo já existia; faltava a UI alcançá-lo.*
+
+Índice parcial `idx_goal_habit(habit_id) WHERE habit_id IS NOT NULL`: só as
+constâncias têm hábito, e as outras não pagam por linhas que nunca casam.
+
+### Duas colunas baratas para a fase 4
+
+- **`subject_details.summary`** — o texto curto do que um curso ensina. Não é
+  `category` (livre e do usuário, ADR-0072) nem uma nota linkada (uma frase de duas
+  linhas não merece um node e um link).
+- **`event_details.notes`** — a observação de uma entrega/prova ("trazer
+  calculadora"). `location` existe mas é outra coisa; sobrecarregá-la faria o
+  calendário mostrar a observação como se fosse o lugar.
+
+Os dois são `ALTER TABLE ADD COLUMN`, que nunca recria tabela. Fica a distinção
+registrada: **a regra do batch existe para os CHECKs e os `kind`s, que custam
+recriação; um ADD COLUMN pode chegar quando a tela chegar.**
+
 ## 6. Integridade e migrations
 
 - `user_version` gerenciado pelo `rusqlite_migration`.

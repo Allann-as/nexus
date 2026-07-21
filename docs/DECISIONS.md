@@ -2652,3 +2652,84 @@ de captura media a janela em pixels ESCALADOS (Windows a 125%) e copiava a tela 
 imagem saía cortada à direita — o campo de busca da topbar aparecia cortado em todas elas, que era a
 pista. `SetProcessDPIAware()` resolveu. **Uma ferramenta de observação com bug fabrica bugs no
 observado**; antes de corrigir o que a imagem mostra, vale conferir se a imagem está inteira.
+
+## ADR-0077 — O levantamento em BATCH das fases 3–6: nenhum `kind` novo, logo nenhuma recriação de `nodes`
+
+**Data:** 2026-07-21 · **Status:** aceito · **v1.3 (COCKPIT), fase 3** · **migration 0017**
+
+**Contexto.** A regra dos ADR-0029/0036/0045/0058/0074 diz que o roadmap inteiro se olha ANTES de
+tocar no schema, porque adicionar um `kind` custa recriar `nodes` — a tabela mais referenciada do
+banco — e a recriação tem três armadilhas que falham em silêncio (CASCADE, rowid do FTS, rename dos
+gatilhos). Esta é a primeira migration da v1.3, e ela precisa cobrir o que as fases 3, 4, 5 e 6 vão
+pedir. O levantamento foi feito contra o inventário do schema vigente (`user_version` = 16).
+
+**O levantamento, item a item.**
+
+| Fase | O que a tela pede | O que o schema já tem | Precisa de schema? |
+|---|---|---|---|
+| 3 | Meta **métrica / conquista / etapas** | `goal_details.goal_kind` (0016) | não |
+| 3 | Meta de **CONSTÂNCIA (diária)** | — | **sim** (4º valor no CHECK) |
+| 3 | Sub-desafio **degrau único** | `milestone_details.kind='simple'` (0007) | não |
+| 3 | Sub-desafio **hábito diário ligado** | `kind='counter'` + `habit_id` + `counts_from` (0007/0009) | não |
+| 3 | Templates por Esfera | `goalTemplates.ts` (código) | não |
+| 3 | Delete universal | código + IPC | não |
+| 4 | Saúde: exames | `event_details.category` | não |
+| 4 | Finanças: BankTile na cor da marca | **`accounts.color`** (0005) | não |
+| 4 | Carreira: habilidade 1–10 + check-in mensal | **`skill_checkins`** (0016) | não |
+| 4 | Carreira: marcos com tipo | ledger-only, tipo no payload (ADR-0032) | não |
+| 4 | Estudos: temas de matéria como subtarefas | `task` com `parent_id` = a matéria | não |
+| 4 | Estudos: idioma por etapas | meta `staged` + `subject_details.level_goal_id` (0016) | não |
+| 4 | Estudos: **faculdade — provas e entregas** | `event_details.category` é **TEXT LIVRE, sem CHECK** | não |
+| 4 | Estudos: **observações por entrega** | — | sim (ADD COLUMN barato) |
+| 4 | Estudos: curso — status quero/fazendo/concluído | `subject_details.course_stage` (0016) | não |
+| 4 | Estudos: **curso — "o que ele ensina"** | — | sim (ADD COLUMN barato) |
+| 4 | Estudos: checklist de conteúdos do curso | `task`/`milestone` sob a matéria | não |
+| 5 | Todas as telas de sistema | apresentação | não |
+| 6 | Tela de bloqueio + saudação | `settings.json` (ADR-0075) | não |
+
+**O resultado, que É a decisão: NENHUM `kind` novo e NENHUM `link_type` novo.** Os 16 kinds e os 5
+`link_type` cobrem tudo que as quatro fases pedem. **Logo `nodes` não é recriada, e as três armadilhas
+do 12-step não se aplicam a nada aqui.** Isto está registrado para não se recriar `nodes` por reflexo
+— foi exatamente o resultado (e a lição) do ADR-0058 e do 0074.
+
+Dois achados que evitaram migration à toa, e que valem mais que a migration em si:
+
+1. **`event_details.category` não tem CHECK** — é TEXT livre desde a 0007. As provas e entregas da
+   Faculdade entram como categorias novas sem tocar no banco. Se ela fosse um CHECK fechado (como
+   `contributions.asset_class`), a fase 4 teria custado uma reconstrução.
+2. **`accounts.color` já existe** desde a 0005, semeada com as cores dos seis bancos. O BankTile do
+   terminal de aporte lê a cor do BANCO, não de um mapa hardcoded no frontend — e o registro de
+   marcas no `instruments.tsx` fica sendo só o fallback para conta que o usuário criar.
+
+**O que a 0017 faz, então:**
+
+1. **Reconstrói `goal_details`** para o CHECK de `goal_kind` admitir `'constancia'`, e ganha duas
+   colunas: `habit_id` (o hábito que alimenta a constância) e `daily_target` (o alvo POR DIA — o
+   "R$ 10" de "guardar R$ 10 por dia"). É a reconstrução BARATA, a mesma da 0016: `goal_details` não
+   tem gatilho de FTS, nada indexa o rowid dela, e quem a referencia (`goal_checkpoints`) aponta para
+   a PK, que volta idêntica.
+2. **`subject_details.summary`** (TEXT) — o texto curto do que o curso ensina.
+3. **`event_details.notes`** (TEXT) — as observações de uma entrega/prova.
+
+Os dois ADD COLUMN são baratos por construção e **poderiam ter esperado**: `ALTER TABLE ADD COLUMN`
+nunca recria tabela. Entram aqui porque já sabemos que serão necessários, e uma migration a menos é
+uma migration a menos — mas registra-se a distinção: **a regra do batch existe para os CHECKs e os
+`kind`s, que custam recriação; um ADD COLUMN pode chegar quando a tela chegar.**
+
+**A meta de CONSTÂNCIA é um hábito por baixo, e isso é a decisão de desenho da fase.** "Guardar R$ 10
+por dia" e "30 dias sem fritura" precisam de: uma marca por dia, um valor opcional no dia, sequência,
+heatmap e presença nos Checkpoints de hoje da Esfera. `habit_ticks` já é exatamente isso — PK
+`(habit_id, day)` `WITHOUT ROWID`, `status` e `value REAL` — e `domain::streak`, o heatmap anual e a
+query `habits_today` já sabem lê-la. Criar uma tabela `goal_daily_marks` seria duplicar a série mais
+consultada do BI e reimplementar streak, heatmap e XP por fora. Então a meta de constância **cria (ou
+liga) um hábito real**, guarda o id em `goal_details.habit_id`, e o progresso é a soma dos
+`habit_ticks.value` (ou a contagem de dias `done`) contra `target_value`. É a mesma filosofia do
+contador de sub-desafio do ADR-0071: *o mecanismo já existia; faltava a UI alcançá-lo.*
+
+**Considerado e RECUSADO nesta migration: unificar `annual_goal_details` ao motor de metas.** As Metas
+Anuais têm `goal_kind` próprio (`binary`/`quantitative`, ADR-0036) e a fase 5 pede que a tela use "o
+motor da fase 3" — que se lê como o motor de RENDERIZAÇÃO (o card, o detalhe, os degraus), não o
+modelo de dados. Reunificar as duas tabelas é refatoração de domínio, não de tela, e não é o que a
+fase pede. Fica registrado que, se um dia for preciso, `annual_goal_details` é uma reconstrução
+BARATA (sem FTS, sem rowid, sem dependente de rowid) — adiar custa quase nada, e é por isso que adiar
+aqui não viola a regra do batch.
