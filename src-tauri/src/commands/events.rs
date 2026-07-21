@@ -158,6 +158,16 @@ pub fn events_by_category(
     state.events.upcoming_by_category(&category, limit)
 }
 
+/// O histórico de uma categoria: o que já passou, do mais recente para trás.
+#[tauri::command]
+pub fn past_events_by_category(
+    state: State<'_, AppState>,
+    category: String,
+    limit: i64,
+) -> Result<Vec<Occurrence>> {
+    state.events.past_by_category(&category, limit)
+}
+
 /// Os choques de horário de uma janela. Só avisa — nunca barra uma escrita.
 #[tauri::command]
 pub fn event_conflicts(

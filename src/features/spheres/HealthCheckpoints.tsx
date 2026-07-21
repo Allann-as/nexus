@@ -20,7 +20,7 @@ import { CircleCheckBig, Flame, Plus } from "lucide-react";
 
 import { Checkbox } from "../../design-system/Checkbox";
 import { Button, EmptyState, cx } from "../../design-system/primitives";
-import { ProgressRing } from "../../design-system/charts";
+import { MonoLabel, Ring, SegBar } from "../../design-system/instruments";
 import { useToasts } from "../../stores/toasts";
 import { habitsToday, tickHabit, untickHabit, type HabitWithStats } from "../../lib/ipc";
 import { HabitCreateForm, describeSchedule } from "../habits/HabitsScreen";
@@ -83,7 +83,10 @@ export function HealthCheckpoints({ areaId }: { areaId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ===== o anel do dia — cresce a cada check ===== */}
+      {/* ===== o anel do dia — cresce a cada check =====
+          A SegBar tem um segmento POR CHECKPOINT: aqui ela não é decoração da
+          porcentagem, é a lista em miniatura. Marcar um hábito acende um
+          segmento, e o que falta se conta de relance sem ler número nenhum. */}
       <section
         className="relative overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-subtle)] p-5"
         style={{
@@ -92,10 +95,8 @@ export function HealthCheckpoints({ areaId }: { areaId: string }) {
         }}
       >
         <div className="flex items-center justify-between gap-5">
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold tracking-[0.14em] text-[var(--text-tertiary)] uppercase">
-              O dia
-            </p>
+          <div className="min-w-0 flex-1">
+            <MonoLabel>O dia</MonoLabel>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="tabular text-[34px] leading-[38px] font-bold tracking-[-0.03em] text-[var(--text-primary)]">
                 {done}
@@ -103,17 +104,14 @@ export function HealthCheckpoints({ areaId }: { areaId: string }) {
               </span>
               <span className="text-[13px] text-[var(--text-secondary)]">checkpoints</span>
             </div>
-            <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
+            <SegBar value={ratio} segments={Math.max(total, 1)} height={12} className="mt-3" />
+            <p className="mt-2 text-[12px] text-[var(--text-secondary)]">
               {done === total
                 ? "Dia fechado. Constância é isto — de novo amanhã."
                 : `${total - done} ${total - done === 1 ? "checkpoint" : "checkpoints"} para fechar o dia`}
             </p>
           </div>
-          <ProgressRing value={ratio} size={84} thickness={7}>
-            <span className="tabular text-[17px] font-semibold text-[var(--text-primary)]">
-              {Math.round(ratio * 100)}%
-            </span>
-          </ProgressRing>
+          <Ring value={ratio} size={84} thickness={7} label="feito" />
         </div>
       </section>
 

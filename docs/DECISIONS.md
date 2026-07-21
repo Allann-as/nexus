@@ -3053,3 +3053,74 @@ uma decisão do usuário, não um efeito colateral de apagar uma linha. O teste
 
 Os dois são a razão de a régua ser *"nenhum 'pronto' sem screenshot"*: o gate estava verde nos dois
 casos.
+
+---
+
+## ADR-0083 — As Esferas falavam o idioma antigo; Saúde é a primeira a mudar, e a tela cobrou três correções
+
+**Data:** 2026-07-21 · **Status:** aceito · **v1.3 (COCKPIT), fase 4 — Saúde**
+
+**Contexto.** A fase 1 construiu o vocabulário do COCKPIT (`instruments.tsx`: SegBar, Ring, StatusList,
+Heatmap, MonoLabel) e a fase 2 migrou a Home. As Esferas **ficaram para trás**: continuavam em
+`HeroCard`/`StatCard`/`SummaryCard`, o vocabulário do Midnight. O app falava dois idiomas dependendo de
+onde se clicava — e quem clica não sabe que um é `cards.tsx` e o outro é `instruments.tsx`; ele vê duas
+telas que deveriam ser a mesma e não são.
+
+A fase 4 é a migração das cinco Esferas. Saúde é a primeira.
+
+**Decisão 1 — `StatCard` sai, `StatTile` entra, e o vivo é obrigatório.** Um `StatCard` é número +
+rótulo. Quatro caixas com um número cada numa página larga é a esparsidão que o dono reprovou. O
+`StatTile` exige um elemento VIVO — anel, série ou medidor segmentado —, então cada número carrega a
+própria história.
+
+**Decisão 2 — o anel ganha a SegBar ao lado.** O anel dá a forma de relance; a barra segmentada dá a
+leitura precisa sem obrigar a ler o número. Nos Checkpoints a SegBar tem **um segmento por
+checkpoint**: ali ela não é decoração da porcentagem, é a lista em miniatura — marcar um hábito acende
+um segmento.
+
+**Decisão 3 — o heatmap do Treino deixa o ECharts, e a grade gira.** O ADR-0018 põe a fronteira em
+"análise densa vai para o ECharts", e um heatmap de calendário parecia estar do lado de lá. Duas coisas
+mudaram: a fase 3b desenhou o heatmap da CONSTÂNCIA com o instrumento `Heatmap` e ele deu conta; e ter
+dois heatmaps com desenhos diferentes é o problema dos dois idiomas outra vez. Perde-se o tooltip rico
+(vira o `title` do navegador); ganha-se a grade falando a língua do resto.
+
+A **orientação** também muda, e é ela que resolve o defeito concreto: as colunas passam a ser SEMANAS e
+as linhas, dias da semana. Só assim um rótulo de mês tem onde pousar — na versão anterior, com uma
+semana por linha, "junho" não tinha coluna a que pertencer, e o eixo mostrava "12/05" a cada quatro
+semanas.
+
+**Decisão 4 — Exames vira um REGISTRO, e isso exigiu backend.** A seção cumpria o pedido (criação
+inline, D-dias, excluir) e mesmo assim era uma linha com meia página vazia embaixo — violando a regra
+do "sem espaços vazios". O que faltava não era enchimento: era o **histórico**. `past_by_category` é o
+espelho de `upcoming_by_category` (mesmos índices, o `>=` vira `<`, a ordem inverte), e com ele a tela
+responde *"quando foi meu último hemograma?"* — a pergunta que se faz num consultório. Três tiles
+(próximo, no último ano, desde o último) e a lista "Já realizados".
+
+O teste `the_history_of_a_category_is_the_mirror_of_the_upcoming` prende os três contratos que a tela
+assume: o corte no dia, a ordem invertida e **nenhuma sobreposição** entre as listas — um exame contado
+duas vezes inflaria o "no último ano".
+
+### As três correções que só a DIRIGIDA cobrou
+
+O gate estava verde nas três.
+
+1. **Um gráfico bonito sob um rótulo que ele não descreve.** O tile "Maior streak" tinha ganhado
+   `card.spark` para não ficar "vazio" — mas aquela série é a conclusão dos checkpoints da Esfera
+   INTEIRA e não tem relação nenhuma com a história daquele streak. Um gráfico que mente é pior que um
+   número sozinho: ele é lido. O tile ficou **sem** vivo, e quem o salva da esparsidão é o `hint`, que
+   diz QUAL hábito acumula os dias — a informação que de fato faltava.
+
+2. **"maabr".** Os rótulos de mês, um por coluna de 16px, se sobrepunham: "mar" e "abr" saíram na tela
+   grudados. A regra não virou "esconda o segundo" e sim **não nomear um mês que mal aparece**: a
+   janela quase sempre começa no meio de um mês, e essa ponta não merece um rótulo que empurra o do mês
+   seguinte. Distância mínima de três colunas.
+
+3. **O desempate de um `sort` virando afirmação sobre a vida do usuário.** Com Seg, Qua e Sáb todos em
+   17/17, o tile "Melhor dia" anunciou *"o mais fraco é sáb"* — sobre um dia de 100%. A primeira versão
+   pegava o último da lista ordenada e o chamava de pior. Agora o pior só é citado quando é, de fato,
+   PIOR; havendo empate no topo, a frase diz isso ("100% — empatado com qua e sáb"), que é a informação
+   verdadeira.
+
+A terceira é a mais importante das três, e não é um bug de layout: é o mesmo princípio do ADR-0037 e da
+regra do "número real ou omitido". **Uma tela não pode afirmar mais do que os dados sustentam** — e um
+`sort` estável sobre valores iguais não sustenta nada.

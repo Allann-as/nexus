@@ -219,6 +219,29 @@ impl EventRepository for SqliteEventRepository {
         })
     }
 
+    fn past_by_category(
+        &self,
+        category: &str,
+        before_day: &str,
+        limit: i64,
+    ) -> Result<Vec<Occurrence>> {
+        self.db.with_read(|c| {
+            // O espelho de `upcoming_by_category`: mesmos índices, o `>=` vira
+            // `<` e a ordem inverte. A cancelada sai pelo mesmo motivo — um exame
+            // desmarcado não foi feito, e o histórico é do que ACONTECEU.
+            let mut stmt = c.prepare_cached(&format!(
+                "{SELECT_OCCURRENCE}
+                  WHERE e.category = ?1
+                    AND o.day < ?2
+                    AND o.status <> 'cancelled'
+                  ORDER BY o.starts_at DESC
+                  LIMIT ?3"
+            ))?;
+            let rows = stmt.query_map(params![category, before_day, limit], map_occurrence)?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        })
+    }
+
     fn update(&self, id: &str, patch: &EventPatch, updated_at: i64) -> Result<Event> {
         self.db.with_write(|conn| {
             let tx = conn.transaction()?;
@@ -519,6 +542,83 @@ mod tests {
             ends_at,
             day: day.into(),
         }
+    }
+
+    /// Um exame numa data, com categoria — o insumo dos dois cortes.
+    fn exam(repo: &SqliteEventRepository, id: &str, title: &str, day: &str, at: i64) {
+        repo.create_with_event(
+            id,
+            &node(title),
+            &NewEventDetails {
+                category: Some("exame".into()),
+                ..details(at, at + 3_600_000, None)
+            },
+            &[occ(at, at + 3_600_000, day)],
+            &ledger_event(id),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn the_history_of_a_category_is_the_mirror_of_the_upcoming() {
+        // A fase 4 partiu a seção de Exames em dois cortes do MESMO dado: o que
+        // vem e o que passou. O teste prende os três contratos que a tela
+        // assume — o corte no dia, a ordem invertida, e nenhuma sobreposição
+        // entre as duas listas.
+        let (_dir, repo) = fixture();
+        exam(&repo, "e1", "Hemograma", "2026-01-10", 1_000);
+        exam(&repo, "e2", "Colesterol", "2026-04-20", 2_000);
+        exam(&repo, "e3", "Cardiologista", "2026-09-05", 3_000);
+
+        let hoje = "2026-07-21";
+
+        let futuros = repo.upcoming_by_category("exame", hoje, 10).unwrap();
+        assert_eq!(futuros.len(), 1);
+        assert_eq!(futuros[0].title, "Cardiologista");
+
+        // Do mais RECENTE para trás: quem abre a tela quer ver o último exame no
+        // topo, não o de dois anos atrás.
+        let passados = repo.past_by_category("exame", hoje, 10).unwrap();
+        assert_eq!(
+            passados
+                .iter()
+                .map(|o| o.title.as_str())
+                .collect::<Vec<_>>(),
+            ["Colesterol", "Hemograma"]
+        );
+
+        // Nenhum exame aparece nas duas listas: `>= hoje` e `< hoje` são
+        // complementares, e um exame contado duas vezes inflaria o "no último
+        // ano" do painel.
+        assert!(
+            futuros
+                .iter()
+                .all(|f| !passados.iter().any(|p| p.event_id == f.event_id)),
+            "um exame vazou para os dois cortes"
+        );
+    }
+
+    #[test]
+    fn a_cancelled_exam_is_in_neither_list() {
+        // Um exame desmarcado não é o próximo exame — e também não foi feito.
+        // A guarda já existia no corte dos futuros; o histórico herda a mesma
+        // regra, senão "no último ano" contaria consultas que não aconteceram.
+        let (_dir, repo) = fixture();
+        exam(&repo, "e1", "Hemograma", "2026-01-10", 1_000);
+        repo.db
+            .with_write(|c| {
+                c.execute(
+                    "UPDATE event_occurrences SET status = 'cancelled' WHERE event_id = 'e1'",
+                    [],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+
+        assert!(repo
+            .past_by_category("exame", "2026-07-21", 10)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]

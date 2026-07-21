@@ -182,6 +182,7 @@ pub fn run() {
             commands::events::delete_event,
             commands::events::event_conflicts,
             commands::events::events_by_category,
+            commands::events::past_events_by_category,
             commands::events::extend_materialization,
             commands::finance::list_accounts,
             commands::finance::add_contribution,

@@ -633,6 +633,19 @@ pub trait EventRepository: Send + Sync {
         limit: i64,
     ) -> Result<Vec<Occurrence>>;
 
+    /// As ocorrências JÁ PASSADAS de uma categoria, da mais recente para trás.
+    ///
+    /// O espelho da anterior, e o que transforma a seção de Exames de uma lista
+    /// de compromissos num REGISTRO (v1.3, fase 4). A pergunta que a tela não
+    /// sabia responder era *"quando foi meu último hemograma?"* — e ela é a
+    /// pergunta que se faz num consultório.
+    fn past_by_category(
+        &self,
+        category: &str,
+        before_day: &str,
+        limit: i64,
+    ) -> Result<Vec<Occurrence>>;
+
     fn update(&self, id: &str, patch: &EventPatch, updated_at: i64) -> Result<Event>;
 
     /// Remarca UMA ocorrência e grava o evento, na mesma transação.

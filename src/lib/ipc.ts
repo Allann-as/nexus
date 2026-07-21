@@ -1148,6 +1148,16 @@ export const moveMilestone = (id: string, toIndex: number) =>
 export const eventsByCategory = (category: string, limit = 20) =>
   call<Occurrence[]>("events_by_category", { category, limit });
 
+/**
+ * O que já passou, do mais recente para trás (v1.3, fase 4).
+ *
+ * É o que faz a seção de Exames virar um REGISTRO em vez de uma lista de
+ * compromissos: *"quando foi meu último hemograma?"* é a pergunta que se faz num
+ * consultório, e até aqui a tela não sabia responder.
+ */
+export const pastEventsByCategory = (category: string, limit = 20) =>
+  call<Occurrence[]>("past_events_by_category", { category, limit });
+
 /* ===== finanças (M3.5) ===== */
 
 /** Uma conta/banco. Espelha `ports::Account` e a tabela `accounts` (0005). */

@@ -16,12 +16,20 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, MapPin, Plus } from "lucide-react";
+import { CalendarClock, History, MapPin, Plus, Stethoscope } from "lucide-react";
 
 import { ArmedDelete } from "../../design-system/ArmedDelete";
+import { StatTile } from "../../design-system/cards";
 import { DatePicker } from "../../design-system/DatePicker";
+import { MonoLabel } from "../../design-system/instruments";
 import { Button, Card, EmptyState, cx } from "../../design-system/primitives";
-import { createEvent, deleteEvent, eventsByCategory, type Occurrence } from "../../lib/ipc";
+import {
+  createEvent,
+  deleteEvent,
+  eventsByCategory,
+  pastEventsByCategory,
+  type Occurrence,
+} from "../../lib/ipc";
 import { useToasts } from "../../stores/toasts";
 import { fromDay, toDay } from "../calendar/grid";
 
@@ -32,18 +40,44 @@ function daysUntil(day: string): number {
   return Math.round((target.getTime() - today.getTime()) / 86_400_000);
 }
 
+/** O que falta: "hoje", "amanhã", "em 4 dias". */
+function countdown(days: number): string {
+  if (days === 0) return "hoje";
+  if (days === 1) return "amanhã";
+  return `em ${days} dias`;
+}
+
+/**
+ * O que passou: "ontem", "há 12 dias", "há 3 meses".
+ *
+ * Vira meses depois de 60 dias porque "há 214 dias" é um número que ninguém
+ * converte de cabeça — e a pergunta do consultório é "quantos meses faz?".
+ */
+function elapsed(days: number): string {
+  if (days <= 0) return "hoje";
+  if (days === 1) return "ontem";
+  if (days < 60) return `há ${days} dias`;
+  const months = Math.round(days / 30);
+  if (months < 24) return `há ${months} meses`;
+  return `há ${Math.round(days / 365)} anos`;
+}
+
 export function HealthExams({ areaId }: { areaId: string }) {
   const [creating, setCreating] = useState(false);
   const { data: exams = [], isLoading } = useQuery({
     queryKey: ["events", "category", "exame"],
     queryFn: () => eventsByCategory("exame", 40),
   });
+  const { data: history = [] } = useQuery({
+    queryKey: ["events", "category", "exame", "past"],
+    queryFn: () => pastEventsByCategory("exame", 20),
+  });
 
   if (isLoading) {
     return <div className="h-64 animate-pulse rounded-[var(--radius-lg)] bg-[var(--bg-surface)]" />;
   }
 
-  if (exams.length === 0 && !creating) {
+  if (exams.length === 0 && history.length === 0 && !creating) {
     return (
       <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--border-subtle)] py-16">
         <EmptyState
@@ -60,12 +94,47 @@ export function HealthExams({ areaId }: { areaId: string }) {
     );
   }
 
+  const next = exams[0];
+  const last = history[0];
+  const sinceLast = last ? -daysUntil(last.day) : null;
+
+  /* Quantos exames no último ano — a medida de quem se cuida. Conta os PASSADOS,
+     porque um exame agendado ainda não é um exame feito. */
+  const lastYear = history.filter((e) => -daysUntil(e.day) <= 365).length;
+
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
+      {/* A tela era uma lista de compromissos com meia página vazia embaixo. Os
+          três tiles e o histórico a transformam num REGISTRO: o que vem, com que
+          frequência eu me cuido, e quando foi a última vez. */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+        <StatTile
+          icon={CalendarClock}
+          label="Próximo exame"
+          tone={next && daysUntil(next.day) < 7 ? "warning" : "sphere"}
+          value={next ? countdown(daysUntil(next.day)) : "—"}
+          hint={next?.title ?? "nenhum agendado"}
+        />
+        <StatTile
+          icon={Stethoscope}
+          label="No último ano"
+          value={lastYear}
+          unit={lastYear === 1 ? "exame" : "exames"}
+          hint="realizados, sem contar os agendados"
+        />
+        <StatTile
+          icon={History}
+          label="Desde o último"
+          value={sinceLast === null ? "—" : sinceLast}
+          unit={sinceLast === null ? undefined : sinceLast === 1 ? "dia" : "dias"}
+          hint={last?.title ?? "nenhum registro anterior"}
+        />
+      </div>
+
       <div className="flex items-center justify-between px-1">
-        <span className="text-[12px] text-[var(--text-tertiary)]">
+        <MonoLabel>
           {exams.length} {exams.length === 1 ? "exame agendado" : "exames agendados"}
-        </span>
+        </MonoLabel>
         {!creating && (
           <Button variant="secondary" size="sm" icon={Plus} onClick={() => setCreating(true)}>
             Adicionar exame
@@ -75,11 +144,33 @@ export function HealthExams({ areaId }: { areaId: string }) {
 
       {creating && <ExamForm areaId={areaId} onDone={() => setCreating(false)} />}
 
-      <div className="flex flex-col gap-2">
-        {exams.map((e) => (
-          <ExamRow key={`${e.eventId}@${e.startsAt}`} exam={e} days={daysUntil(e.day)} />
-        ))}
-      </div>
+      {exams.length === 0 && !creating ? (
+        <p className="rounded-[var(--radius-lg)] border border-dashed border-[var(--border-subtle)] px-4 py-6 text-center text-[12px] text-[var(--text-tertiary)]">
+          Nada agendado. O histórico abaixo continua valendo.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {exams.map((e) => (
+            <ExamRow key={`${e.eventId}@${e.startsAt}`} exam={e} days={daysUntil(e.day)} />
+          ))}
+        </div>
+      )}
+
+      {history.length > 0 && (
+        <>
+          <MonoLabel className="mt-2 px-1">Já realizados</MonoLabel>
+          <div className="flex flex-col gap-2">
+            {history.map((e) => (
+              <ExamRow
+                key={`${e.eventId}@${e.startsAt}`}
+                exam={e}
+                days={daysUntil(e.day)}
+                past
+              />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -202,8 +293,17 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function ExamRow({ exam, days }: { exam: Occurrence; days: number }) {
-  const soon = days >= 0 && days < 7;
+function ExamRow({
+  exam,
+  days,
+  past = false,
+}: {
+  exam: Occurrence;
+  days: number;
+  /** Já aconteceu: sem alerta, com o tempo contado para trás. */
+  past?: boolean;
+}) {
+  const soon = !past && days >= 0 && days < 7;
   const start = new Date(exam.startsAt);
 
   const qc = useQueryClient();
@@ -226,6 +326,9 @@ function ExamRow({ exam, days }: { exam: Occurrence; days: number }) {
       className={cx(
         "flex items-center gap-4 rounded-[var(--radius-lg)] border bg-[var(--bg-surface)] px-4 py-3",
         soon ? "border-[var(--warning)]" : "border-[var(--border-subtle)]",
+        // O passado é passado: a linha recua um tom para o olho ir primeiro ao
+        // que ainda vai acontecer.
+        past && "opacity-70",
       )}
     >
       {/* A data em bloco: o dia grande, o mês pequeno — leitura de relance. */}
@@ -263,7 +366,7 @@ function ExamRow({ exam, days }: { exam: Occurrence; days: number }) {
             : "text-[var(--text-tertiary)]",
         )}
       >
-        {days === 0 ? "hoje" : days === 1 ? "amanhã" : `em ${days} dias`}
+        {past ? elapsed(-days) : countdown(days)}
       </span>
 
       <ArmedDelete

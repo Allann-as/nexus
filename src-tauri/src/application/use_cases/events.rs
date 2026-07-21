@@ -140,6 +140,12 @@ impl EventService {
             .upcoming_by_category(category, &self.clock.today_local(), limit)
     }
 
+    /// O histórico de uma categoria — o que já passou, do mais recente para trás.
+    pub fn past_by_category(&self, category: &str, limit: i64) -> Result<Vec<Occurrence>> {
+        self.events
+            .past_by_category(category, &self.clock.today_local(), limit)
+    }
+
     /// Arrasta UMA ocorrência para outro horário (o timeblocking).
     ///
     /// `occurrence_start` e não só o id do evento: a chave de uma ocorrência é
