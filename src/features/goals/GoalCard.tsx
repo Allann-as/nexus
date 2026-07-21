@@ -15,15 +15,22 @@
  */
 
 import { useState } from "react";
-import { Check, GripVertical, Info, Plus, Repeat, Target, TrendingUp } from "lucide-react";
+import { Check, Flame, GripVertical, Info, Link2, Plus, Repeat, Target, TrendingUp } from "lucide-react";
 
 import { ArmedDelete } from "../../design-system/ArmedDelete";
 import { Checkbox } from "../../design-system/Checkbox";
 import { CountUp } from "../../design-system/cards";
 import { ProgressBar, ProgressRing, Sparkline } from "../../design-system/charts";
+import { Heatmap, type HeatCell } from "../../design-system/instruments";
 import { Button, cx } from "../../design-system/primitives";
 import { metricDecimals } from "../../lib/format";
-import type { GoalKind, GoalWithProgress, MilestoneView, ProgressSource } from "../../lib/ipc";
+import type {
+  Constancia,
+  GoalKind,
+  GoalWithProgress,
+  MilestoneView,
+  ProgressSource,
+} from "../../lib/ipc";
 import { NodeLinkSection } from "../links/NodeLinkSection";
 
 /** O subtítulo de uma meta SEM métrica — onde a quantitativa mostra o que mede. */
@@ -31,6 +38,7 @@ const KIND_LABEL: Record<GoalKind, string> = {
   quantitative: "",
   binary: "Conquista",
   staged: "Por etapas",
+  constancia: "Constância diária",
 };
 
 export function GoalCard({
@@ -45,6 +53,8 @@ export function GoalCard({
   deleting,
   onDeleteMilestone,
   deletingMilestoneId,
+  onLinkHabit,
+  onAddDailyMilestone,
 }: {
   goal: GoalWithProgress;
   colour: string;
@@ -58,6 +68,10 @@ export function GoalCard({
   onDeleteMilestone: (m: MilestoneView) => void;
   /** Qual degrau está em voo — só ele trava, e não a árvore inteira. */
   deletingMilestoneId: string | null;
+  /** Religa o hábito de uma constância que ficou sem um (a 0018 zera o vínculo). */
+  onLinkHabit: () => void;
+  /** Cria o hábito diário E o sub-desafio contado que ele alimenta. */
+  onAddDailyMilestone: (title: string, targetCount: number) => void;
 }) {
   const [formula, setFormula] = useState(false);
   const done = goal.milestones.filter((m) => m.ratio >= 1).length;
@@ -72,6 +86,11 @@ export function GoalCard({
     goal.goalKind === "quantitative" &&
     goal.startValue !== null &&
     goal.targetValue !== null;
+
+  /* A constância traz a série DELA (os ticks do hábito ligado), e não
+     checkpoints: ela não tem nenhum, por invariante — `add_checkpoint` a recusa
+     (ADR-0079). Tudo que é dela mora neste objeto. */
+  const c = goal.constancia;
 
   // A série viva dos checkpoints, normalizada 0..1 do começo ao alvo (C5). O sinal
   // do span já cuida da direção: 82→72 tem span negativo, então medir 72 dá 1. O
@@ -154,6 +173,22 @@ export function GoalCard({
                 / {goal.targetValue} {goal.unit}
               </span>
             </div>
+          ) : c ? (
+            /* A leitura de uma constância é o ACUMULADO: "R$ 1.250 / R$ 3.650".
+               Os dias marcados vão ao lado porque são a outra metade da história
+               — 12 dias de "R$ 10 por dia" são 12 dias E R$ 120, e mostrar só um
+               dos dois esconde se o ritmo está sendo cumprido. */
+            <div className="flex items-baseline gap-2">
+              <span className="tabular text-[34px] leading-none font-semibold text-[var(--text-primary)]">
+                <CountUp to={c.accumulated} decimals={metricDecimals(c.accumulated)} />
+              </span>
+              <span className="tabular text-[15px] text-[var(--text-tertiary)]">
+                / {c.target} {goal.unit}
+              </span>
+              <span className="tabular text-[12px] text-[var(--text-tertiary)]">
+                · {c.daysMarked} dia{c.daysMarked === 1 ? "" : "s"}
+              </span>
+            </div>
           ) : goal.goalKind === "staged" && goal.progress.stageTotal ? (
             <div className="flex items-baseline gap-2">
               <span className="tabular text-[34px] leading-none font-semibold text-[var(--text-primary)]">
@@ -182,7 +217,9 @@ export function GoalCard({
 
         {/* A trajetória: a série dos checkpoints como sparkline (C5). Sem medições,
             cai na barra grossa com glow — sempre há um elemento vivo. */}
-        {quantitative && goal.checkpoints.length >= 1 ? (
+        {c ? (
+          <ConstanciaStrip c={c} unit={goal.unit} onLinkHabit={onLinkHabit} />
+        ) : quantitative && goal.checkpoints.length >= 1 ? (
           <Sparkline data={series} color="var(--sphere)" width={420} height={44} className="w-full" />
         ) : (
           <div className="relative">
@@ -261,6 +298,7 @@ export function GoalCard({
           onMove={onMoveMilestone}
           onDelete={onDeleteMilestone}
           deletingId={deletingMilestoneId}
+          onAddDaily={onAddDailyMilestone}
         />
 
         <footer className="mt-4 flex items-center gap-2 border-t border-[var(--border-subtle)] pt-3">
@@ -282,6 +320,185 @@ export function GoalCard({
       </div>
     </article>
   );
+}
+
+/**
+ * A faixa de uma CONSTÂNCIA: o heatmap dos dias, a sequência e a projeção.
+ *
+ * # Por que o heatmap é montado aqui, e não vem pronto do backend
+ *
+ * `constancia.days` traz só os dias que TÊM tick — é a série honesta, e ela não
+ * inventa linhas para os dias em que nada aconteceu. Mas um heatmap com buracos
+ * omitidos mentiria: as células ficariam lado a lado e uma semana inteira em
+ * branco pareceria uma semana de dois dias. Então a grade contínua de
+ * `countsFrom` até hoje se monta na tela, que é quem sabe o formato dela.
+ *
+ * A INTENSIDADE de cada célula é a fração do alvo diário cumprida no dia — com
+ * alvo diário, "guardei R$ 30 de R$ 10" satura em 1; sem alvo diário, marcar é
+ * marcar e a célula é cheia. Um dia PULADO não é um dia vazio, e por isso ele
+ * tem célula (fraca) em vez de sumir.
+ */
+function ConstanciaStrip({
+  c,
+  unit,
+  onLinkHabit,
+}: {
+  c: Constancia;
+  unit: string | null;
+  onLinkHabit: () => void;
+}) {
+  /* Sem hábito não há série nenhuma — nem porque nunca se ligou um, nem porque
+     o hábito foi excluído (a 0018 zera o vínculo e os dois viram o mesmo
+     estado, ADR-0078). Desenhar um heatmap vazio de 90 células cinzas seria um
+     instrumento fingindo medir; o que cabe aqui é a saída. */
+  if (!c.habitId) {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-dashed border-[var(--border-subtle)] px-3 py-2.5">
+        <span className="text-[11px] leading-[17px] text-[var(--text-tertiary)]">
+          Sem hábito ligado — é ele que marca os dias e move esta meta.
+        </span>
+        <Button variant="secondary" size="sm" icon={Link2} onClick={onLinkHabit}>
+          Ligar hábito
+        </Button>
+      </div>
+    );
+  }
+
+  const { cells, truncated } = constanciaCells(c, unit);
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <Heatmap cells={cells} columns={7} color="var(--sphere)" cell={11} gap={3} />
+
+      {/* Corte declarado. Uma meta de três anos daria mil células e um heatmap
+          que não cabe no card; mostrar as 26 últimas semanas em SILÊNCIO faria a
+          faixa parecer a história inteira. O acumulado acima segue sendo o
+          total desde o começo — só o desenho é que tem janela. */}
+      {truncated && (
+        <span className="text-[10px] text-[var(--text-tertiary)]">
+          últimas 26 semanas — o acumulado acima conta desde{" "}
+          {new Date(`${c.countsFrom}T12:00:00`).toLocaleDateString("pt-BR")}
+        </span>
+      )}
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--text-secondary)]">
+        <span className="inline-flex items-center gap-1.5">
+          <Flame size={12} className="text-[var(--sphere)]" />
+          <span className="tabular font-semibold text-[var(--text-primary)]">{c.streak.current}</span>
+          <span className="text-[var(--text-tertiary)]">
+            dia{c.streak.current === 1 ? "" : "s"} seguidos
+          </span>
+          {c.streak.record > c.streak.current && (
+            <span className="tabular text-[var(--text-tertiary)]">(recorde {c.streak.record})</span>
+          )}
+        </span>
+
+        {/* A projeção da constância sai dos TICKS, não de checkpoints — ela mora
+            em `constancia.projection` de propósito (ADR-0079). Com menos de dois
+            dias marcados ela é `null`, e a linha diz isso em vez de chutar. */}
+        {c.projection ? (
+          <span className="inline-flex items-center gap-1.5">
+            <TrendingUp size={12} className="text-[var(--sphere)]" />
+            {c.projection.eta ? (
+              <>
+                no ritmo atual, você acumula o alvo em{" "}
+                <strong className="tabular font-semibold text-[var(--text-primary)]">
+                  {new Date(c.projection.eta).toLocaleDateString("pt-BR")}
+                </strong>
+              </>
+            ) : (
+              <>no ritmo atual, o alvo não é alcançado</>
+            )}
+          </span>
+        ) : (
+          <span className="text-[var(--text-tertiary)]">
+            marque {2 - c.daysMarked} dia{c.daysMarked === 1 ? "" : "s"} para ver a projeção
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Quantas semanas o heatmap de uma constância desenha, no máximo. */
+const HEATMAP_WEEKS = 26;
+
+/**
+ * A grade contínua do heatmap de uma constância.
+ *
+ * Três decisões moram aqui, e nenhuma delas cabe no backend:
+ *
+ * 1. **A grade é contínua.** `c.days` traz só os dias que TÊM tick — a série
+ *    honesta, que não inventa linhas para os dias em que nada aconteceu. Mas
+ *    encostar essas células umas nas outras faria uma semana em branco parecer
+ *    uma semana de dois dias. Os buracos viram células vazias.
+ * 2. **As semanas alinham.** As colunas são dias da semana, então a grade
+ *    começa no domingo da primeira semana — sem o preenchimento, cada meta
+ *    desenharia as colunas numa fase diferente e nenhuma delas seria legível
+ *    como "as segundas-feiras".
+ * 3. **A janela é finita e DECLARADA.** No máximo `HEATMAP_WEEKS` semanas; o
+ *    corte é dito na tela por quem chama.
+ */
+function constanciaCells(
+  c: Constancia,
+  unit: string | null,
+): { cells: HeatCell[]; truncated: boolean } {
+  const marks = new Map(c.days.map((d) => [d.day, d]));
+  const dayKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+
+  const birth = new Date(`${c.countsFrom}T12:00:00`);
+  const earliest = new Date(today);
+  earliest.setDate(earliest.getDate() - (HEATMAP_WEEKS * 7 - 1));
+
+  const truncated = birth < earliest;
+  const from = truncated ? earliest : birth;
+
+  // O domingo da semana em que a janela começa — as colunas são dias da semana.
+  const start = new Date(from);
+  start.setDate(start.getDate() - start.getDay());
+
+  const cells: HeatCell[] = [];
+  for (const d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
+    const label = d.toLocaleDateString("pt-BR");
+
+    // Os dias antes do começo da janela existem na GRADE (para as semanas
+    // alinharem) mas não na história: eles ficam vazios e sem tooltip.
+    if (d < from) {
+      cells.push({ value: null });
+      continue;
+    }
+
+    const mark = marks.get(dayKey(d));
+    if (!mark) {
+      cells.push({ value: null, title: `${label} — sem marca` });
+      continue;
+    }
+    if (mark.status !== "done") {
+      // Pulado e falhado são FATOS: aparecem, fracos, para a sequência que se
+      // quebrou ter onde ser vista. Zero seria "nada aconteceu", que é outra
+      // coisa.
+      cells.push({
+        value: 0.15,
+        title: `${label} — ${mark.status === "skipped" ? "pulado" : "falhou"}`,
+      });
+      continue;
+    }
+
+    // A intensidade é a fração do combinado diário cumprida no dia: "guardei
+    // R$ 30 de R$ 10" satura em 1. Sem alvo diário, marcar é marcar. O piso de
+    // 0.35 existe para um dia feito nunca parecer um dia vazio.
+    const intensity = c.dailyTarget ? Math.min(1, mark.value / c.dailyTarget) : 1;
+    cells.push({
+      value: Math.max(0.35, intensity),
+      title: `${label} — ${mark.value} ${unit ?? ""}`.trim(),
+    });
+  }
+
+  return { cells, truncated };
 }
 
 /**
@@ -339,6 +556,7 @@ function MilestoneTree({
   onMove,
   onDelete,
   deletingId,
+  onAddDaily,
 }: {
   milestones: MilestoneView[];
   onToggle: (m: MilestoneView, done: boolean) => void;
@@ -346,10 +564,12 @@ function MilestoneTree({
   onMove: (m: MilestoneView, toIndex: number) => void;
   onDelete: (m: MilestoneView) => void;
   deletingId: string | null;
+  onAddDaily: (title: string, targetCount: number) => void;
 }) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<number | null>(null);
   const [adding, setAdding] = useState("");
+  const [daily, setDaily] = useState(false);
 
   return (
     <div className="mt-4 flex flex-col gap-0.5">
@@ -456,6 +676,96 @@ function MilestoneTree({
           placeholder="Adicionar sub-desafio"
           className="min-w-0 flex-1 bg-transparent text-[12px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
         />
+        {/* A segunda porta, e a que faltava: um sub-desafio que RENOVA TODO DIA.
+            O campo acima cria um degrau de marcar uma vez; este cria um hábito
+            diário de verdade, que entra nos Checkpoints da Esfera e preenche o
+            contador sozinho. As duas coisas são diferentes o bastante para não
+            caberem no mesmo Enter. */}
+        {!daily && (
+          <button
+            onClick={() => setDaily(true)}
+            className="shrink-0 text-[11px] font-medium text-[var(--text-tertiary)] hover:text-[var(--sphere)]"
+          >
+            + hábito diário
+          </button>
+        )}
+      </div>
+
+      {daily && <DailyMilestoneForm onCancel={() => setDaily(false)} onSubmit={onAddDaily} />}
+    </div>
+  );
+}
+
+/**
+ * O sub-desafio que renova todo dia.
+ *
+ * Ele não é um checkbox: é um HÁBITO diário mais um sub-desafio 'counter' ligado
+ * a ele (§4 da 0007). Marcar o hábito nos Checkpoints do dia é o que enche o
+ * contador — e é por isso que o formulário pede duas coisas e não uma: o nome do
+ * que se faz todo dia, e quantas vezes até o sub-desafio estar vencido.
+ *
+ * O piso é HOJE, decidido pelo backend (`counts_from`, 0009): um "30 dias de
+ * academia" criado hoje sobre um hábito antigo nasceria completo, exibindo
+ * 51/30 — que foi o que a tela mostrou quando o M3 foi dirigido de verdade.
+ */
+function DailyMilestoneForm({
+  onSubmit,
+  onCancel,
+}: {
+  onSubmit: (title: string, targetCount: number) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [count, setCount] = useState("30");
+
+  const target = Number(count);
+  const valid = title.trim() !== "" && Number.isInteger(target) && target > 0;
+
+  const submit = () => {
+    if (!valid) return;
+    onSubmit(title.trim(), target);
+    onCancel();
+  };
+
+  return (
+    <div className="mt-1 flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        <Repeat size={12} className="shrink-0 text-[var(--sphere)]" />
+        <input
+          autoFocus
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit();
+            if (e.key === "Escape") onCancel();
+          }}
+          placeholder="O que você vai fazer todo dia"
+          className="min-w-0 flex-1 bg-transparent text-[12px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
+        />
+        <input
+          value={count}
+          onChange={(e) => setCount(e.target.value.replace(/\D/g, ""))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit();
+            if (e.key === "Escape") onCancel();
+          }}
+          aria-label="Quantos dias"
+          className="tabular h-7 w-14 shrink-0 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-transparent px-2 text-center text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--sphere)]"
+        />
+        <span className="shrink-0 text-[11px] text-[var(--text-tertiary)]">dias</span>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] leading-[16px] text-[var(--text-tertiary)]">
+          Entra nos Checkpoints de hoje e conta a partir de hoje.
+        </span>
+        <div className="flex shrink-0 gap-1.5">
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            Cancelar
+          </Button>
+          <Button variant="primary" size="sm" onClick={submit} disabled={!valid}>
+            Criar
+          </Button>
+        </div>
       </div>
     </div>
   );

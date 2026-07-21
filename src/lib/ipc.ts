@@ -847,16 +847,21 @@ export type ProgressSource = "metric" | "milestones";
 export type MilestoneKind = "simple" | "counter";
 
 /**
- * O TIPO de uma meta. Espelha o CHECK de `goal_details.goal_kind` (0016).
+ * O TIPO de uma meta. Espelha o CHECK de `goal_details.goal_kind` (0017).
  *
  * - `quantitative` — a meta de sempre: métrica, hoje, alvo e unidade.
  * - `binary` — a CONQUISTA ("conseguir um emprego"). Só título e prazo.
  * - `staged` — a ESCADA de níveis nomeados ("Básico -> Fluente").
+ * - `constancia` — a CONSTÂNCIA diária ("guardar R$ 10 por dia", "30 dias sem
+ *   fritura"). Marca-se todo dia; o progresso é o acumulado contra o alvo.
+ *
+ * Sem acento em `constancia`: a string é a do CHECK do banco, não um rótulo de
+ * tela. O rótulo em português vive em `GOAL_KINDS`.
  *
  * Não se confunde com `AnnualGoalKind`, que é da meta ANUAL e só tem dois
  * valores.
  */
-export type GoalKind = "quantitative" | "binary" | "staged";
+export type GoalKind = "quantitative" | "binary" | "staged" | "constancia";
 
 export interface Goal {
   id: string;
@@ -869,6 +874,9 @@ export interface Goal {
    * 'quantitative', `null` em bloco numa 'binary' ou 'staged'. Uma conquista
    * não mede nada, e um alvo fingido desenharia uma barra que ninguém
    * alimenta.
+   *
+   * A 'constancia' fica no MEIO: ela tem `targetValue`, `unit` e `direction`,
+   * e NÃO tem `metricName` nem `startValue` — começa em zero por definição.
    */
   metricName: string | null;
   startValue: number | null;
@@ -877,6 +885,18 @@ export interface Goal {
   direction: Direction | null;
   deadline: number | null;
   progressSource: ProgressSource;
+  /**
+   * O hábito que alimenta uma 'constancia' (0017). `null` em todo outro tipo —
+   * e `null` também quando o hábito foi excluído: a 0018 desfaz o vínculo em
+   * vez de segurar o hábito, então "nunca ligou" e "foi apagado" são o mesmo
+   * estado, com a mesma saída (ligar um hábito).
+   */
+  habitId: string | null;
+  /**
+   * O alvo POR DIA da constância — o "R$ 10" de "guardar R$ 10 por dia".
+   * `null` quando ela conta DIAS ("30 dias sem fritura").
+   */
+  dailyTarget: number | null;
 }
 
 export interface GoalCheckpoint {
@@ -943,6 +963,46 @@ export interface Projection {
   formula: string;
 }
 
+/** Um dia marcado de uma constância — uma célula do heatmap. */
+export interface ConstanciaDay {
+  /** 'AAAA-MM-DD' local. */
+  day: string;
+  /**
+   * 'done' | 'skipped' | 'failed'. Um dia PULADO e um dia que nunca existiu são
+   * fatos diferentes — pintar os dois de cinza apagaria a diferença.
+   */
+  status: string;
+  /** Quanto este dia somou ao acumulado. Zero fora do 'done'. */
+  value: number;
+}
+
+/**
+ * A leitura de uma meta de CONSTÂNCIA — mirrors `ConstanciaView`.
+ *
+ * Ela não sai de `checkpoints`: sai dos ticks do hábito ligado (ADR-0077). É por
+ * isso que marcar o hábito nos Checkpoints do dia move a meta sozinho.
+ */
+export interface Constancia {
+  /** `null` = sem hábito ligado. A tela oferece ligar um. */
+  habitId: string | null;
+  dailyTarget: number | null;
+  /**
+   * O dia a partir do qual esta meta conta: o dia em que ela foi CRIADA. Sem
+   * esse piso, uma constância criada hoje sobre um hábito antigo nasceria
+   * completa (ADR-0079).
+   */
+  countsFrom: string;
+  accumulated: number;
+  target: number;
+  /** Dias marcados como feitos. Não é o acumulado: 12 dias de R$ 10 são R$ 120. */
+  daysMarked: number;
+  streak: { current: number; record: number; isRecord: boolean };
+  /** Do mais antigo ao mais recente. Alimenta o heatmap. */
+  days: ConstanciaDay[];
+  /** A reta sobre o ACUMULADO. `null` com menos de dois dias marcados. */
+  projection: Projection | null;
+}
+
 /** `Goal` achatada com tudo que a tela precisa — mirrors `GoalWithProgress`. */
 export interface GoalWithProgress extends Goal {
   progress: GoalProgress;
@@ -952,11 +1012,15 @@ export interface GoalWithProgress extends Goal {
   /** Numa meta 'staged' estes SÃO os degraus, já em `sortOrder`. */
   milestones: MilestoneView[];
   /**
-   * `null` com menos de 2 checkpoints — e SEMPRE `null` numa meta 'binary' ou
-   * 'staged': uma reta precisa de um alvo numérico, e inventar uma data sobre
-   * um alvo que não existe seria um chute.
+   * `null` com menos de 2 checkpoints — e SEMPRE `null` fora da meta
+   * 'quantitative': uma reta precisa de um alvo numérico, e inventar uma data
+   * sobre um alvo que não existe seria um chute. A constância também tem alvo,
+   * mas a reta dela sai dos TICKS e mora em `constancia.projection`; duas
+   * séries diferentes no mesmo campo é ambiguidade que a tela resolve errado.
    */
   projection: Projection | null;
+  /** Só numa meta 'constancia'. `null` nos outros três tipos. */
+  constancia: Constancia | null;
 }
 
 /**
@@ -970,8 +1034,12 @@ export interface GoalWithProgress extends Goal {
  * `direction` não precisa mais ser mandada: o backend a deduz de `startValue`
  * vs `targetValue`. Se for mandada, tem que concordar com os números.
  *
- * `progressSource` é ignorada fora da 'quantitative': uma meta sem alvo só pode
- * medir pelos degraus, e o backend força 'milestones'.
+ * Uma 'constancia' exige `targetValue` e `unit` e PROÍBE `metricName` e
+ * `startValue` — ela começa em zero e acumula. `direction` é forçada a
+ * 'increase' pelo backend: uma constância nunca anda para trás.
+ *
+ * `progressSource` é ignorada nas metas SEM alvo: uma conquista ou uma escada só
+ * podem medir pelos degraus, e o backend força 'milestones'.
  */
 export const createGoal = (g: {
   title: string;
@@ -984,7 +1052,19 @@ export const createGoal = (g: {
   direction?: Direction | null;
   deadline?: number | null;
   progressSource?: ProgressSource;
+  /** Só numa 'constancia'. O backend recusa nos outros tipos. */
+  habitId?: string | null;
+  dailyTarget?: number | null;
 }) => call<Goal>("create_goal", { goal: g });
+
+/**
+ * Liga (ou desliga, com `null`) o hábito que alimenta uma constância.
+ *
+ * É o "+ Ligar hábito" da tela de detalhe — e o conserto de uma meta cujo hábito
+ * foi excluído (a 0018 deixa o vínculo em `null`, não segura o hábito).
+ */
+export const setGoalHabit = (id: string, habitId: string | null) =>
+  call<Goal>("set_goal_habit", { id, habitId });
 
 export const listGoals = (areaId?: string | null) =>
   call<Goal[]>("list_goals", { areaId: areaId ?? null });

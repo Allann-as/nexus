@@ -17,11 +17,14 @@ use nexus_lib::application::use_cases::career::CareerService;
 use nexus_lib::application::use_cases::challenges::ChallengeService;
 use nexus_lib::application::use_cases::fin_goals::FinGoalService;
 use nexus_lib::application::use_cases::goals::GoalService;
+use nexus_lib::application::use_cases::habits::HabitService;
+use nexus_lib::application::use_cases::nodes::NodeService;
 use nexus_lib::domain::entities::{
     CareerMilestoneKind, Direction, GoalKind, MilestoneKind, ProgressSource,
 };
 use nexus_lib::domain::errors::NexusError;
-use nexus_lib::domain::schedule::{format_day, parse_day};
+use nexus_lib::domain::schedule::{format_day, parse_day, Schedule};
+use nexus_lib::domain::streak::TickStatus;
 use nexus_lib::infrastructure::clock::{SystemClock, Uuid7Gen};
 use nexus_lib::infrastructure::db::Db;
 use nexus_lib::infrastructure::paths::Paths;
@@ -35,6 +38,12 @@ use nexus_lib::infrastructure::repositories::{
 
 struct World {
     goals: GoalService,
+    /// A constância é um HÁBITO por baixo (ADR-0077): sem o serviço de hábitos
+    /// não há como marcar um dia, e sem marcar um dia não há o que testar.
+    habits: HabitService,
+    /// Apagar um hábito é apagar um NODE — a operação é a mesma para todas as
+    /// 16 espécies (ADR-0056), e é por ela que se prova que a meta sobrevive.
+    nodes: NodeService,
     fin_goals: FinGoalService,
     challenges: ChallengeService,
     career: CareerService,
@@ -54,9 +63,25 @@ fn setup() -> World {
     let clock = Arc::new(SystemClock);
     let ids = Arc::new(Uuid7Gen);
 
+    let habit_repo = Arc::new(SqliteHabitRepository::new(db.clone()));
+
     World {
         goals: GoalService {
             goals: Arc::new(SqliteGoalRepository::new(db.clone())),
+            nodes: node_repo.clone(),
+            areas: area_repo.clone(),
+            habits: habit_repo.clone(),
+            ids: ids.clone(),
+            clock: clock.clone(),
+        },
+        habits: HabitService {
+            habits: habit_repo,
+            nodes: node_repo.clone(),
+            areas: area_repo.clone(),
+            ids: ids.clone(),
+            clock: clock.clone(),
+        },
+        nodes: NodeService {
             nodes: node_repo.clone(),
             areas: area_repo.clone(),
             ids: ids.clone(),
@@ -383,6 +408,8 @@ fn quantitative(title: &str) -> NewGoal {
             direction: Some(Direction::Decrease),
             deadline: None,
             progress_source: ProgressSource::Metric,
+            habit_id: None,
+            daily_target: None,
         },
     }
 }
@@ -401,6 +428,8 @@ fn metricless(title: &str, kind: GoalKind) -> NewGoal {
             deadline: None,
             // De propósito o padrão errado do DTO: o serviço tem que forçá-lo.
             progress_source: ProgressSource::Metric,
+            habit_id: None,
+            daily_target: None,
         },
     }
 }
@@ -457,6 +486,409 @@ fn an_achievement_carrying_a_metric_never_reaches_the_database() {
         NexusError::Validation(_)
     ));
     assert!(w.goals.list(None).unwrap().is_empty());
+}
+
+/* ===================================================================
+COCKPIT fase 3b — a CONSTÂNCIA, contra o CHECK da 0017 e contra os ticks
+=================================================================== */
+
+/// Uma constância como o formulário a manda: alvo, unidade, e o hábito que a
+/// alimenta. Sem métrica e sem partida — ela começa em zero e acumula.
+fn constancia(title: &str, target: f64, unit: &str, daily: Option<f64>, habit: &str) -> NewGoal {
+    NewGoal {
+        title: title.into(),
+        area_id: None,
+        details: NewGoalDetails {
+            goal_kind: GoalKind::Constancia,
+            metric_name: None,
+            start_value: None,
+            target_value: Some(target),
+            unit: Some(unit.into()),
+            direction: None,
+            deadline: None,
+            progress_source: ProgressSource::Metric,
+            habit_id: Some(habit.into()),
+            daily_target: daily,
+        },
+    }
+}
+
+/// Um hábito diário, que é o que uma constância sempre precisa por baixo.
+fn daily_habit(w: &World, title: &str) -> String {
+    w.habits
+        .create(title, None, Schedule::Daily, None, None, None, None)
+        .unwrap()
+        .id
+}
+
+/// Retrocede a CRIAÇÃO de uma meta em N dias.
+///
+/// Existe porque o piso de uma constância é o dia em que ela foi criada
+/// (`nodes.created_at`, a lição do `counts_from` da 0009 sem coluna nova): sem
+/// retroceder, um teste só consegue marcar HOJE, e nenhuma série de vários dias
+/// seria testável. É a mesma manobra que o teste da conquista concluída faz com
+/// `nodes.status` — o fixture escreve o passado, e o serviço o lê.
+fn born_days_ago(w: &World, goal_id: &str, days: i64) {
+    let ms = (chrono::Local::now() - chrono::Duration::days(days)).timestamp_millis();
+    w.db.with_write(|c| {
+        c.execute(
+            "UPDATE nodes SET created_at = ?2 WHERE id = ?1",
+            rusqlite::params![goal_id, ms],
+        )?;
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn a_constancia_accumulates_the_ticks_of_the_habit_that_feeds_it() {
+    // O teste que prova o ADR-0077 inteiro: NÃO há tabela nova e NÃO há um
+    // segundo lugar onde registrar. Marcar o hábito nos Checkpoints do dia é o
+    // que move a meta — e é por isso que a meta e o checklist diário nunca
+    // discordam.
+    let w = setup();
+    let habit = daily_habit(&w, "Guardar dinheiro");
+    let goal = w
+        .goals
+        .create(&constancia(
+            "Guardar R$ 10 por dia",
+            300.0,
+            "R$",
+            Some(10.0),
+            &habit,
+        ))
+        .unwrap();
+
+    // A direção é derivada, não perguntada: uma constância só anda para frente.
+    assert_eq!(goal.direction, Some(Direction::Increase));
+    assert_eq!(goal.daily_target, Some(10.0));
+    assert_eq!(goal.habit_id.as_deref(), Some(habit.as_str()));
+
+    // Zero dias: a barra é zero, mas a leitura já se explica.
+    let start = w.goals.get_with_progress(&goal.id).unwrap();
+    let c0 = start.constancia.as_ref().expect("uma constância tem série");
+    assert_eq!(c0.accumulated, 0.0);
+    assert_eq!(c0.days_marked, 0);
+    assert_eq!(c0.habit_id.as_deref(), Some(habit.as_str()));
+
+    // A meta existe há uma semana, para haver dias dentro da janela dela.
+    born_days_ago(&w, &goal.id, 7);
+
+    // Três dias: dois no combinado (marcados sem digitar) e um com valor.
+    let today = chrono::Local::now().date_naive();
+    for (back, value) in [(2i64, None), (1, Some(30.0)), (0, None)] {
+        let day = format_day(today - chrono::Duration::days(back));
+        w.habits
+            .tick(&habit, Some(&day), TickStatus::Done, value)
+            .unwrap();
+    }
+
+    let full = w.goals.get_with_progress(&goal.id).unwrap();
+    let c = full.constancia.expect("uma constância tem série");
+    // 10 (combinado) + 30 (digitado) + 10 (combinado) = 50.
+    assert_eq!(c.accumulated, 50.0);
+    assert_eq!(c.days_marked, 3);
+    assert_eq!(c.days.len(), 3);
+    assert!((full.progress.ratio - 50.0 / 300.0).abs() < 1e-9);
+    assert!(full.progress.formula.contains("3 dias marcados"));
+
+    // A série do heatmap sai em ordem, e o dia com valor carrega o valor dele.
+    assert!(c.days.iter().all(|d| d.status == "done"));
+    assert_eq!(c.days.iter().map(|d| d.value).sum::<f64>(), 50.0);
+}
+
+#[test]
+fn a_constancia_without_a_daily_target_counts_days() {
+    // "30 dias sem fritura": a unidade É o dia, e um valor no tick não muda isso.
+    let w = setup();
+    let habit = daily_habit(&w, "Sem fritura");
+    let goal = w
+        .goals
+        .create(&constancia(
+            "30 dias sem fritura",
+            30.0,
+            "dias",
+            None,
+            &habit,
+        ))
+        .unwrap();
+    assert!(goal.daily_target.is_none());
+    born_days_ago(&w, &goal.id, 7);
+
+    let today = chrono::Local::now().date_naive();
+    for back in 0..3i64 {
+        w.habits
+            .tick(
+                &habit,
+                Some(&format_day(today - chrono::Duration::days(back))),
+                TickStatus::Done,
+                None,
+            )
+            .unwrap();
+    }
+
+    let full = w.goals.get_with_progress(&goal.id).unwrap();
+    let c = full.constancia.unwrap();
+    assert_eq!(c.accumulated, 3.0, "três dias são três, não três reais");
+    assert!((full.progress.ratio - 0.1).abs() < 1e-9);
+}
+
+#[test]
+fn a_constancia_does_not_count_the_habits_past_life() {
+    // A lição do `counts_from` da 0009, agora sem coluna nova: o piso é o dia em
+    // que a META foi criada. Sem ele, uma constância criada hoje sobre um hábito
+    // com meses de histórico nasceria completa — um desafio ganho sem se fazer
+    // nada.
+    let w = setup();
+    let habit = daily_habit(&w, "Guardar dinheiro");
+
+    let today = chrono::Local::now().date_naive();
+    for back in 1..=5i64 {
+        w.habits
+            .tick(
+                &habit,
+                Some(&format_day(today - chrono::Duration::days(back))),
+                TickStatus::Done,
+                None,
+            )
+            .unwrap();
+    }
+
+    // A meta nasce DEPOIS dos cinco dias.
+    let goal = w
+        .goals
+        .create(&constancia("30 dias seguidos", 30.0, "dias", None, &habit))
+        .unwrap();
+    let c = w
+        .goals
+        .get_with_progress(&goal.id)
+        .unwrap()
+        .constancia
+        .unwrap();
+
+    assert_eq!(c.counts_from, format_day(today));
+    assert_eq!(
+        c.days_marked, 0,
+        "os cinco dias anteriores à meta não são progresso dela"
+    );
+    assert_eq!(c.accumulated, 0.0);
+}
+
+#[test]
+fn a_skipped_day_shows_up_but_does_not_accumulate() {
+    // Pulado é um FATO — ele aparece no heatmap. O que ele não é é progresso.
+    let w = setup();
+    let habit = daily_habit(&w, "Guardar dinheiro");
+    let goal = w
+        .goals
+        .create(&constancia("Guardar", 300.0, "R$", Some(10.0), &habit))
+        .unwrap();
+    born_days_ago(&w, &goal.id, 7);
+
+    let today = chrono::Local::now().date_naive();
+    w.habits
+        .tick(
+            &habit,
+            Some(&format_day(today - chrono::Duration::days(1))),
+            TickStatus::Skipped,
+            None,
+        )
+        .unwrap();
+    w.habits
+        .tick(&habit, Some(&format_day(today)), TickStatus::Done, None)
+        .unwrap();
+
+    let c = w
+        .goals
+        .get_with_progress(&goal.id)
+        .unwrap()
+        .constancia
+        .unwrap();
+    assert_eq!(c.days.len(), 2, "o dia pulado está na série");
+    assert_eq!(c.days_marked, 1);
+    assert_eq!(c.accumulated, 10.0);
+    let skipped = c.days.iter().find(|d| d.status == "skipped").unwrap();
+    assert_eq!(skipped.value, 0.0);
+}
+
+#[test]
+fn a_constancia_is_not_measured_with_a_measurement() {
+    // Ela TEM unidade e alvo, então passaria pela guarda de `add_checkpoint` —
+    // e escreveria uma série paralela que barra nenhuma lê. São dois números
+    // dizendo a mesma coisa, que é exatamente o que o ADR-0077 evitou.
+    let w = setup();
+    let habit = daily_habit(&w, "Guardar dinheiro");
+    let goal = w
+        .goals
+        .create(&constancia("Guardar", 300.0, "R$", Some(10.0), &habit))
+        .unwrap();
+
+    let err = w
+        .goals
+        .add_checkpoint(&goal.id, 50.0, None, None)
+        .unwrap_err();
+    match err {
+        NexusError::Validation(m) => assert!(m.contains("marcando o dia"), "mensagem opaca: {m}"),
+        other => panic!("esperava Validation, veio {other:?}"),
+    }
+    assert!(w
+        .goals
+        .get_with_progress(&goal.id)
+        .unwrap()
+        .checkpoints
+        .is_empty());
+}
+
+#[test]
+fn a_habit_that_feeds_a_constancia_can_still_be_deleted() {
+    // O teste que ACHOU o defeito da 0018. Antes dela, isto devolvia
+    // `Storage("FOREIGN KEY constraint failed")`: a promessa do ADR-0077 — a
+    // meta sobrevive ao hábito — era inalcançável, porque o hábito não podia ser
+    // apagado. `ON DELETE SET NULL` desfaz o vínculo e deixa as duas de pé.
+    let w = setup();
+    let habit = daily_habit(&w, "Guardar dinheiro");
+    let goal = w
+        .goals
+        .create(&constancia("Guardar", 300.0, "R$", Some(10.0), &habit))
+        .unwrap();
+    w.habits
+        .tick(
+            &habit,
+            Some(&format_day(chrono::Local::now().date_naive())),
+            TickStatus::Done,
+            None,
+        )
+        .unwrap();
+
+    w.nodes.delete(&habit).unwrap();
+
+    let full = w.goals.get_with_progress(&goal.id).unwrap();
+    let c = full
+        .constancia
+        .expect("a meta continua sendo uma constância");
+    assert!(
+        c.habit_id.is_none(),
+        "o vínculo tinha que ter ido a NULL, não segurado o hábito"
+    );
+    assert!(c.days.is_empty());
+    assert!(full.progress.formula.contains("não tem um hábito ligado"));
+    assert_eq!(
+        w.goals.list(None).unwrap().len(),
+        1,
+        "a meta sobrevive ao hábito"
+    );
+    // E ela volta a andar assim que outro hábito é ligado — é o "+ Ligar hábito"
+    // da tela de detalhe fazendo o conserto.
+    let outro = daily_habit(&w, "Guardar de novo");
+    assert_eq!(
+        w.goals
+            .set_habit(&goal.id, Some(&outro))
+            .unwrap()
+            .habit_id
+            .as_deref(),
+        Some(outro.as_str())
+    );
+}
+
+#[test]
+fn a_habit_that_feeds_a_counted_sub_challenge_can_be_deleted_too() {
+    // O MESMO defeito, e ele não nasceu na 0017: `milestone_details.habit_id`
+    // tem a mesma forma de FK desde a 0007. Apagar o hábito "Academia" com um
+    // sub-desafio "30 dias de academia" pendurado nele falhava com
+    // `FOREIGN KEY constraint failed` — em contradição direta com a fase B da
+    // BÚSSOLA (ADR-0056), que prometeu que excluir é um direito.
+    let w = setup();
+    let habit = daily_habit(&w, "Academia");
+    let goal = w.goals.create(&quantitative("Perder 10 kg")).unwrap();
+    let sub = w
+        .goals
+        .add_milestone(&NewMilestone {
+            title: "30 dias de academia".into(),
+            goal_id: goal.id.clone(),
+            kind: MilestoneKind::Counter,
+            habit_id: Some(habit.clone()),
+            target_count: Some(30),
+            weight: 1.0,
+            counts_from: None,
+        })
+        .unwrap();
+
+    w.nodes.delete(&habit).unwrap();
+
+    // O contador sobrevive ao hábito, parado — e a leitura não explode.
+    let full = w.goals.get_with_progress(&goal.id).unwrap();
+    let m = full
+        .milestones
+        .iter()
+        .find(|m| m.milestone.id == sub.id)
+        .unwrap();
+    assert!(
+        m.milestone.habit_id.is_none(),
+        "o vínculo tinha que ir a NULL"
+    );
+    assert_eq!(m.ratio, 0.0);
+    assert!(
+        m.milestone.current_count.is_none(),
+        "sem hábito, não conta nada"
+    );
+}
+
+#[test]
+fn a_habit_can_be_linked_and_unlinked_but_only_on_a_constancia() {
+    // O "+ Ligar hábito" da tela de detalhe, e o conserto do caso acima.
+    let w = setup();
+    let habit = daily_habit(&w, "Guardar dinheiro");
+    let other = daily_habit(&w, "Guardar mais");
+    let goal = w
+        .goals
+        .create(&constancia("Guardar", 300.0, "R$", Some(10.0), &habit))
+        .unwrap();
+
+    let relinked = w.goals.set_habit(&goal.id, Some(&other)).unwrap();
+    assert_eq!(relinked.habit_id.as_deref(), Some(other.as_str()));
+
+    let unlinked = w.goals.set_habit(&goal.id, None).unwrap();
+    assert!(unlinked.habit_id.is_none());
+    let full = w.goals.get_with_progress(&goal.id).unwrap();
+    assert!(full.constancia.as_ref().unwrap().habit_id.is_none());
+    assert!(full.progress.formula.contains("não tem um hábito ligado"));
+
+    // Numa meta que não é constância a coluna nem existe (o CHECK da 0017 a
+    // proíbe): o serviço recusa antes de o banco recusar.
+    let plain = w
+        .goals
+        .create(&metricless("Conseguir um emprego", GoalKind::Binary))
+        .unwrap();
+    assert!(matches!(
+        w.goals.set_habit(&plain.id, Some(&habit)).unwrap_err(),
+        NexusError::Validation(_)
+    ));
+}
+
+#[test]
+fn a_constancia_can_only_be_fed_by_a_habit() {
+    // `habit_id` referencia `nodes(id)`, e `nodes` guarda as 16 espécies: para o
+    // BANCO, apontar para uma meta é uma FK perfeitamente válida. Quem sabe que
+    // só hábito serve é a camada de aplicação.
+    let w = setup();
+    let victim = w
+        .goals
+        .create(&metricless("Uma meta qualquer", GoalKind::Binary))
+        .unwrap();
+
+    let err = w
+        .goals
+        .create(&constancia("Guardar", 300.0, "R$", Some(10.0), &victim.id))
+        .unwrap_err();
+    assert!(
+        matches!(err, NexusError::Validation(ref m) if m.contains("não é um hábito")),
+        "{err:?}"
+    );
+    assert_eq!(
+        w.goals.list(None).unwrap().len(),
+        1,
+        "a meta ruim não nasceu"
+    );
 }
 
 #[test]

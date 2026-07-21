@@ -154,6 +154,10 @@ impl AppState {
             goals: goal_repo.clone(),
             nodes: node_repo.clone(),
             areas: area_repo.clone(),
+            // A série de uma meta de constância são os ticks do hábito ligado
+            // (ADR-0077) — o motor de metas lê `habit_ticks` em vez de manter
+            // uma tabela paralela.
+            habits: habit_repo.clone(),
             ids: ids.clone(),
             clock: clock.clone(),
         };

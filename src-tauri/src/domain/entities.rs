@@ -154,10 +154,12 @@ impl Status {
 
 /// O TIPO de uma meta (BÚSSOLA, fase C).
 ///
-/// Espelha o CHECK de `goal_details.goal_kind` (0016). Fechado porque decide o
-/// que a meta PODE ter: `quantitative` exige os cinco campos de métrica,
-/// `binary` e `staged` proíbem todos os cinco — é o mesmo CHECK de tabela da
-/// 0016, dito de novo aqui, onde a mensagem de erro pode ser em português.
+/// Espelha o CHECK de `goal_details.goal_kind` (0016, ampliado pela 0017).
+/// Fechado porque decide o que a meta PODE ter: `quantitative` exige os cinco
+/// campos de métrica, `binary` e `staged` proíbem todos os cinco, e
+/// `constancia` fica no meio (alvo, unidade e direção; sem métrica nem
+/// partida) — é o mesmo CHECK de tabela da 0017, dito de novo aqui, onde a
+/// mensagem de erro pode ser em português.
 ///
 /// Não se confunde com `AnnualGoalKind`: aquele é da meta ANUAL (satélite
 /// `annual_goal_details`, 0012) e só tem dois valores. São duas entidades
@@ -173,6 +175,14 @@ pub enum GoalKind {
     /// A ESCADA de níveis nomeados — "Básico -> Fluente". O progresso é o degrau
     /// atual sobre o total, e os degraus SÃO os sub-desafios, em `sort_order`.
     Staged,
+    /// A CONSTÂNCIA — "guardar R$ 10 por dia", "30 dias sem fritura". Marca-se
+    /// TODO DIA; o progresso é o acumulado contra o alvo. Ela tem alvo, unidade
+    /// e direção, mas não tem métrica nem ponto de partida: uma constância
+    /// começa em zero por definição, e o nome do que ela mede é o título dela.
+    ///
+    /// Por baixo ela é um HÁBITO (ADR-0077): a série dela é `habit_ticks`, e é
+    /// por isso que ela aparece nos Checkpoints do dia e se preenche sozinha.
+    Constancia,
 }
 
 impl GoalKind {
@@ -181,6 +191,7 @@ impl GoalKind {
             GoalKind::Quantitative => "quantitative",
             GoalKind::Binary => "binary",
             GoalKind::Staged => "staged",
+            GoalKind::Constancia => "constancia",
         }
     }
 
@@ -189,9 +200,10 @@ impl GoalKind {
             "quantitative" => GoalKind::Quantitative,
             "binary" => GoalKind::Binary,
             "staged" => GoalKind::Staged,
+            "constancia" => GoalKind::Constancia,
             other => {
                 return Err(NexusError::Validation(format!(
-                    "tipo de meta desconhecido: {other} (esperado 'quantitative', 'binary' ou 'staged')"
+                    "tipo de meta desconhecido: {other} (esperado 'quantitative', 'binary', 'staged' ou 'constancia')"
                 )))
             }
         })
@@ -200,6 +212,23 @@ impl GoalKind {
     /// Uma meta sem métrica não tem o que dividir: ela só mede pelos degraus.
     pub fn is_quantitative(self) -> bool {
         matches!(self, GoalKind::Quantitative)
+    }
+
+    /// Quem tem ALVO pode ser medido pela régua da métrica.
+    ///
+    /// Não é a mesma pergunta que `is_quantitative`: a constância não tem
+    /// `metric_name` nem `start_value`, mas tem `target_value` — e é contra ele
+    /// que o acumulado dela é dividido. É literalmente o segundo CHECK da 0017
+    /// (`goal_kind IN ('quantitative','constancia') OR progress_source =
+    /// 'milestones'`), dito onde o erro sai em português.
+    pub fn can_measure_by_metric(self) -> bool {
+        matches!(self, GoalKind::Quantitative | GoalKind::Constancia)
+    }
+
+    /// A constância guarda `habit_id` e `daily_target`; todo o resto os proíbe
+    /// (o terceiro CHECK da 0017).
+    pub fn is_constancia(self) -> bool {
+        matches!(self, GoalKind::Constancia)
     }
 }
 
@@ -830,6 +859,28 @@ mod tests {
         assert!(Direction::parse("subir").is_err());
         assert!(ProgressSource::parse("vibes").is_err());
         assert!(MilestoneKind::parse("timer").is_err());
+
+        // Os QUATRO tipos de meta da 0017. O `constancia` sem acento é o que
+        // está no CHECK — trocar por "constância" aqui gravaria uma linha que o
+        // banco recusa, e o teste existe exatamente para prender essa string.
+        for k in [
+            GoalKind::Quantitative,
+            GoalKind::Binary,
+            GoalKind::Staged,
+            GoalKind::Constancia,
+        ] {
+            assert_eq!(GoalKind::parse(k.as_str()).unwrap(), k);
+        }
+        assert_eq!(GoalKind::Constancia.as_str(), "constancia");
+        assert!(GoalKind::parse("diaria").is_err());
+
+        // As duas perguntas que a 0017 separou: quem tem ALVO (e portanto pode
+        // medir pela métrica) não é a mesma coisa que quem tem MÉTRICA.
+        assert!(GoalKind::Constancia.can_measure_by_metric());
+        assert!(!GoalKind::Constancia.is_quantitative());
+        assert!(!GoalKind::Binary.can_measure_by_metric());
+        assert!(!GoalKind::Staged.can_measure_by_metric());
+        assert!(GoalKind::Quantitative.can_measure_by_metric());
     }
 
     #[test]

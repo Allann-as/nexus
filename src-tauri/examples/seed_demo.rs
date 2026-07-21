@@ -70,7 +70,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         clock: clock.clone(),
     };
     let habits = HabitService {
-        habits: habit_repo,
+        habits: habit_repo.clone(),
         nodes: node_repo.clone(),
         areas: area_repo.clone(),
         ids: ids.clone(),
@@ -94,6 +94,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         goals: goal_repo,
         nodes: node_repo.clone(),
         areas: area_repo.clone(),
+        habits: habit_repo.clone(),
         ids: ids.clone(),
         clock: clock.clone(),
     };
@@ -520,6 +521,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             direction: Some(Direction::Decrease),
             deadline: Some(at(today + chrono::Duration::days(150), 12, 0)),
             progress_source: ProgressSource::Metric,
+            habit_id: None,
+            daily_target: None,
         },
     })?;
 
@@ -591,6 +594,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             direction: Some(Direction::Increase),
             deadline: None,
             progress_source: ProgressSource::Milestones,
+            habit_id: None,
+            daily_target: None,
         },
     })?;
     for (i, title) in [

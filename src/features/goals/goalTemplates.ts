@@ -25,6 +25,32 @@
 
 import type { GoalKind, Template } from "../../lib/ipc";
 
+/**
+ * O formato de CONSTÂNCIA de uma Esfera (v1.3, fase 3b).
+ *
+ * Uma constância tem duas leituras possíveis, e cada Esfera prefere uma:
+ *
+ *   * **acumular um valor** — "guardar R$ 10 por dia até R$ 3.650". Tem
+ *     `dailyTarget`, e a unidade é a coisa acumulada (R$, páginas, minutos).
+ *   * **contar dias** — "30 dias sem fritura". Não tem `dailyTarget`: o que se
+ *     conta é ter marcado o dia, e a unidade É "dias".
+ *
+ * Oferecer "R$ por dia" em Saúde ou "kg por dia" em Finanças é o mesmo erro que
+ * abriu a fase C da v1.2 — por isso isto é catálogo, e não um formulário só.
+ */
+export type ConstanciaTemplate = {
+  /** O exemplo no título. */
+  titlePlaceholder: string;
+  /** O nome do hábito que vai alimentar a meta — o que aparece nos Checkpoints. */
+  habitPlaceholder: string;
+  /** A unidade do que se acumula. "dias" quando a Esfera conta dias. */
+  unit: string;
+  /** O exemplo do alvo POR DIA. Vazio = esta Esfera conta DIAS, não valores. */
+  dailyPlaceholder: string;
+  /** O exemplo do alvo total. */
+  targetPlaceholder: string;
+};
+
 export type GoalTemplate = {
   /** O tipo que o formulário abre marcado nesta Esfera. */
   defaultKind: GoalKind;
@@ -39,6 +65,8 @@ export type GoalTemplate = {
    * escada óbvia, e o usuário nomeia os dele do zero.
    */
   stages: string[];
+  /** O formato de constância desta Esfera. */
+  constancia: ConstanciaTemplate;
 };
 
 /**
@@ -51,6 +79,13 @@ const GENERIC: GoalTemplate = {
   metricPlaceholder: "O que você vai medir",
   units: ["unidades", "vezes", "dias", "horas"],
   stages: [],
+  constancia: {
+    titlePlaceholder: "30 dias seguidos",
+    habitPlaceholder: "O que você vai fazer todo dia",
+    unit: "dias",
+    dailyPlaceholder: "",
+    targetPlaceholder: "30",
+  },
 };
 
 export const GOAL_TEMPLATES: Record<Template, GoalTemplate> = {
@@ -63,6 +98,15 @@ export const GOAL_TEMPLATES: Record<Template, GoalTemplate> = {
     metricPlaceholder: "Peso",
     units: ["kg", "treinos", "km", "horas", "dias"],
     stages: [],
+    /* Saúde conta DIAS: "30 dias sem fritura", "60 dias dormindo 8 h". Um alvo
+       diário em kg não existe — ninguém perde 0,2 kg por dia por decisão. */
+    constancia: {
+      titlePlaceholder: "30 dias sem fritura",
+      habitPlaceholder: "Comer sem fritura",
+      unit: "dias",
+      dailyPlaceholder: "",
+      targetPlaceholder: "30",
+    },
   },
 
   /* Finanças mede em dinheiro, sempre. A unidade é R$ e ponto — oferecer "kg"
@@ -73,6 +117,15 @@ export const GOAL_TEMPLATES: Record<Template, GoalTemplate> = {
     metricPlaceholder: "Valor investido",
     units: ["R$"],
     stages: [],
+    /* Finanças ACUMULA valor: "guardar R$ 10 por dia". A unidade é R$ e ponto —
+       oferecer "kg" aqui foi o sintoma que abriu a fase C da v1.2. */
+    constancia: {
+      titlePlaceholder: "Guardar R$ 10 por dia",
+      habitPlaceholder: "Guardar o dinheiro do dia",
+      unit: "R$",
+      dailyPlaceholder: "10",
+      targetPlaceholder: "3650",
+    },
   },
 
   /* Os objetivos financeiros (as caixinhas) têm tela própria com depósito e
@@ -83,6 +136,13 @@ export const GOAL_TEMPLATES: Record<Template, GoalTemplate> = {
     metricPlaceholder: "Valor guardado",
     units: ["R$"],
     stages: [],
+    constancia: {
+      titlePlaceholder: "Guardar R$ 20 por dia para a entrada",
+      habitPlaceholder: "Separar o valor do dia",
+      unit: "R$",
+      dailyPlaceholder: "20",
+      targetPlaceholder: "7300",
+    },
   },
 
   /* Carreira é a Esfera das CONQUISTAS: conseguir um emprego, ser promovido,
@@ -95,6 +155,15 @@ export const GOAL_TEMPLATES: Record<Template, GoalTemplate> = {
     metricPlaceholder: "O que você vai medir",
     units: ["entrevistas", "candidaturas", "projetos", "R$"],
     stages: ["Preparação", "Candidaturas", "Entrevistas", "Proposta aceita"],
+    /* Carreira acumula ESFORÇO diário rumo a uma conquista: candidaturas
+       enviadas, horas de portfólio. Conta unidades, não dias. */
+    constancia: {
+      titlePlaceholder: "Uma candidatura por dia",
+      habitPlaceholder: "Enviar uma candidatura",
+      unit: "candidaturas",
+      dailyPlaceholder: "1",
+      targetPlaceholder: "90",
+    },
   },
 
   /* Estudos evolui por NÍVEL: básico, intermediário, avançado, fluente. É a
@@ -106,6 +175,15 @@ export const GOAL_TEMPLATES: Record<Template, GoalTemplate> = {
     metricPlaceholder: "Horas estudadas",
     units: ["horas", "aulas", "páginas", "capítulos"],
     stages: ["Básico", "Intermediário", "Avançado", "Fluente"],
+    /* Estudos acumula PÁGINAS ou minutos por dia — a constância que faz um
+       idioma sair do lugar é a de todo dia, não a da maratona de domingo. */
+    constancia: {
+      titlePlaceholder: "20 páginas por dia",
+      habitPlaceholder: "Ler 20 páginas",
+      unit: "páginas",
+      dailyPlaceholder: "20",
+      targetPlaceholder: "600",
+    },
   },
 
   simple: GENERIC,

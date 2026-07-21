@@ -17,11 +17,13 @@ import { useToasts } from "../../stores/toasts";
 import {
   addGoalCheckpoint,
   addMilestone,
+  createHabit,
   deleteNode,
   goalWithProgress,
   listAreas,
   listGoals,
   moveMilestone,
+  setGoalHabit,
   setGoalProgressSource,
   setMilestoneDone,
   type MilestoneView,
@@ -80,6 +82,81 @@ export function GoalsList({ areaId }: { areaId: string | null }) {
     mutationFn: ({ goalId, title }: { goalId: string; title: string }) =>
       addMilestone({ goalId, title }),
     onSuccess: (_r, { goalId }) => refresh(goalId),
+    onError: pushError,
+  });
+
+  /* O sub-desafio que RENOVA TODO DIA: um hábito diário mais o 'counter' que ele
+     alimenta (§4 da 0007). Duas chamadas e não uma transação porque são dois
+     nodes de espécies diferentes, e o desfecho parcial é benigno: se a segunda
+     falhar, sobra um hábito diário — uma coisa útil e deletável. A ordem
+     inversa deixaria um contador sem quem o contasse, que é o estado inútil.
+
+     `areaId` do hábito é o da META, não o filtro da tela: um sub-desafio de uma
+     meta de Saúde tem que aparecer nos Checkpoints de Saúde mesmo que a lista
+     esteja em "Todas". */
+  const addDaily = useMutation({
+    mutationFn: async ({
+      goalId,
+      goalAreaId,
+      title,
+      targetCount,
+    }: {
+      goalId: string;
+      goalAreaId: string | null;
+      title: string;
+      targetCount: number;
+    }) => {
+      const habit = await createHabit({
+        title,
+        areaId: goalAreaId,
+        schedule: { type: "daily" },
+      });
+      return addMilestone({
+        goalId,
+        title,
+        kind: "counter",
+        habitId: habit.id,
+        targetCount,
+      });
+    },
+    onSuccess: (_r, { goalId }) => {
+      refresh(goalId);
+      // O hábito novo entra no checklist de hoje da Esfera e no Hub — as duas
+      // telas que ninguém recarrega a partir daqui.
+      void client.invalidateQueries({ queryKey: ["habits"] });
+      void client.invalidateQueries({ queryKey: ["spheres", "overview"] });
+      push("success", "Hábito diário criado e ligado à meta");
+    },
+    onError: pushError,
+  });
+
+  /* Religar o hábito de uma constância que ficou sem um — porque o hábito foi
+     excluído (a 0018 zera o vínculo, ADR-0078) ou porque a meta foi criada sem.
+     Criar um novo é o caminho de um clique; escolher entre os que já existem
+     seria uma lista dentro de um card, e o card não é o lugar disso. */
+  const linkHabit = useMutation({
+    mutationFn: async ({
+      goalId,
+      goalAreaId,
+      title,
+    }: {
+      goalId: string;
+      goalAreaId: string | null;
+      title: string;
+    }) => {
+      const habit = await createHabit({
+        title,
+        areaId: goalAreaId,
+        schedule: { type: "daily" },
+      });
+      return setGoalHabit(goalId, habit.id);
+    },
+    onSuccess: (_r, { goalId }) => {
+      refresh(goalId);
+      void client.invalidateQueries({ queryKey: ["habits"] });
+      void client.invalidateQueries({ queryKey: ["spheres", "overview"] });
+      push("success", "Hábito ligado — marque o dia para a meta andar");
+    },
     onError: pushError,
   });
 
@@ -191,6 +268,12 @@ export function GoalsList({ areaId }: { areaId: string | null }) {
           onDeleteMilestone={(m) => removeMilestone.mutate({ m })}
           deletingMilestoneId={
             removeMilestone.isPending ? (removeMilestone.variables?.m.id ?? null) : null
+          }
+          onAddDailyMilestone={(title, targetCount) =>
+            addDaily.mutate({ goalId: goal.id, goalAreaId: goal.areaId, title, targetCount })
+          }
+          onLinkHabit={() =>
+            linkHabit.mutate({ goalId: goal.id, goalAreaId: goal.areaId, title: goal.title })
           }
         />
       ))}

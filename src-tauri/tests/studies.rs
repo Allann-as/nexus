@@ -54,6 +54,7 @@ fn setup() -> Studies {
             goals: Arc::new(SqliteGoalRepository::new(db.clone())),
             nodes: Arc::new(SqliteNodeRepository::new(db.clone())),
             areas: area_repo.clone(),
+            habits: habit_repo.clone(),
             ids: ids.clone(),
             clock: clock.clone(),
         },
@@ -340,6 +341,8 @@ fn make_goal(s: &Studies, title: &str, kind: GoalKind) -> String {
             direction: None,
             deadline: None,
             progress_source: ProgressSource::Metric,
+            habit_id: None,
+            daily_target: None,
         },
         _ => NewGoalDetails {
             goal_kind: kind,
@@ -350,6 +353,8 @@ fn make_goal(s: &Studies, title: &str, kind: GoalKind) -> String {
             direction: None,
             deadline: None,
             progress_source: ProgressSource::Milestones,
+            habit_id: None,
+            daily_target: None,
         },
     };
     s.goals

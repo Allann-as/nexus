@@ -7,11 +7,19 @@
  * básico ao avançado em inglês"* não é um número. E o exemplo "Perder 10 kg"
  * aparecia até dentro de Finanças.
  *
- * Agora o primeiro passo é **que tipo de meta?** (ADR-0071):
+ * Agora o primeiro passo é **que tipo de meta?** (ADR-0071 / ADR-0079):
  *
  *   * QUANTITATIVA — o formato de sempre. Nada aqui regrediu.
  *   * CONQUISTA    — só título. Ou aconteceu, ou não. Os degraus contam o caminho.
  *   * POR ETAPAS   — uma escada de estágios nomeados; o progresso é o degrau atual.
+ *   * CONSTÂNCIA   — marca-se TODO DIA e acumula ("guardar R$ 10 por dia").
+ *
+ * A constância é a que mais mexe neste formulário, porque ela **cria um hábito**:
+ * a série dela É `habit_ticks` (ADR-0077), e é por isso que ela aparece nos
+ * Checkpoints do dia da Esfera e se preenche sozinha ao ser marcada lá. O
+ * salvamento então é hábito → meta, nessa ordem: a meta precisa do id do hábito,
+ * e um hábito sem meta é um hábito perfeitamente útil, enquanto uma constância
+ * sem hábito é uma barra que nada alimenta.
  *
  * E o formulário nasce CONTEXTUAL: os exemplos, as unidades, o tipo que abre
  * marcado e os degraus sugeridos vêm de `goalTemplates.ts`, indexados pelo
@@ -32,7 +40,7 @@ import { Plus, Target, X } from "lucide-react";
 import { Modal, ModalHeader } from "../../design-system/Modal";
 import { Button, cx } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
-import { addMilestone, createGoal, type Area, type GoalKind } from "../../lib/ipc";
+import { addMilestone, createGoal, createHabit, type Area, type GoalKind } from "../../lib/ipc";
 import { SphereIcon } from "../hub/SphereIcon";
 import { goalTemplateFor } from "./goalTemplates";
 
@@ -40,6 +48,11 @@ const KINDS: Array<{ key: GoalKind; label: string; hint: string }> = [
   { key: "quantitative", label: "Com número", hint: "Uma métrica que sobe ou desce até um alvo" },
   { key: "binary", label: "Conquista", hint: "Aconteceu ou não aconteceu" },
   { key: "staged", label: "Por etapas", hint: "Uma escada de níveis nomeados" },
+  {
+    key: "constancia",
+    label: "Constância",
+    hint: "Você marca todo dia, e o feito do dia se acumula até o alvo",
+  },
 ];
 
 export function NewGoalModal({
@@ -67,6 +80,12 @@ export function NewGoalModal({
   const [stages, setStages] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
+  /* Os três campos da constância. `habitTitle` é o nome do HÁBITO que a
+     alimenta — ele nasce junto e é o que aparece nos Checkpoints do dia. */
+  const [habitTitle, setHabitTitle] = useState("");
+  const [habitTouched, setHabitTouched] = useState(false);
+  const [dailyTarget, setDailyTarget] = useState("");
+
   const tpl = useMemo(
     () => goalTemplateFor(areas.find((a) => a.id === areaId)?.template),
     [areas, areaId],
@@ -85,10 +104,26 @@ export function NewGoalModal({
     if (kind === "staged") setStages((s) => (s.length === 0 ? tpl.stages : s));
   }, [kind, tpl]);
 
+  /* A constância nasce com a unidade e o alvo diário da Esfera já preenchidos —
+     em Finanças isso é "R$ 10", em Saúde é "dias" sem alvo diário nenhum. Como
+     nos degraus, a sugestão só entra enquanto o usuário não digitou por cima. */
+  useEffect(() => {
+    if (kind !== "constancia") return;
+    setUnit((u) => (u === "" ? tpl.constancia.unit : u));
+    setDailyTarget((d) => (d === "" ? tpl.constancia.dailyPlaceholder : d));
+  }, [kind, tpl]);
+
   const start = Number(startValue.replace(",", "."));
   const target = Number(targetValue.replace(",", "."));
+  const daily = dailyTarget.trim() === "" ? null : Number(dailyTarget.replace(",", "."));
 
   const namedStages = stages.map((s) => s.trim()).filter((s) => s !== "");
+
+  /* O hábito, quando o usuário não o nomeou, é o próprio título da meta:
+     "Guardar R$ 10 por dia" é um nome perfeitamente bom para o que aparece no
+     checklist do dia. Pedir dois nomes obrigatórios para uma coisa só seria
+     burocracia — o campo existe para quem QUER separá-los. */
+  const effectiveHabit = (habitTouched && habitTitle.trim()) || title.trim();
 
   const valid =
     title.trim() !== "" &&
@@ -100,25 +135,56 @@ export function NewGoalModal({
         start !== target)) &&
     // Uma escada sem degraus é uma escada sem degrau nenhum para subir: ela
     // nasceria em 0/0 e nunca sairia dali.
-    (kind !== "staged" || namedStages.length >= 2);
+    (kind !== "staged" || namedStages.length >= 2) &&
+    // Uma constância precisa do alvo a acumular e da unidade dele; o alvo POR
+    // DIA é opcional (sem ele, ela conta DIAS), mas se vier tem que ser > 0.
+    (kind !== "constancia" ||
+      (unit.trim() !== "" &&
+        Number.isFinite(target) &&
+        target > 0 &&
+        (daily === null || (Number.isFinite(daily) && daily > 0))));
 
   const submit = async () => {
     if (!valid || saving) return;
     setSaving(true);
     try {
       const quantitative = kind === "quantitative";
+      const constancia = kind === "constancia";
+
+      /* O HÁBITO vem primeiro, porque a meta precisa do id dele. Se a criação da
+         meta falhar depois disto, sobra um hábito diário — que é uma coisa útil
+         e deletável, não lixo. A ordem inversa deixaria uma meta de constância
+         sem série nenhuma, que é o estado inútil dos dois. */
+      const habit = constancia
+        ? await createHabit({
+            title: effectiveHabit,
+            areaId,
+            schedule: { type: "daily" },
+            // O hábito herda o alvo diário: marcar "R$ 30" no dia é digitar no
+            // hábito, e é esse `value` que o acumulado da meta soma.
+            targetValue: daily,
+            unit: daily === null ? null : unit.trim(),
+          })
+        : null;
+
       const goal = await createGoal({
         title: title.trim(),
         areaId,
         goalKind: kind,
         // Os cinco campos da métrica só existem na quantitativa. O banco recusa
         // qualquer um deles nos outros tipos (o CHECK por tipo da 0016).
+        //
+        // A constância fica no MEIO: ela tem alvo e unidade, e NÃO tem métrica
+        // nem partida (o terceiro braço do CHECK da 0017). A direção o backend
+        // força para 'increase' — uma constância só acumula.
         metricName: quantitative ? metricName.trim() : null,
         startValue: quantitative ? start : null,
-        targetValue: quantitative ? target : null,
-        unit: quantitative ? unit.trim() : null,
+        targetValue: quantitative || constancia ? target : null,
+        unit: quantitative || constancia ? unit.trim() : null,
         // A direção é DERIVADA pelo backend a partir do par de números.
-        progressSource: quantitative ? "metric" : "milestones",
+        progressSource: quantitative || constancia ? "metric" : "milestones",
+        habitId: habit?.id ?? null,
+        dailyTarget: constancia ? daily : null,
       });
 
       // Os degraus da escada, em ordem. Sequencial de propósito: `sort_order` sai
@@ -153,7 +219,9 @@ export function NewGoalModal({
       ? "Uma métrica, um começo honesto e um alvo"
       : kind === "binary"
         ? "A linha de chegada; os degraus vêm depois"
-        : "Os degraus da escada, do primeiro ao último";
+        : kind === "staged"
+          ? "Os degraus da escada, do primeiro ao último"
+          : "Um dia de cada vez, somando até o alvo";
 
   return (
     <Modal onClose={onClose}>
@@ -166,7 +234,7 @@ export function NewGoalModal({
             <span className="text-[10px] tracking-[0.1em] text-[var(--text-tertiary)] uppercase">
               Tipo
             </span>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {KINDS.map((k) => (
                 <button
                   key={k.key}
@@ -196,7 +264,9 @@ export function NewGoalModal({
             autoFocus
             value={title}
             onChange={setTitle}
-            placeholder={tpl.titlePlaceholder}
+            placeholder={
+              kind === "constancia" ? tpl.constancia.titlePlaceholder : tpl.titlePlaceholder
+            }
             label="Meta"
           />
 
@@ -223,6 +293,56 @@ export function NewGoalModal({
                   </Chip>
                 ))}
               </div>
+            </>
+          )}
+
+          {/* ===== a constância: quanto por dia, até quanto, e o hábito ===== */}
+          {kind === "constancia" && (
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                <Input
+                  value={dailyTarget}
+                  onChange={setDailyTarget}
+                  placeholder={tpl.constancia.dailyPlaceholder || "opcional"}
+                  label="Por dia"
+                />
+                <Input
+                  value={targetValue}
+                  onChange={setTargetValue}
+                  placeholder={tpl.constancia.targetPlaceholder}
+                  label="Até acumular"
+                />
+                <Input
+                  value={unit}
+                  onChange={setUnit}
+                  placeholder={tpl.constancia.unit}
+                  label="Unidade"
+                />
+              </div>
+
+              {/* A frase que diz o que vai acontecer, com os números que o
+                  usuário acabou de digitar. Um formulário de constância sem ela
+                  faz o dono adivinhar se "30" é dias ou reais. */}
+              <p className="text-[11px] leading-[17px] text-[var(--text-tertiary)]">
+                {constanciaSentence(daily, target, unit)}
+              </p>
+
+              <Input
+                value={habitTouched ? habitTitle : effectiveHabit}
+                onChange={(v) => {
+                  setHabitTouched(true);
+                  setHabitTitle(v);
+                }}
+                placeholder={tpl.constancia.habitPlaceholder}
+                label="Hábito diário (aparece nos Checkpoints)"
+              />
+              {/* O que a constância REALMENTE cria, dito antes de criar: um
+                  hábito diário. Ele é a série da meta (ADR-0077), e marcar ele
+                  no dia é o que move a barra — não há um segundo lugar. */}
+              <p className="text-[11px] leading-[17px] text-[var(--text-tertiary)]">
+                Um hábito diário com este nome é criado junto e entra nos
+                Checkpoints de hoje. Marcar ele lá é o que move esta meta.
+              </p>
             </>
           )}
 
@@ -302,6 +422,35 @@ export function NewGoalModal({
       </div>
     </Modal>
   );
+}
+
+/**
+ * A frase que diz, com os números que o usuário acabou de digitar, o que vai
+ * acontecer quando ele marcar o dia.
+ *
+ * Ela existe porque "30" sozinho é ambíguo: 30 dias? 30 reais? A regra do
+ * ADR-0079 — sem alvo diário a constância conta DIAS, com alvo diário ela soma
+ * VALORES — só é óbvia depois de explicada uma vez, e este é o lugar de explicar.
+ *
+ * Função livre e exportada para ser testável sozinha: é texto com concordância,
+ * e concordância errada ("1 dias") é a marca de um app que ninguém leu.
+ */
+export function constanciaSentence(
+  daily: number | null,
+  target: number,
+  unit: string,
+): string {
+  const u = unit.trim();
+  const hasTarget = Number.isFinite(target) && target > 0;
+
+  if (daily === null) {
+    const base = `Cada dia marcado conta 1 ${u || "dia"}`;
+    return hasTarget ? `${base} — a meta fecha em ${target}.` : `${base}.`;
+  }
+  const base = `Marcar o dia conta ${daily} ${u}`;
+  return hasTarget
+    ? `${base}, e a meta fecha ao somar ${target} ${u}.`
+    : `${base}. Digite um valor diferente no dia para corrigir.`;
 }
 
 function Input({

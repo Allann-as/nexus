@@ -37,6 +37,7 @@ fn migration_set() -> Vec<M<'static>> {
         M::up(include_str!("../../../migrations/0015_focus_sessions.sql")),
         M::up(include_str!("../../../migrations/0016_compass.sql")),
         M::up(include_str!("../../../migrations/0017_goal_engine.sql")),
+        M::up(include_str!("../../../migrations/0018_habit_unlinks.sql")),
     ]
 }
 
@@ -1305,6 +1306,223 @@ mod tests {
                 .query_row("SELECT COUNT(*) FROM goal_details", [], |r| r.get(0))
                 .unwrap();
             assert_eq!(n, 3, "as metas não se multiplicaram nem sumiram");
+        }
+    }
+
+    /// A 0018 conserta um defeito que existia desde a **0007**: um hábito ligado
+    /// a um sub-desafio contado, a uma temporada ou a uma constância era
+    /// **indelével** — o DELETE voltava `FOREIGN KEY constraint failed`, porque
+    /// `REFERENCES nodes(id)` sem `ON DELETE` é NO ACTION, não "sem CASCADE".
+    ///
+    /// Cada teste daqui prova as DUAS metades: o pai SAI, e o filho FICA com o
+    /// vínculo desfeito. Um teste que só apagasse o hábito passaria mesmo se a
+    /// migration tivesse escrito CASCADE por engano — e CASCADE aqui apagaria a
+    /// meta do usuário junto com o hábito.
+    mod habit_unlinks {
+        use super::*;
+
+        /// Um banco no estado da 0017 — antes da correção — com um hábito
+        /// segurado pelas TRÊS colunas ao mesmo tempo.
+        fn seeded_at_v17() -> Connection {
+            let mut conn = Connection::open_in_memory().unwrap();
+            migrations().to_version(&mut conn, 17).unwrap();
+            conn.execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 INSERT INTO areas (id, name) VALUES ('a1', 'Saude');
+
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('h1', 'habit', 'Academia', 'a1', 100, 100);
+                 INSERT INTO habit_details (node_id, schedule_json)
+                      VALUES ('h1', '{\"kind\":\"daily\"}');
+
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('g1', 'goal', 'Perder 10 kg', 'a1', 100, 100);
+                 INSERT INTO goal_details
+                      (node_id, goal_kind, metric_name, start_value, target_value,
+                       unit, direction, progress_source)
+                      VALUES ('g1', 'quantitative', 'Peso', 90.0, 80.0, 'kg',
+                              'decrease', 'metric');
+
+                 INSERT INTO nodes (id, kind, title, area_id, parent_id, created_at, updated_at)
+                      VALUES ('m1', 'milestone', '30 dias de academia', 'a1', 'g1', 100, 100);
+                 INSERT INTO milestone_details
+                      (node_id, kind, habit_id, target_count, counts_from)
+                      VALUES ('m1', 'counter', 'h1', 30, '2026-07-01');
+
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('t1', 'challenge', 'Julho na academia', 'a1', 100, 100);
+                 INSERT INTO challenge_details
+                      (node_id, starts_on, ends_on, metric, habit_id, target_count)
+                      VALUES ('t1', '2026-07-01', '2026-07-31', 'habit_days', 'h1', 20);
+
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('g2', 'goal', '30 dias seguidos', 'a1', 100, 100);
+                 INSERT INTO goal_details
+                      (node_id, goal_kind, target_value, unit, direction,
+                       progress_source, habit_id, daily_target)
+                      VALUES ('g2', 'constancia', 30.0, 'dias', 'increase',
+                              'metric', 'h1', NULL);",
+            )
+            .unwrap();
+            conn
+        }
+
+        #[test]
+        fn before_the_fix_the_habit_was_indelible() {
+            // O defeito, provado em vez de descrito. Este teste é a razão de a
+            // 0018 existir: sem ele, o próximo leitor teria que acreditar no
+            // cabeçalho da migration.
+            let conn = seeded_at_v17();
+            let err = conn.execute("DELETE FROM nodes WHERE id = 'h1'", []);
+            assert!(
+                err.is_err(),
+                "na 0017 o hábito era indelével — se isto passou, a 0018 perdeu o motivo"
+            );
+        }
+
+        #[test]
+        fn the_three_links_go_to_null_and_the_habit_finally_goes() {
+            let mut conn = seeded_at_v17();
+            migrations().to_latest(&mut conn).unwrap();
+            conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+
+            conn.execute("DELETE FROM nodes WHERE id = 'h1'", [])
+                .unwrap();
+
+            // Metade 1: o pai saiu.
+            let habits: i64 = conn
+                .query_row("SELECT COUNT(*) FROM nodes WHERE id = 'h1'", [], |r| {
+                    r.get(0)
+                })
+                .unwrap();
+            assert_eq!(habits, 0);
+
+            // Metade 2: os três filhos FICARAM, sem o vínculo. Se a migration
+            // tivesse escrito CASCADE, estas três contagens seriam zero — e o
+            // usuário teria perdido uma meta, um sub-desafio e uma temporada por
+            // ter apagado um hábito.
+            for (table, id) in [
+                ("milestone_details", "m1"),
+                ("challenge_details", "t1"),
+                ("goal_details", "g2"),
+            ] {
+                let habit: Option<String> = conn
+                    .query_row(
+                        &format!("SELECT habit_id FROM {table} WHERE node_id = ?1"),
+                        [id],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or_else(|e| panic!("{table}/{id} sumiu junto com o hábito: {e}"));
+                assert!(habit.is_none(), "{table}/{id} devia ter ido a NULL");
+            }
+
+            let mut stmt = conn.prepare("PRAGMA foreign_key_check").unwrap();
+            assert!(
+                stmt.query([]).unwrap().next().unwrap().is_none(),
+                "as três reconstruções não deixaram referência órfã"
+            );
+        }
+
+        #[test]
+        fn the_data_of_the_three_tables_survives_the_rebuild() {
+            // Três tabelas recriadas de uma vez: o que elas guardavam tem que
+            // atravessar inteiro, incluindo o `counts_from` que a 0009 acrescentou
+            // e que um INSERT ... SELECT desatento deixaria para trás.
+            let mut conn = seeded_at_v17();
+            migrations().to_latest(&mut conn).unwrap();
+
+            let (kind, target, counts_from): (String, i64, String) = conn
+                .query_row(
+                    "SELECT kind, target_count, counts_from FROM milestone_details
+                      WHERE node_id = 'm1'",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .unwrap();
+            assert_eq!(
+                (kind.as_str(), target, counts_from.as_str()),
+                ("counter", 30, "2026-07-01")
+            );
+
+            let (metric, target): (String, i64) = conn
+                .query_row(
+                    "SELECT metric, target_count FROM challenge_details WHERE node_id = 't1'",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!((metric.as_str(), target), ("habit_days", 20));
+
+            let (kind, unit): (String, String) = conn
+                .query_row(
+                    "SELECT goal_kind, unit FROM goal_details WHERE node_id = 'g2'",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!((kind.as_str(), unit.as_str()), ("constancia", "dias"));
+        }
+
+        #[test]
+        fn the_invariants_of_the_rebuilt_tables_are_still_live() {
+            // A terceira reconstrução de `goal_details` reescreve os três CHECKs
+            // à mão. Um deles esquecido passaria despercebido até o dia em que o
+            // banco aceitasse uma meta incoerente.
+            let mut conn = seeded_at_v17();
+            migrations().to_latest(&mut conn).unwrap();
+            conn.execute_batch(
+                "INSERT INTO nodes (id, kind, title, created_at, updated_at)
+                      VALUES ('g9', 'goal', 'Incoerente', 0, 0);",
+            )
+            .unwrap();
+
+            // Uma conquista não pode fingir métrica (o CHECK por tipo).
+            assert!(conn
+                .execute(
+                    "INSERT INTO goal_details (node_id, goal_kind, target_value, progress_source)
+                          VALUES ('g9', 'binary', 100.0, 'milestones')",
+                    [],
+                )
+                .is_err());
+
+            // Só a constância carrega hábito e alvo diário (o CHECK de exclusividade).
+            assert!(conn
+                .execute(
+                    "INSERT INTO goal_details
+                          (node_id, goal_kind, metric_name, start_value, target_value,
+                           unit, direction, progress_source, daily_target)
+                          VALUES ('g9', 'quantitative', 'Peso', 90.0, 80.0, 'kg',
+                                  'decrease', 'metric', 10.0)",
+                    [],
+                )
+                .is_err());
+
+            // E o peso de um sub-desafio segue tendo que ser positivo (0007).
+            assert!(conn
+                .execute(
+                    "INSERT INTO milestone_details (node_id, kind, weight)
+                          VALUES ('g9', 'simple', 0)",
+                    [],
+                )
+                .is_err());
+        }
+
+        #[test]
+        fn running_the_unlink_twice_is_a_no_op() {
+            let mut conn = seeded_at_v17();
+            migrations().to_latest(&mut conn).unwrap();
+            migrations().to_latest(&mut conn).unwrap();
+
+            for (table, expected) in [
+                ("milestone_details", 1i64),
+                ("challenge_details", 1),
+                ("goal_details", 2),
+            ] {
+                let n: i64 = conn
+                    .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+                    .unwrap();
+                assert_eq!(n, expected, "{table} se multiplicou ou sumiu");
+            }
         }
     }
 }

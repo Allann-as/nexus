@@ -28,7 +28,7 @@ impl SqliteGoalRepository {
 const SELECT_GOAL: &str = "
     SELECT n.id, n.title, n.area_id, n.status, g.goal_kind,
            g.metric_name, g.start_value, g.target_value, g.unit, g.direction,
-           g.deadline, g.progress_source
+           g.deadline, g.progress_source, g.habit_id, g.daily_target
       FROM nodes n
       JOIN goal_details g ON g.node_id = n.id";
 
@@ -84,6 +84,10 @@ fn map_goal(row: &Row) -> rusqlite::Result<Goal> {
             .map_err(to_sql_err)?,
         deadline: row.get(10)?,
         progress_source: ProgressSource::parse(&source).map_err(to_sql_err)?,
+        // Os dois campos da constância (0017). NULL em todo outro tipo, por
+        // CHECK — não por convenção.
+        habit_id: row.get(12)?,
+        daily_target: row.get(13)?,
     })
 }
 
@@ -129,8 +133,8 @@ impl GoalRepository for SqliteGoalRepository {
             tx.execute(
                 "INSERT INTO goal_details
                    (node_id, goal_kind, metric_name, start_value, target_value, unit,
-                    direction, deadline, progress_source)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    direction, deadline, progress_source, habit_id, daily_target)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 params![
                     id,
                     d.goal_kind.as_str(),
@@ -141,6 +145,8 @@ impl GoalRepository for SqliteGoalRepository {
                     d.direction.map(Direction::as_str),
                     d.deadline,
                     d.progress_source.as_str(),
+                    d.habit_id,
+                    d.daily_target,
                 ],
             )?;
             append_in_tx(&tx, event)?;
@@ -347,6 +353,23 @@ impl GoalRepository for SqliteGoalRepository {
         })
     }
 
+    fn set_habit(&self, goal_id: &str, habit_id: Option<&str>) -> Result<Goal> {
+        self.db.with_write(|c| {
+            let changed = c.execute(
+                "UPDATE goal_details SET habit_id = ?2 WHERE node_id = ?1",
+                params![goal_id, habit_id],
+            )?;
+            if changed == 0 {
+                return Err(NexusError::NotFound(format!("meta {goal_id}")));
+            }
+            Ok(c.query_row(
+                &format!("{SELECT_GOAL} WHERE n.id = ?1"),
+                params![goal_id],
+                map_goal,
+            )?)
+        })
+    }
+
     fn milestone_neighbours(
         &self,
         goal_id: &str,
@@ -476,6 +499,8 @@ mod tests {
                 direction: Some(Direction::Decrease),
                 deadline: None,
                 progress_source: ProgressSource::Metric,
+                habit_id: None,
+                daily_target: None,
             },
             &ledger_event("g1", Kind::Goal),
         )
@@ -502,6 +527,8 @@ mod tests {
                 direction: None,
                 deadline: None,
                 progress_source: ProgressSource::Milestones,
+                habit_id: None,
+                daily_target: None,
             },
             &ledger_event(id, Kind::Goal),
         )

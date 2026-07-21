@@ -684,6 +684,14 @@ pub struct NewGoalDetails {
     pub direction: Option<Direction>,
     pub deadline: Option<i64>,
     pub progress_source: ProgressSource,
+    /// O hábito que alimenta uma CONSTÂNCIA (0017). `None` em todo outro tipo —
+    /// e `None` também numa constância criada antes de o hábito existir: a tela
+    /// oferece "+ Ligar hábito" para o caso.
+    pub habit_id: Option<String>,
+    /// O alvo POR DIA de uma constância: o "R$ 10" de "guardar R$ 10 por dia".
+    /// `None` quando a constância é binária ("30 dias sem fritura" — conta ter
+    /// marcado o dia, não quanto).
+    pub daily_target: Option<f64>,
 }
 
 #[derive(Debug, Clone)]
@@ -711,6 +719,9 @@ pub struct Goal {
     pub direction: Option<Direction>,
     pub deadline: Option<i64>,
     pub progress_source: ProgressSource,
+    /// O hábito que alimenta a constância (0017). Ver `NewGoalDetails`.
+    pub habit_id: Option<String>,
+    pub daily_target: Option<f64>,
 }
 
 /// Uma medição da métrica, com a data em que foi tomada.
@@ -823,6 +834,13 @@ pub trait GoalRepository: Send + Sync {
     /// régua não é um fato da vida do usuário, é a configuração de como o fato é
     /// medido. Ver ADR-0023.
     fn set_progress_source(&self, goal_id: &str, source: ProgressSource) -> Result<Goal>;
+
+    /// Liga (ou desliga, com `None`) o hábito que alimenta uma constância.
+    ///
+    /// Sem evento de ledger, pela mesma razão do `set_progress_source`: qual
+    /// hábito alimenta a barra é configuração de como o fato é medido — o FATO
+    /// segue sendo o tick, que já tem o evento dele. Ver ADR-0023.
+    fn set_habit(&self, goal_id: &str, habit_id: Option<&str>) -> Result<Goal>;
 
     /// A coordenada dos vizinhos da posição `index` na árvore da meta.
     ///

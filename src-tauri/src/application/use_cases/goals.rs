@@ -6,8 +6,8 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::application::ports::{
-    AreaRepository, Checkpoint, Clock, Goal, GoalRepository, IdGen, Milestone, NewCheckpoint,
-    NewGoal, NewGoalDetails, NewMilestone, NewNode, NodeRepository,
+    AreaRepository, Checkpoint, Clock, Goal, GoalRepository, HabitRepository, IdGen, Milestone,
+    NewCheckpoint, NewGoal, NewGoalDetails, NewMilestone, NewNode, NodeRepository, Tick,
 };
 use crate::domain::entities::{
     validate_title, Direction, GoalKind, Kind, MilestoneKind, ProgressSource, Status,
@@ -17,6 +17,7 @@ use crate::domain::ledger::{EventType, NewLedgerEvent};
 use crate::domain::ordering::order_between;
 use crate::domain::projection::{self, Point, Projection};
 use crate::domain::schedule::{format_day, parse_day};
+use crate::domain::streak::{self, Streaks, TickStatus, Ticks};
 
 /// Um sub-desafio com a fração dele já calculada.
 #[derive(Debug, Clone, Serialize)]
@@ -66,6 +67,59 @@ impl GoalProgress {
     }
 }
 
+/// Um dia marcado de uma constância — uma linha do heatmap.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConstanciaDay {
+    /// 'AAAA-MM-DD' local.
+    pub day: String,
+    /// 'done' | 'skipped' | 'failed'. O heatmap colore por ele: um dia PULADO e
+    /// um dia que nunca existiu são fatos diferentes, e pintar os dois de cinza
+    /// apagaria a diferença.
+    pub status: String,
+    /// Quanto ESTE dia somou ao acumulado, na unidade da meta. Zero fora do
+    /// 'done' — só o dia feito acumula.
+    pub value: f64,
+}
+
+/// A leitura de uma meta de CONSTÂNCIA (0017 / ADR-0077).
+///
+/// Ela não sai de `goal_checkpoints`: sai de `habit_ticks`, do hábito ligado.
+/// É por isso que marcar o hábito nos Checkpoints do dia move a meta sozinho —
+/// não há um segundo lugar onde registrar, e portanto não há dois números.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConstanciaView {
+    /// `None` quando nunca se ligou um hábito — ou quando o hábito ligado foi
+    /// APAGADO, porque a 0018 desfaz o vínculo (`ON DELETE SET NULL`) em vez de
+    /// levar a meta junto. Os dois casos são o MESMO estado, de propósito: o
+    /// `habit_id` foi a NULL, não a um túmulo, e a tela oferece a mesma coisa
+    /// nos dois — ligar um hábito. Ver o cabeçalho da 0018.
+    pub habit_id: Option<String>,
+    pub daily_target: Option<f64>,
+    /// O dia a partir do qual esta meta conta: o dia em que ela foi CRIADA.
+    ///
+    /// É a mesma lição do `counts_from` de um sub-desafio contado (0009): sem
+    /// piso, uma constância criada hoje sobre um hábito com 120 dias de
+    /// histórico nasceria completa — um desafio ganho sem se fazer nada. Aqui o
+    /// piso não precisou de coluna nova: `nodes.created_at` já é ele.
+    pub counts_from: String,
+    /// A soma dos dias feitos, na unidade da meta.
+    pub accumulated: f64,
+    pub target: f64,
+    /// Quantos dias foram marcados como feitos. Não é o mesmo que o acumulado:
+    /// 12 dias de "R$ 10 por dia" são 12 dias e R$ 120.
+    pub days_marked: i64,
+    /// Sequência atual e recorde do hábito ligado, pela régua de sempre
+    /// (`domain::streak`) — nada reimplementado aqui.
+    pub streak: Streaks,
+    /// A série, do mais antigo ao mais recente. Alimenta o heatmap.
+    pub days: Vec<ConstanciaDay>,
+    /// A reta sobre o ACUMULADO. `None` com menos de dois dias marcados — uma
+    /// projeção de um ponto só é um chute, e o NEXUS não chuta.
+    pub projection: Option<Projection>,
+}
+
 /// Tudo que a tela de uma meta precisa, numa chamada.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -80,13 +134,24 @@ pub struct GoalWithProgress {
     pub checkpoints: Vec<Checkpoint>,
     pub milestones: Vec<MilestoneView>,
     /// `None` com menos de 2 checkpoints. Ver `domain::projection`.
+    ///
+    /// Só a meta QUANTITATIVA a preenche: a constância também tem alvo, mas a
+    /// série dela não são checkpoints — a reta dela mora em
+    /// `constancia.projection`, sobre os ticks. Duas projeções no mesmo campo,
+    /// vindas de séries diferentes, seria o tipo de ambiguidade que a tela
+    /// resolve errado em silêncio.
     pub projection: Option<Projection>,
+    /// Só numa meta de constância. `None` nos outros três tipos.
+    pub constancia: Option<ConstanciaView>,
 }
 
 pub struct GoalService {
     pub goals: Arc<dyn GoalRepository>,
     pub nodes: Arc<dyn NodeRepository>,
     pub areas: Arc<dyn AreaRepository>,
+    /// A série de uma constância são os ticks do hábito ligado (ADR-0077).
+    /// Sem este port, o motor de metas teria que reimplementar `habit_ticks`.
+    pub habits: Arc<dyn HabitRepository>,
     pub ids: Arc<dyn IdGen>,
     pub clock: Arc<dyn Clock>,
 }
@@ -110,12 +175,21 @@ impl GoalService {
         let details = match d.goal_kind {
             GoalKind::Quantitative => normalize_quantitative(d)?,
             GoalKind::Binary | GoalKind::Staged => normalize_without_metric(d)?,
+            GoalKind::Constancia => normalize_constancia(d)?,
         };
 
         if let Some(aid) = &new.area_id {
             if !self.areas.exists(aid)? {
                 return Err(NexusError::NotFound(format!("área {aid} não existe")));
             }
+        }
+
+        // O hábito ligado é validado ANTES de a meta existir: uma constância
+        // apontando para uma tarefa (ou para um id que não existe) gravaria uma
+        // meta cuja barra nunca sairia de zero, sem dizer por quê. A coluna não
+        // tem CASCADE, então o banco não faria essa checagem por nós.
+        if let Some(hid) = &details.habit_id {
+            self.check_is_habit(hid)?;
         }
 
         let id = self.ids.new_id();
@@ -132,6 +206,8 @@ impl GoalService {
                 "to": details.target_value,
                 "unit": details.unit,
                 "progressSource": details.progress_source.as_str(),
+                "habit": details.habit_id,
+                "dailyTarget": details.daily_target,
             }),
             title_snapshot: title.clone(),
         };
@@ -167,6 +243,16 @@ impl GoalService {
         noted_at: Option<i64>,
     ) -> Result<Checkpoint> {
         let goal = self.goals.get(goal_id)?;
+        // Uma constância TEM unidade e alvo, então ela passaria pela guarda
+        // abaixo — e escreveria uma série paralela que barra nenhuma lê. Ela se
+        // registra marcando o DIA, no hábito ligado: é o ponto inteiro do
+        // ADR-0077, que existe para não haver dois lugares onde dizer a mesma
+        // coisa e dois números discordando.
+        if goal.goal_kind.is_constancia() {
+            return Err(NexusError::Validation(
+                "uma meta de constância se registra marcando o dia no hábito ligado, não com uma medição".into(),
+            ));
+        }
         // Uma medição é um ponto da MÉTRICA. Uma conquista e uma escada não têm
         // métrica (0016): aceitar um número aqui criaria uma série que nenhuma
         // barra lê e que a projeção não pode usar.
@@ -387,10 +473,11 @@ impl GoalService {
     /// Ver ADR-0023.
     pub fn set_progress_source(&self, id: &str, source: ProgressSource) -> Result<Goal> {
         let goal = self.goals.get(id)?;
-        // Só a meta quantitativa tem as DUAS réguas para escolher. Numa conquista
-        // ou numa escada 'metric' dividiria por um alvo que não existe — e o
-        // CHECK da 0016 recusaria a linha de qualquer jeito.
-        if !goal.goal_kind.is_quantitative() && source == ProgressSource::Metric {
+        // Quem tem ALVO tem as duas réguas para escolher — a quantitativa pelo
+        // peso medido, a constância pelo acumulado dos dias. Numa conquista ou
+        // numa escada 'metric' dividiria por um alvo que não existe, e o CHECK
+        // da 0017 recusaria a linha de qualquer jeito.
+        if !goal.goal_kind.can_measure_by_metric() && source == ProgressSource::Metric {
             return Err(NexusError::Validation(
                 "esta meta não tem métrica: o progresso dela só pode vir dos degraus".into(),
             ));
@@ -401,6 +488,132 @@ impl GoalService {
             return Ok(goal);
         }
         self.goals.set_progress_source(id, source)
+    }
+
+    /// Liga (ou desliga, com `None`) o hábito que alimenta uma constância.
+    ///
+    /// É o "+ Ligar hábito" da tela de detalhe — e também o conserto do caso que
+    /// a 0017 deixou possível de propósito: o hábito foi apagado, `habit_id`
+    /// ficou órfão, e a meta continua viva esperando outro. Sem evento de
+    /// ledger, como o `set_progress_source`: o FATO é o tick, que já tem o dele.
+    pub fn set_habit(&self, goal_id: &str, habit_id: Option<&str>) -> Result<Goal> {
+        let goal = self.goals.get(goal_id)?;
+        if !goal.goal_kind.is_constancia() {
+            return Err(NexusError::Validation(
+                "só uma meta de constância é alimentada por um hábito".into(),
+            ));
+        }
+        if let Some(hid) = habit_id {
+            self.check_is_habit(hid)?;
+        }
+        self.goals.set_habit(goal_id, habit_id)
+    }
+
+    /// Recusa ligar qualquer coisa que não seja um hábito.
+    ///
+    /// `goal_details.habit_id` referencia `nodes(id)`, e `nodes` guarda as 16
+    /// espécies: para o banco, apontar para uma tarefa é uma FK perfeitamente
+    /// válida. Quem sabe que só hábito serve é esta camada.
+    fn check_is_habit(&self, habit_id: &str) -> Result<()> {
+        let habit = self.nodes.get(habit_id)?;
+        if habit.kind != Kind::Habit {
+            return Err(NexusError::Validation(format!(
+                "'{}' não é um hábito",
+                habit.title
+            )));
+        }
+        Ok(())
+    }
+
+    /// A série de uma constância, lida dos ticks do hábito ligado.
+    ///
+    /// Ela nunca falha por causa do hábito. Desde a 0018, apagar o hábito zera
+    /// `habit_id` sozinho, então o caso normal já cai no ramo "sem hábito". O
+    /// `NotFound` tolerado abaixo é a defesa de fundo para uma linha escrita por
+    /// fora do serviço: deixá-lo subir faria a meta inteira sumir da tela por
+    /// causa de um id que ninguém deveria ter gravado.
+    fn constancia_view(&self, goal: &Goal) -> Result<ConstanciaView> {
+        let node = self.nodes.get(&goal.id)?;
+        let counts_from = format_day(day_of(node.created_at).ok_or_else(|| {
+            NexusError::Validation(format!("meta com data ilegível: {}", node.created_at))
+        })?);
+        let today_str = self.clock.today_local();
+        let today = parse_day(&today_str)?;
+        let target = goal.target_value.unwrap_or(0.0);
+
+        let habit = match goal.habit_id.as_deref() {
+            None => None,
+            Some(hid) => match self.habits.get(hid) {
+                Ok(h) => Some(h),
+                Err(NexusError::NotFound(_)) => None,
+                Err(e) => return Err(e),
+            },
+        };
+        let Some(habit) = habit else {
+            return Ok(ConstanciaView {
+                habit_id: goal.habit_id.clone(),
+                daily_target: goal.daily_target,
+                counts_from,
+                accumulated: 0.0,
+                target,
+                days_marked: 0,
+                streak: Streaks::default(),
+                days: Vec::new(),
+                projection: None,
+            });
+        };
+
+        let raw = self
+            .habits
+            .ticks_in_range(&habit.id, &counts_from, &today_str)?;
+
+        let mut ticks: Ticks = Ticks::new();
+        let mut days: Vec<ConstanciaDay> = Vec::with_capacity(raw.len());
+        let mut accumulated = 0.0;
+        let mut days_marked = 0i64;
+        let mut points: Vec<Point> = Vec::new();
+
+        for (day, tick) in &raw {
+            if let Ok(parsed) = parse_day(day) {
+                ticks.insert(parsed, tick.status);
+            }
+            let value = day_value(tick, goal.daily_target);
+            if tick.status == TickStatus::Done {
+                accumulated += value;
+                days_marked += 1;
+                // A reta é sobre o ACUMULADO, não sobre o valor do dia: é o
+                // acumulado que caminha até o alvo. Um ponto por dia FEITO —
+                // os pulados não movem a linha nem a interrompem.
+                if let Ok(parsed) = parse_day(day) {
+                    points.push(Point {
+                        day: parsed,
+                        value: accumulated,
+                    });
+                }
+            }
+            days.push(ConstanciaDay {
+                day: day.clone(),
+                status: tick.status.as_str().to_string(),
+                value,
+            });
+        }
+
+        let projection = match goal.unit.as_deref() {
+            Some(unit) => projection::project(&points, target, unit),
+            None => None,
+        };
+
+        Ok(ConstanciaView {
+            habit_id: goal.habit_id.clone(),
+            daily_target: goal.daily_target,
+            counts_from,
+            accumulated,
+            target,
+            days_marked,
+            streak: streak::compute(&habit.schedule, &ticks, today),
+            days,
+            projection,
+        })
     }
 
     /// Move um sub-desafio para a posição `to_index` na árvore da meta.
@@ -453,7 +666,13 @@ impl GoalService {
         // quantitativa que mede pelos sub-desafios: o peso continua sendo
         // medido, e saber quando ele chega lá não deixa de ser verdade porque a
         // barra mostra outra coisa.
+        // A constância também tem alvo e unidade, mas a série dela não são
+        // checkpoints — a reta dela sai dos ticks, dentro de `constancia_view`.
+        // Sem esta guarda, ela cairia aqui com zero pontos e devolveria `None`
+        // de qualquer jeito; a guarda existe para o motivo ficar escrito, e não
+        // deduzido de um acaso.
         let projection = match (goal.target_value, goal.unit.as_deref()) {
+            _ if !goal.goal_kind.is_quantitative() => None,
             (Some(target), Some(unit)) => {
                 let points: Vec<Point> = checkpoints
                     .iter()
@@ -472,12 +691,24 @@ impl GoalService {
         // O TIPO manda antes da fonte: uma escada mede pelos degraus vencidos,
         // e uma conquista sem degrau nenhum mede pelo próprio ato de concluir.
         // A fonte só decide o que ela sempre decidiu — na meta quantitativa.
+        let constancia = if goal.goal_kind.is_constancia() {
+            Some(self.constancia_view(&goal)?)
+        } else {
+            None
+        };
+
         let progress = match goal.goal_kind {
             GoalKind::Staged => staged_progress(&milestones),
             GoalKind::Binary => binary_progress(&goal, &milestones),
             GoalKind::Quantitative => match goal.progress_source {
                 ProgressSource::Metric => metric_progress(&goal, current_value),
                 ProgressSource::Milestones => milestones_progress(&milestones),
+            },
+            // A constância mede pelo acumulado — mas o usuário pode ter picado
+            // ela em sub-desafios e virado a régua, e aí vale a régua dele.
+            GoalKind::Constancia => match (goal.progress_source, &constancia) {
+                (ProgressSource::Metric, Some(view)) => constancia_progress(&goal, view),
+                _ => milestones_progress(&milestones),
             },
         };
 
@@ -488,6 +719,7 @@ impl GoalService {
             checkpoints,
             milestones,
             projection,
+            constancia,
         })
     }
 }
@@ -499,6 +731,15 @@ impl GoalService {
 /// da meta quantitativa, pura e testável sozinha, como `milestone_ratio` e as
 /// funções de barra logo abaixo.
 fn normalize_quantitative(d: &NewGoalDetails) -> Result<NewGoalDetails> {
+    // Mesma guarda da conquista, e pela mesma razão: os dois campos são da
+    // constância. Silenciá-los aqui deixaria o usuário achar que ligou um
+    // hábito que nada lê.
+    if d.habit_id.is_some() || d.daily_target.is_some() {
+        return Err(NexusError::Validation(
+            "só uma meta de constância tem hábito ligado e alvo diário".into(),
+        ));
+    }
+
     let metric_name = d
         .metric_name
         .as_deref()
@@ -563,7 +804,140 @@ fn normalize_quantitative(d: &NewGoalDetails) -> Result<NewGoalDetails> {
         direction: Some(implied),
         deadline: d.deadline,
         progress_source: d.progress_source,
+        // Os dois campos da constância são exclusivos dela (o terceiro CHECK da
+        // 0017). Uma quantitativa com `daily_target` seria um número que tela
+        // nenhuma lê — e o banco recusaria a linha.
+        habit_id: None,
+        daily_target: None,
     })
+}
+
+/// A CONSTÂNCIA: alvo e unidade obrigatórios, métrica e partida proibidas.
+///
+/// Ela fica no MEIO das outras duas famílias, e é por isso que tem função
+/// própria em vez de um `if` dentro de uma delas:
+///
+///   * como a quantitativa, tem `target_value`, `unit` e `direction` — é contra
+///     o alvo que o acumulado é dividido;
+///   * como a conquista, não tem `metric_name` nem `start_value` — o nome do que
+///     ela mede É o título dela ("guardar R$ 10 por dia"), e ela começa em zero
+///     por definição: ninguém já vinha guardando antes de decidir guardar.
+///
+/// A DIREÇÃO é sempre `increase`, e não uma escolha: uma constância ACUMULA — 12
+/// dias marcados nunca viram 11. Uma meta de reduzir algo até um número é uma
+/// quantitativa, não uma constância. Forçar aqui é o mesmo gesto de deduzir a
+/// direção dos números na quantitativa: o campo é derivado, não perguntado.
+fn normalize_constancia(d: &NewGoalDetails) -> Result<NewGoalDetails> {
+    if d.metric_name.is_some() || d.start_value.is_some() {
+        return Err(NexusError::Validation(
+            "uma meta de constância não tem métrica nem ponto de partida: ela começa em zero e acumula".into(),
+        ));
+    }
+
+    let unit = d
+        .unit
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            NexusError::Validation(
+                "uma meta de constância precisa de unidade (dias, R$, páginas...)".into(),
+            )
+        })?
+        .to_string();
+
+    let target_value = d.target_value.ok_or_else(|| {
+        NexusError::Validation("uma meta de constância precisa de um alvo a acumular".into())
+    })?;
+    if !target_value.is_finite() || target_value <= 0.0 {
+        return Err(NexusError::Validation(format!(
+            "o alvo de uma constância precisa ser maior que zero (veio {target_value})"
+        )));
+    }
+
+    // O alvo POR DIA é opcional — "30 dias sem fritura" não tem um. Mas quando
+    // existe, ele tem que ser positivo: o CHECK da 0017 diz o mesmo, e aqui a
+    // mensagem explica.
+    if let Some(daily) = d.daily_target {
+        if !daily.is_finite() || daily <= 0.0 {
+            return Err(NexusError::Validation(format!(
+                "o alvo diário precisa ser maior que zero (veio {daily})"
+            )));
+        }
+    }
+
+    Ok(NewGoalDetails {
+        goal_kind: GoalKind::Constancia,
+        metric_name: None,
+        start_value: None,
+        target_value: Some(target_value),
+        unit: Some(unit),
+        direction: Some(Direction::Increase),
+        deadline: d.deadline,
+        progress_source: d.progress_source,
+        habit_id: d.habit_id.clone(),
+        daily_target: d.daily_target,
+    })
+}
+
+/// Quanto um dia soma ao acumulado de uma constância.
+///
+/// Três casos, e a ordem importa:
+///   * dia não feito (pulado ou falhado): zero. Só o dia FEITO acumula.
+///   * com alvo diário: o valor que o usuário digitou no dia ("guardei R$ 30
+///     hoje"), ou o alvo diário quando ele só marcou ("guardei os R$ 10 de
+///     sempre"). Marcar sem digitar é o gesto de um clique, e ele tem que
+///     significar o combinado — não zero.
+///   * sem alvo diário: 1, porque a unidade É o dia ("30 dias sem fritura").
+fn day_value(tick: &Tick, daily_target: Option<f64>) -> f64 {
+    if tick.status != TickStatus::Done {
+        return 0.0;
+    }
+    match daily_target {
+        Some(daily) => tick.value.filter(|v| v.is_finite()).unwrap_or(daily),
+        None => 1.0,
+    }
+}
+
+/// A barra de uma CONSTÂNCIA: o acumulado sobre o alvo.
+fn constancia_progress(goal: &Goal, view: &ConstanciaView) -> GoalProgress {
+    let unit = goal.unit.as_deref().unwrap_or("");
+
+    // Sem hábito não há de onde a série vir. Vale para a constância recém-criada
+    // e para aquela cujo hábito foi excluído — a 0018 faz as duas caírem aqui, e
+    // a saída é a mesma nas duas: ligar um hábito.
+    if view.habit_id.is_none() {
+        return GoalProgress::plain(
+            0.0,
+            ProgressSource::Metric,
+            "esta constância não tem um hábito ligado: ligue um para marcar os dias".into(),
+        );
+    }
+    if view.target <= 0.0 {
+        // O `create` barra isto na porta; uma linha escrita por fora dividiria
+        // por zero e devolveria infinito com cara de resposta.
+        return GoalProgress::plain(
+            0.0,
+            ProgressSource::Metric,
+            "esta constância não tem alvo: não há caminho a medir".into(),
+        );
+    }
+
+    let ratio = (view.accumulated / view.target).clamp(0.0, 1.0);
+    GoalProgress::plain(
+        ratio,
+        ProgressSource::Metric,
+        format!(
+            "{} ÷ {} {unit} = {}% ({} dia{} marcado{} desde {})",
+            view.accumulated,
+            view.target,
+            pct(ratio),
+            view.days_marked,
+            if view.days_marked == 1 { "" } else { "s" },
+            if view.days_marked == 1 { "" } else { "s" },
+            view.counts_from,
+        ),
+    )
 }
 
 /// A fração de um sub-desafio.
@@ -731,6 +1105,13 @@ fn normalize_without_metric(d: &NewGoalDetails) -> Result<NewGoalDetails> {
                 .into(),
         ));
     }
+    // O hábito e o alvo diário são da constância. Uma conquista com hábito
+    // ligado teria uma barra alimentada por um lado e medida por outro.
+    if d.habit_id.is_some() || d.daily_target.is_some() {
+        return Err(NexusError::Validation(
+            "só uma meta de constância tem hábito ligado e alvo diário".into(),
+        ));
+    }
 
     Ok(NewGoalDetails {
         goal_kind: d.goal_kind,
@@ -741,6 +1122,8 @@ fn normalize_without_metric(d: &NewGoalDetails) -> Result<NewGoalDetails> {
         direction: None,
         deadline: d.deadline,
         progress_source: ProgressSource::Milestones,
+        habit_id: None,
+        daily_target: None,
     })
 }
 
@@ -815,6 +1198,43 @@ mod tests {
             direction: Some(Direction::Decrease),
             deadline: None,
             progress_source: source,
+            habit_id: None,
+            daily_target: None,
+        }
+    }
+
+    /// Uma meta de CONSTÂNCIA: alvo e unidade, sem métrica nem partida.
+    fn constancia(daily_target: Option<f64>, target: f64) -> Goal {
+        Goal {
+            id: "g3".into(),
+            title: "Guardar R$ 10 por dia".into(),
+            area_id: None,
+            status: "active".into(),
+            goal_kind: GoalKind::Constancia,
+            metric_name: None,
+            start_value: None,
+            target_value: Some(target),
+            unit: Some("R$".into()),
+            direction: Some(Direction::Increase),
+            deadline: None,
+            progress_source: ProgressSource::Metric,
+            habit_id: Some("h1".into()),
+            daily_target,
+        }
+    }
+
+    /// A leitura de uma constância, montada à mão para testar só a BARRA.
+    fn view(accumulated: f64, target: f64, days_marked: i64) -> ConstanciaView {
+        ConstanciaView {
+            habit_id: Some("h1".into()),
+            daily_target: Some(10.0),
+            counts_from: "2026-07-01".into(),
+            accumulated,
+            target,
+            days_marked,
+            streak: Streaks::default(),
+            days: Vec::new(),
+            projection: None,
         }
     }
 
@@ -833,6 +1253,8 @@ mod tests {
             direction: None,
             deadline: None,
             progress_source: ProgressSource::Milestones,
+            habit_id: None,
+            daily_target: None,
         }
     }
 
@@ -846,6 +1268,8 @@ mod tests {
             direction: None,
             deadline: None,
             progress_source: ProgressSource::Metric,
+            habit_id: None,
+            daily_target: None,
         }
     }
 
@@ -1260,6 +1684,207 @@ mod tests {
         ] {
             assert!(!p.formula.is_empty());
             assert!((0.0..=1.0).contains(&p.ratio), "ratio fora da faixa");
+        }
+    }
+
+    /* ===== A CONSTÂNCIA (COCKPIT, fase 3b / 0017) ===== */
+
+    /// Os detalhes de uma constância como o formulário os manda.
+    fn constancia_details(target: Option<f64>, unit: Option<&str>) -> NewGoalDetails {
+        let mut d = details(GoalKind::Constancia);
+        d.target_value = target;
+        d.unit = unit.map(str::to_string);
+        d
+    }
+
+    fn tick(status: TickStatus, value: Option<f64>) -> Tick {
+        Tick { status, value }
+    }
+
+    #[test]
+    fn a_constancia_has_an_target_but_never_a_metric() {
+        // Ela fica no MEIO das outras duas famílias: alvo, unidade e direção
+        // como a quantitativa; sem `metric_name` nem `start_value` como a
+        // conquista. É exatamente o terceiro ramo do CHECK da 0017.
+        let d = normalize_constancia(&constancia_details(Some(3650.0), Some("R$"))).unwrap();
+        assert_eq!(d.goal_kind, GoalKind::Constancia);
+        assert_eq!(d.target_value, Some(3650.0));
+        assert_eq!(d.unit.as_deref(), Some("R$"));
+        assert!(d.metric_name.is_none());
+        assert!(d.start_value.is_none());
+    }
+
+    #[test]
+    fn a_constancia_always_walks_forwards() {
+        // Uma constância ACUMULA: 12 dias marcados nunca viram 11. A direção é
+        // derivada, não perguntada — e o CHECK da 0017 exige que ela exista.
+        let mut input = constancia_details(Some(30.0), Some("dias"));
+        input.direction = Some(Direction::Decrease);
+        let d = normalize_constancia(&input).unwrap();
+        assert_eq!(d.direction, Some(Direction::Increase));
+    }
+
+    #[test]
+    fn a_constancia_that_smuggles_a_metric_or_a_start_is_refused() {
+        // Ninguém "já vinha guardando R$ 10 por dia" antes de decidir guardar:
+        // uma constância começa em zero por definição, e o nome do que ela mede
+        // é o título dela.
+        for poison in [
+            (|d: &mut NewGoalDetails| d.metric_name = Some("Peso".into())) as Poison,
+            |d: &mut NewGoalDetails| d.start_value = Some(10.0),
+        ] {
+            let mut input = constancia_details(Some(30.0), Some("dias"));
+            poison(&mut input);
+            let err = normalize_constancia(&input).unwrap_err();
+            assert!(
+                matches!(err, NexusError::Validation(ref m) if m.contains("começa em zero")),
+                "{err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_constancia_without_an_target_or_a_unit_is_refused() {
+        let cases: [(&str, NewGoalDetails); 3] = [
+            ("alvo", constancia_details(None, Some("dias"))),
+            ("unidade", constancia_details(Some(30.0), None)),
+            ("unidade", constancia_details(Some(30.0), Some("   "))),
+        ];
+        for (expected, input) in cases {
+            let err = normalize_constancia(&input).unwrap_err();
+            assert!(
+                matches!(err, NexusError::Validation(ref m) if m.contains(expected)),
+                "esperava '{expected}', veio {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_targets_of_a_constancia_have_to_be_positive() {
+        // Um alvo zero nunca sai do lugar; um alvo diário zero é um combinado
+        // que não pede nada. Os dois têm CHECK na 0017 — aqui a mensagem
+        // explica, em vez de "constraint failed".
+        for bad in [0.0, -5.0] {
+            assert!(normalize_constancia(&constancia_details(Some(bad), Some("dias"))).is_err());
+
+            let mut input = constancia_details(Some(30.0), Some("dias"));
+            input.daily_target = Some(bad);
+            let err = normalize_constancia(&input).unwrap_err();
+            assert!(
+                matches!(err, NexusError::Validation(ref m) if m.contains("alvo diário")),
+                "{err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn only_a_constancia_carries_a_habit_and_a_daily_target() {
+        // O terceiro CHECK da 0017 dito na porta: uma quantitativa com hábito
+        // ligado teria uma barra alimentada por um lado e medida por outro, e o
+        // usuário acharia que ligou algo que nada lê.
+        let mut quant = details(GoalKind::Quantitative);
+        quant.metric_name = Some("Peso".into());
+        quant.unit = Some("kg".into());
+        quant.start_value = Some(90.0);
+        quant.target_value = Some(80.0);
+        quant.habit_id = Some("h1".into());
+        assert!(normalize_quantitative(&quant).is_err());
+
+        let mut bin = details(GoalKind::Binary);
+        bin.daily_target = Some(10.0);
+        assert!(normalize_without_metric(&bin).is_err());
+    }
+
+    #[test]
+    fn a_marked_day_counts_what_was_typed_or_the_agreed_amount() {
+        // Marcar sem digitar é o gesto de UM clique, e ele tem que significar o
+        // combinado ("guardei os R$ 10 de sempre") — não zero, que faria a barra
+        // ignorar o dia que o usuário marcou.
+        assert_eq!(
+            day_value(&tick(TickStatus::Done, Some(30.0)), Some(10.0)),
+            30.0
+        );
+        assert_eq!(day_value(&tick(TickStatus::Done, None), Some(10.0)), 10.0);
+        // Um valor ilegível cai no combinado em vez de envenenar a soma com NaN.
+        assert_eq!(
+            day_value(&tick(TickStatus::Done, Some(f64::NAN)), Some(10.0)),
+            10.0
+        );
+    }
+
+    #[test]
+    fn without_a_daily_target_a_constancia_counts_days() {
+        // "30 dias sem fritura": a unidade É o dia. Um valor no tick não muda
+        // isso — o que se conta é ter marcado.
+        assert_eq!(day_value(&tick(TickStatus::Done, None), None), 1.0);
+        assert_eq!(day_value(&tick(TickStatus::Done, Some(99.0)), None), 1.0);
+    }
+
+    #[test]
+    fn a_day_that_was_not_done_adds_nothing() {
+        // Pulado e falhado aparecem no heatmap (são fatos), mas não acumulam.
+        for status in [TickStatus::Skipped, TickStatus::Failed] {
+            assert_eq!(day_value(&tick(status, Some(50.0)), Some(10.0)), 0.0);
+            assert_eq!(day_value(&tick(status, None), None), 0.0);
+        }
+    }
+
+    #[test]
+    fn the_constancia_bar_is_the_accumulated_over_the_target() {
+        let p = constancia_progress(&constancia(Some(10.0), 3650.0), &view(1250.0, 3650.0, 125));
+        assert!((p.ratio - 1250.0 / 3650.0).abs() < 1e-9, "{}", p.ratio);
+        assert!(p.formula.contains("125 dias marcados"));
+        assert!(p.formula.contains("2026-07-01"));
+    }
+
+    #[test]
+    fn passing_the_target_is_one_hundred_percent_not_more() {
+        let p = constancia_progress(&constancia(Some(10.0), 30.0), &view(45.0, 30.0, 45));
+        assert_eq!(p.ratio, 1.0);
+    }
+
+    #[test]
+    fn a_single_marked_day_is_singular_in_the_sentence() {
+        // Detalhe de escrita, e é por isso que ele tem teste: "1 dias marcados"
+        // é a marca de um app que não foi lido por ninguém.
+        let p = constancia_progress(&constancia(None, 30.0), &view(1.0, 30.0, 1));
+        assert!(p.formula.contains("1 dia marcado desde"), "{}", p.formula);
+    }
+
+    #[test]
+    fn a_constancia_without_a_habit_says_so_instead_of_just_showing_zero() {
+        // Zero por cento e "não há de onde vir" são leituras diferentes, e a
+        // segunda é a única que diz ao usuário o que fazer. É também o estado em
+        // que a meta cai quando o hábito é excluído (a 0018 zera o vínculo).
+        let mut v = view(0.0, 30.0, 0);
+        v.habit_id = None;
+        let p = constancia_progress(&constancia(None, 30.0), &v);
+        assert_eq!(p.ratio, 0.0);
+        assert!(p.formula.contains("não tem um hábito ligado"));
+    }
+
+    #[test]
+    fn a_constancia_with_a_broken_target_does_not_divide_by_zero() {
+        // O `create` barra isto na porta; uma linha escrita por fora devolveria
+        // infinito com cara de resposta.
+        let p = constancia_progress(&constancia(None, 0.0), &view(10.0, 0.0, 10));
+        assert_eq!(p.ratio, 0.0);
+        assert!(p.ratio.is_finite());
+    }
+
+    #[test]
+    fn every_constancia_reading_explains_itself_too() {
+        // A mesma regra da constituição §2 que os outros tipos já cumprem.
+        for p in [
+            constancia_progress(&constancia(Some(10.0), 3650.0), &view(1250.0, 3650.0, 125)),
+            constancia_progress(&constancia(None, 30.0), &view(0.0, 30.0, 0)),
+        ] {
+            assert!(!p.formula.is_empty());
+            assert!((0.0..=1.0).contains(&p.ratio));
+            // A constância NÃO é uma escada: os três campos de degrau ficam
+            // `None`, como em toda barra que não conta degraus.
+            assert!(p.stage_current.is_none());
+            assert!(p.stage_total.is_none());
         }
     }
 

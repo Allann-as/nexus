@@ -2733,3 +2733,108 @@ modelo de dados. Reunificar as duas tabelas é refatoração de domínio, não d
 fase pede. Fica registrado que, se um dia for preciso, `annual_goal_details` é uma reconstrução
 BARATA (sem FTS, sem rowid, sem dependente de rowid) — adiar custa quase nada, e é por isso que adiar
 aqui não viola a regra do batch.
+
+---
+
+## ADR-0078 — Um hábito ligado a QUALQUER coisa era indelével desde a 0007; `ON DELETE SET NULL` nas três
+
+**Data:** 2026-07-21 · **Status:** aceito · **v1.3 (COCKPIT), fase 3b** · **migration 0018**
+
+**Contexto.** Escrevendo o motor de metas da fase 3b, o teste que provava a promessa central do
+ADR-0077 — *"apagar o hábito não pode apagar a META; a tela trata `habit_id` órfão como 'constância
+sem hábito ligado' e oferece religar"* — falhou com:
+
+```
+Err(Storage("FOREIGN KEY constraint failed"))
+```
+
+O órfão que a 0017 desenhou **nunca podia acontecer**. `habit_id TEXT REFERENCES nodes(id)` sem
+cláusula `ON DELETE` não é "sem CASCADE": é **NO ACTION**, que RECUSA o DELETE do pai. A 0017 quis
+dizer *"não leve a meta junto"*; o que o schema diz é *"não deixe apagar o hábito"*.
+
+Uma sonda (escrita, rodada e descartada — **verificado, não suposto**) mostrou o que importa: **isto
+não nasceu na 0017**. A mesma forma de FK está em `milestone_details.habit_id` desde a **0007** e em
+`challenge_details.habit_id` desde a **0012**. Ou seja: **desde a 0007, apagar o hábito "Academia"
+com um sub-desafio "30 dias de academia" pendurado nele falhava** — e falhava exibindo
+`FOREIGN KEY constraint failed`, uma mensagem de storage que não diz sequer QUAL item está segurando
+o hábito.
+
+Isso contradiz de frente a fase B da BÚSSOLA (ADR-0056): **excluir é um direito**. Um direito que a
+tela oferece e o banco recusa é pior que um direito ausente — o botão existe, o usuário clica, e
+recebe um erro de banco de dados na cara.
+
+**Decisão.** `ON DELETE SET NULL` nas **três** colunas, na migration 0018. É a cláusula que diz
+exatamente o que as três queriam dizer: *o filho sobrevive ao pai, com o vínculo desfeito*.
+
+**Considerado e RECUSADO: limpar as referências no código antes de cada DELETE de hábito.** Isso
+espalharia por `NodeService::delete` o conhecimento de três satélites, e a quarta tabela a ligar um
+hábito (um dia haverá) esqueceria de se registrar — a erosão silenciosa de sempre. `ON DELETE SET
+NULL` é declarativo: quem cria a coluna declara o destino dela, e o banco cobra.
+
+**Considerado e RECUSADO: CASCADE.** Apagaria a meta, o sub-desafio e a temporada do usuário porque
+ele apagou um hábito. É a leitura oposta da que o ADR-0077 quis, e o teste
+`the_three_links_go_to_null_and_the_habit_finally_goes` prova as DUAS metades justamente para que um
+CASCADE escrito por engano não passe: o pai SAI **e** os três filhos FICAM.
+
+**Consequência — e uma simplificação que caiu de graça.** As três leituras já tratavam o NULL
+(`SELECT_MILESTONE` tem `CASE WHEN m.habit_id IS NULL`, o placar de temporada conta zero, a
+`constancia_view` cai no ramo "sem hábito"), então nenhuma delas mudou. E o campo `habit_missing`,
+que a `ConstanciaView` tinha ganhado para distinguir "nunca ligou" de "o hábito foi excluído",
+**deixou de existir**: com SET NULL os dois viram o MESMO estado, e a saída do usuário é a mesma nos
+dois — ligar um hábito. Um campo sempre-falso na fronteira IPC é uma mentira esperando acontecer.
+
+O que se PERDE, conscientemente: depois de apagado o hábito, o vínculo não volta sozinho — o
+`habit_id` foi a NULL, não a um túmulo. Guardar o id de um node morto para poder dizer *"era o
+Academia"* exigiria uma coluna de nome congelado; **o ledger já guarda essa história**, e é lá que
+ela pertence.
+
+**Sobre a regra do batch (ADR-0029/0077).** Esta migration chega uma fase depois da 0017 e não a
+viola: ela não acrescenta `kind` nem vocabulário novo — **corrige** uma cláusula errada em colunas
+que já existiam. As três reconstruções passam pelo mesmo teste do 12-step da 0016/0017 (sem gatilho
+de FTS, sem dependente de rowid, quem referencia aponta para a PK `node_id`, `nodes` intocada). É a
+terceira reconstrução de `goal_details` e a mais barata das três: nada muda além da cláusula
+`ON DELETE`, e os três CHECKs voltam palavra por palavra — reescrevê-los "melhorados" aqui mudaria o
+contrato sem ADR que o diga.
+
+---
+
+## ADR-0079 — A meta de CONSTÂNCIA na aplicação: o piso é `nodes.created_at`, e a régua é o acumulado
+
+**Data:** 2026-07-21 · **Status:** aceito · **v1.3 (COCKPIT), fase 3b**
+
+**Contexto.** A 0017 abriu o schema do quarto tipo de meta; a fase 3b tinha de fazê-lo funcionar. Três
+perguntas não estavam respondidas pelo schema, e cada uma tinha uma resposta errada plausível.
+
+**1. De QUANDO uma constância conta?** O hábito ligado pode ter meses de histórico. Sem piso, uma
+constância "30 dias seguidos" criada hoje sobre um hábito com 120 dias nasceria **completa** — é
+literalmente o bug que a 0009 consertou nos sub-desafios contados, exibindo *51/30* na tela.
+
+**Decisão: o piso é `nodes.created_at` da própria meta.** Sem coluna nova: a 0009 precisou de
+`counts_from` porque um contador podia legitimamente querer contar *desde o início do mês*; uma
+constância, não — ela começa quando o usuário decide começar. `created_at` já é esse instante.
+
+**2. Quanto vale um dia marcado?** Três casos, e a ordem importa: dia não feito vale **0** (só o
+'done' acumula; pulado e falhado aparecem no heatmap porque são fatos, mas não são progresso); com
+alvo diário vale **o valor digitado, ou o alvo diário quando o usuário só marcou** — marcar sem
+digitar é o gesto de UM clique e ele tem que significar o combinado ("guardei os R$ 10 de sempre"),
+não zero; sem alvo diário vale **1**, porque a unidade É o dia ("30 dias sem fritura").
+
+**3. A direção é uma escolha?** Não. Uma constância **acumula**: 12 dias marcados nunca viram 11. A
+`direction` é forçada a `increase`, do mesmo jeito que a quantitativa a deduz dos números — o campo é
+derivado, não perguntado. Uma meta de *reduzir* algo até um número é uma quantitativa, não uma
+constância.
+
+**Consequências de desenho.** `GoalService` ganhou o port `HabitRepository`: a série de uma
+constância É `habit_ticks`, e sem ele o motor de metas reimplementaria a tabela mais consultada do
+BI. A projeção da constância é a reta sobre o **acumulado** (um ponto por dia FEITO), e mora em
+`constancia.projection` — não no `projection` do topo, que segue sendo só da quantitativa: duas
+séries diferentes no mesmo campo é a ambiguidade que a tela resolve errado em silêncio.
+
+`add_checkpoint` **recusa** uma constância. Ela tem unidade e alvo, então passaria pela guarda antiga
+e escreveria uma série paralela que barra nenhuma lê — dois números dizendo a mesma coisa, que é
+exatamente o que o ADR-0077 evitou ao não criar `goal_daily_marks`. Ela se registra marcando o dia, e
+só.
+
+`GoalKind` ganhou `can_measure_by_metric()`, distinta de `is_quantitative()`: **quem tem ALVO** não é
+o mesmo conjunto que **quem tem MÉTRICA**. É o segundo CHECK da 0017 (`goal_kind IN
+('quantitative','constancia') OR progress_source = 'milestones'`) dito onde o erro sai em português.

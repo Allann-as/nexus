@@ -253,6 +253,7 @@ pub fn run() {
             commands::goals::add_milestone,
             commands::goals::set_milestone_done,
             commands::goals::set_goal_progress_source,
+            commands::goals::set_goal_habit,
             commands::goals::move_milestone,
             commands::insights::get_insights,
             commands::insights::recompute_insights,

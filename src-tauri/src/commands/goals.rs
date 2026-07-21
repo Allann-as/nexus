@@ -44,6 +44,13 @@ pub struct NewGoalDto {
     /// 'milestones'.
     #[serde(default = "metric")]
     pub progress_source: ProgressSource,
+    /// O hábito que alimenta uma CONSTÂNCIA (0017). Só ela o aceita; nos outros
+    /// tipos o serviço recusa em vez de ignorar.
+    #[serde(default)]
+    pub habit_id: Option<String>,
+    /// O alvo POR DIA de uma constância. Ausente = a constância conta DIAS.
+    #[serde(default)]
+    pub daily_target: Option<f64>,
 }
 
 fn metric() -> ProgressSource {
@@ -68,8 +75,23 @@ pub fn create_goal(state: State<'_, AppState>, goal: NewGoalDto) -> Result<Goal>
             direction: goal.direction,
             deadline: goal.deadline,
             progress_source: goal.progress_source,
+            habit_id: goal.habit_id,
+            daily_target: goal.daily_target,
         },
     })
+}
+
+/// Liga (ou desliga, com `habitId` ausente) o hábito de uma constância.
+///
+/// É o "+ Ligar hábito" da tela de detalhe — e o conserto de uma meta cujo
+/// hábito foi excluído.
+#[tauri::command]
+pub fn set_goal_habit(
+    state: State<'_, AppState>,
+    id: String,
+    habit_id: Option<String>,
+) -> Result<Goal> {
+    state.goals.set_habit(&id, habit_id.as_deref())
 }
 
 #[tauri::command]

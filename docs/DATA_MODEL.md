@@ -642,7 +642,7 @@ Duas colunas novas, exclusivas da constância (um terceiro CHECK garante isso):
 
 | Coluna | Papel |
 |---|---|
-| `habit_id` | O hábito que alimenta a meta. **Sem CASCADE**: apagar o hábito não pode apagar a META — a tela trata o órfão como "constância sem hábito ligado" e oferece religar, como `milestone_details.habit_id` desde a 0007. |
+| `habit_id` | O hábito que alimenta a meta. Apagar o hábito não pode apagar a META. A 0017 tentou isso omitindo o `ON DELETE` — e **errou**; a 0018 corrigiu para `ON DELETE SET NULL`. Ver §5.16. |
 | `daily_target` | O alvo POR DIA (o "R$ 10"). `NULL` quando a constância é binária ("30 dias sem fritura" — conta ter marcado, não quanto). `CHECK > 0`. |
 
 **A constância é um hábito por baixo, e isso é a decisão de desenho.** Ela precisa
@@ -669,6 +669,36 @@ constâncias têm hábito, e as outras não pagam por linhas que nunca casam.
 Os dois são `ALTER TABLE ADD COLUMN`, que nunca recria tabela. Fica a distinção
 registrada: **a regra do batch existe para os CHECKs e os `kind`s, que custam
 recriação; um ADD COLUMN pode chegar quando a tela chegar.**
+
+## 5.16 Um hábito ligado era INDELÉVEL desde a 0007 (0018, v1.3)
+
+O teste que provava a promessa da §5.15 — *apagar o hábito não apaga a meta* —
+falhou com `FOREIGN KEY constraint failed`. **`REFERENCES nodes(id)` sem cláusula
+`ON DELETE` não é "sem CASCADE": é NO ACTION, que RECUSA o DELETE do pai.** A 0017
+quis dizer *"não leve a meta junto"*; o schema dizia *"não deixe apagar o hábito"*.
+
+E o defeito **não nasceu na 0017**. A mesma forma de FK está em:
+
+| Coluna | Desde | O que ficava indelével |
+|---|---|---|
+| `milestone_details.habit_id` | **0007** | o hábito de um sub-desafio contado ("30 dias de academia") |
+| `challenge_details.habit_id` | **0012** | o hábito de uma temporada `habit_days` |
+| `goal_details.habit_id` | 0017 | o hábito de uma constância |
+
+Ou seja: desde a 0007 o usuário recebia um erro de storage ao tentar apagar um
+hábito ligado a qualquer uma das três — em contradição direta com a fase B da
+BÚSSOLA (ADR-0056), que prometeu que **excluir é um direito**.
+
+A 0018 recria as três com **`ON DELETE SET NULL`**, que é o que as três queriam
+dizer: *o filho sobrevive ao pai, com o vínculo desfeito*. As três leituras já
+tratavam o NULL (`SELECT_MILESTONE` tem `CASE WHEN m.habit_id IS NULL`, o placar de
+temporada conta zero, a `constancia_view` cai no ramo "sem hábito"), então nenhuma
+delas mudou. Detalhes e alternativas recusadas (CASCADE; limpar no código) no
+**ADR-0078**.
+
+As três reconstruções são baratas pelo mesmo motivo das da 0016/0017: sem gatilho
+de FTS, sem dependente de rowid, quem as referencia aponta para a PK `node_id`, e
+**`nodes` não é tocada**.
 
 ## 6. Integridade e migrations
 
