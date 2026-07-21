@@ -642,7 +642,7 @@ Duas colunas novas, exclusivas da constância (um terceiro CHECK garante isso):
 
 | Coluna | Papel |
 |---|---|
-| `habit_id` | O hábito que alimenta a meta. Apagar o hábito não pode apagar a META. A 0017 tentou isso omitindo o `ON DELETE` — e **errou**; a 0018 corrigiu para `ON DELETE SET NULL`. Ver §5.16. |
+| `habit_id` | O hábito que alimenta a meta. Apagar o hábito não pode apagar a META. A 0017 tentou isso omitindo o `ON DELETE` — e **errou**; a 0018 corrigiu para `ON DELETE SET NULL`. Ver §5.16, e a §5.17 para a classe inteira do defeito. |
 | `daily_target` | O alvo POR DIA (o "R$ 10"). `NULL` quando a constância é binária ("30 dias sem fritura" — conta ter marcado, não quanto). `CHECK > 0`. |
 
 **A constância é um hábito por baixo, e isso é a decisão de desenho.** Ela precisa
@@ -699,6 +699,42 @@ delas mudou. Detalhes e alternativas recusadas (CASCADE; limpar no código) no
 As três reconstruções são baratas pelo mesmo motivo das da 0016/0017: sem gatilho
 de FTS, sem dependente de rowid, quem as referencia aponta para a PK `node_id`, e
 **`nodes` não é tocada**.
+
+## 5.17 A FORMA, não as três colunas — e por isso vira teste (0019, v1.3)
+
+A §5.16 consertou três colunas e parou. Mas o defeito é da **forma**
+`REFERENCES nodes(id)` escrita sem `ON DELETE`: enquanto ela existir em qualquer
+coluna viva, existe um clique de "excluir" que devolve erro de storage.
+
+Uma varredura por essa forma — `PRAGMA foreign_key_list` em todas as tabelas —
+achou as três que sobravam, e as três reproduzem:
+
+| Coluna | Desde | O que ficava indelével |
+|---|---|---|
+| `nodes.parent_id` | **0001** | um PROJETO com tarefas; uma MATÉRIA com temas; um OBJETIVO com sub-desafios |
+| `habit_details.routine_id` | **0001** | uma ROTINA com hábitos dentro |
+| `subject_details.level_goal_id` | **0016** | a meta que é a escada de um IDIOMA |
+
+A 0019 recria as três com `ON DELETE SET NULL` — inclusive `parent_id`, onde a
+resposta certa para o usuário é a contrária (apagar o projeto DEVE levar as
+tarefas). O motivo está no **ADR-0081**: um CASCADE apagaria os filhos **sem
+evento no ledger**. Quem os leva é `SqliteNodeRepository::delete_with_event`, que
+desce a árvore por CTE recursiva, apenda um `deleted` por node (com
+`"with_parent"` no payload) e apaga do mais fundo para o mais raso, numa
+transação. A FK é o **piso**; o repositório é o **comportamento**.
+
+**A varredura virou guarda permanente.** `no_foreign_key_to_a_node_refuses_the_delete`
+(em `tests/deletion.rs`) reprova o gate se qualquer FK para `nodes` nascer com
+`on_delete = NO ACTION`, com o nome da coluna na mensagem. `areas` e `accounts`
+ficam de fora de propósito — nenhuma tem caminho de exclusão hoje.
+
+**Duas armadilhas atravessadas nesta recriação, ambas silenciosas.** (1) `nodes` é
+recriada pela QUINTA vez: `rowid` preservado e os três gatilhos de FTS recriados
+palavra por palavra. (2) `subject_details` ganhou colunas por ALTER na 0016 e na
+0017, e a reconstrução **esqueceu a `summary`** na primeira tentativa — um
+`INSERT ... SELECT` que omite coluna não dá erro, só apaga o dado. O teste
+`the_rebuilt_tables_keep_every_column` compara `pragma_table_info` antes e depois:
+numa reconstrução, só a cláusula `ON DELETE` pode ter mudado.
 
 ## 6. Integridade e migrations
 

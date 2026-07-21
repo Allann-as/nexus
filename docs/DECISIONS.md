@@ -2904,3 +2904,94 @@ errado é um incômodo; um app que não abre é um app quebrado.
    próxima sessão vai acreditar sem reverificar. Uma dirigida só vale o que vale a fidelidade da
    captura: o script de screenshot agora força `PER_MONITOR_AWARE_V2`, e **toda dirigida futura
    depende disso**.
+
+---
+
+## ADR-0081 — O defeito da 0018 era de CLASSE: a varredura do schema vira teste, e a árvore sai com um evento por filho
+
+**Data:** 2026-07-21 · **Status:** aceito · **v1.3 (COCKPIT), fase 3c** · **migration 0019**
+
+**Contexto.** O ADR-0078 consertou três colunas `habit_id` e parou aí. Mas o que ele descreveu não é
+um defeito de três colunas — é um defeito de **forma**:
+
+```sql
+coluna TEXT REFERENCES nodes(id)          -- sem cláusula ON DELETE
+```
+
+que o SQLite lê como NO ACTION (*"recuse apagar o pai"*) e que quem escreve lê como *"não leve o
+filho junto"*. As duas leituras só divergem no dia em que alguém aperta "excluir". Enquanto essa
+forma existir em **qualquer** coluna viva, existe um caminho pelo qual o app devolve
+`FOREIGN KEY constraint failed` na cara do usuário.
+
+A varredura por essa forma (`PRAGMA foreign_key_list` em todas as tabelas) achou as três que
+sobravam, e todas as três reproduzem com um clique:
+
+| coluna | desde | o que o usuário faz |
+|---|---|---|
+| `nodes.parent_id` | **0001** | apagar um PROJETO com tarefas; uma MATÉRIA com temas (ADR-0077); um OBJETIVO com sub-desafios |
+| `habit_details.routine_id` | **0001** | apagar uma ROTINA que tem hábitos dentro |
+| `subject_details.level_goal_id` | **0016** | apagar, pela tela de Metas, a meta que é a escada de um IDIOMA |
+
+A do meio e a de baixo são a fase 3b outra vez, em outro lugar. A de cima é maior: **sub-desafios
+existem desde a fase 3b** e são `milestone` filhas por `parent_id` — ou seja, a fase que acabou de
+sair já entregava metas com sub-desafios que ninguém conseguia apagar.
+
+**Decisão 1 — a varredura vira teste, não um conserto.** `no_foreign_key_to_a_node_refuses_the_delete`
+(em `tests/deletion.rs`) percorre `sqlite_master` e roda `PRAGMA foreign_key_list` em cada tabela;
+qualquer FK para `nodes` com `on_delete = NO ACTION` reprova o gate, com o nome da coluna na
+mensagem. A quarta coluna dessa forma não chega a nascer. É a diferença entre consertar um bug e
+fechar a porta por onde ele entra — e é a resposta à pergunta que o ADR-0078 deixou sem fazer:
+*"onde mais?"*.
+
+`areas` e `accounts` ficam **de fora de propósito**: nenhuma das duas tem caminho de exclusão hoje (a
+área se arquiva; as contas são semeadas pela migration). A guarda diz isso por escrito, para que o dia
+em que alguma ganhar um delete seja o dia em que ela cresce junto.
+
+**Decisão 2 — `ON DELETE SET NULL` nas três, inclusive em `parent_id`, e por que NÃO CASCADE.**
+Para `routine_id` e `level_goal_id` é a mesma cláusula pelo mesmo motivo da 0018: vínculo frouxo, o
+filho sobrevive.
+
+`nodes.parent_id` é o caso interessante, porque ali a resposta certa para o usuário é a **contrária**:
+apagar o projeto DEVE levar as tarefas. E mesmo assim a FK vai a SET NULL, porque
+
+> um CASCADE apagaria os filhos **sem um evento no ledger**.
+
+As tarefas sumiriam junto com a história de terem existido — a metade da regra do ADR-0056 que o
+CASCADE não sabe cumprir, porque roda dentro do banco, abaixo da camada que sabe apendar.
+
+**Decisão 3 — quem leva os filhos é o repositório, descendo a árvore com um evento por node.**
+`SqliteNodeRepository::delete_with_event` passa a coletar os descendentes por CTE recursiva, apendar
+um `deleted` para cada um (com o instante do pai e `"with_parent": <id>` no payload, para a Timeline
+não sugerir que o usuário apagou dez coisas) e apagar do mais fundo para o mais raso — tudo numa
+transação. Fica no **repositório**, e não em `NodeService`, porque os cinco serviços que apagam nodes
+(nodes, metas, temporadas, eventos, caixinhas) já funilam por esse único método: pôr a descida na
+camada de cima obrigaria os cinco a lembrar, e o sexto esqueceria.
+
+Então para que mexer na FK, se o serviço já resolve? **Porque a FK é o piso e o código é o
+comportamento.** Se um caminho futuro apagar um node sem descer a árvore, com SET NULL ele deixa um
+órfão VISÍVEL na lista de tarefas — feio, corrigível, ledger intacto. Com NO ACTION devolve erro de
+storage; com CASCADE apaga em silêncio e leva a história junto. Das três formas de errar, SET NULL é
+a única que o usuário enxerga e desfaz.
+
+**O que a migration quase perdeu, e a guarda que nasceu disso.** `subject_details` ganhou quatro
+colunas por ALTER na 0016 e a `summary` na 0017; a primeira versão da reconstrução **esqueceu a
+`summary`**. Um `INSERT ... SELECT` que omite uma coluna não dá erro — ele só apaga o dado, e o
+repositório (que faz `SELECT` por nome) só descobre no dia em que alguém lê o campo. Foi um teste da
+0017 que a cobrou de volta, e o teste `the_rebuilt_tables_keep_every_column` agora compara
+`pragma_table_info` antes (v18) e depois (v19) das três tabelas: numa reconstrução, **só a cláusula
+`ON DELETE` pode ter mudado**.
+
+**O achado de tabela: três testes de migration não estavam testando o upgrade real.** Os testes da
+0018 subiam com `migrations().to_latest()` cru, e o seed deles liga as FKs. O runner de verdade
+(`run`) **desliga** as FKs durante a subida — porque um `DROP TABLE nodes` com FK ligada dispara o
+`ON DELETE CASCADE` dos oito satélites e **apaga os dados do usuário**. Enquanto nenhuma migration
+nova tocasse `nodes`, o atalho passava despercebido; a 0019 toca, e os três caíram com os satélites
+vazios. Eles agora sobem pelo `run()`. A lição vale além daqui: **um teste de migration que não passa
+pelo caminho do app não está testando o upgrade que o usuário recebe** — ele está testando um upgrade
+que ninguém executa.
+
+**Consequência para o `%APPDATA%` real.** Ele ainda está em v16 e agora sobe de uma vez a v19, com o
+snapshot automático do ADR-0069 por cima do backup manual. `nodes` é recriada pela QUINTA vez (0007,
+0011, 0012, 0013, 0019): `rowid` preservado no INSERT e os três gatilhos de FTS recriados palavra por
+palavra — as duas armadilhas que falham em SILÊNCIO, cobertas por
+`the_search_index_still_points_at_the_right_row`.

@@ -38,6 +38,9 @@ fn migration_set() -> Vec<M<'static>> {
         M::up(include_str!("../../../migrations/0016_compass.sql")),
         M::up(include_str!("../../../migrations/0017_goal_engine.sql")),
         M::up(include_str!("../../../migrations/0018_habit_unlinks.sql")),
+        M::up(include_str!(
+            "../../../migrations/0019_delete_is_a_right.sql"
+        )),
     ]
 }
 
@@ -1323,6 +1326,18 @@ mod tests {
 
         /// Um banco no estado da 0017 — antes da correção — com um hábito
         /// segurado pelas TRÊS colunas ao mesmo tempo.
+        ///
+        /// Este seed liga as FKs (o teste `before_the_fix...` precisa delas para
+        /// provar a recusa), e por isso os testes daqui sobem pelo `run()` e não
+        /// pelo `migrations().to_latest()` cru — que é o que eles faziam até a
+        /// 0019 os pegar. A diferença não é estilo: `run()` desliga as FKs
+        /// durante a subida, e uma migration que dropa `nodes` com as FKs
+        /// LIGADAS dispara os `ON DELETE CASCADE` dos oito satélites e apaga os
+        /// dados do usuário (a razão de o pragma morar no runner, e não no .sql
+        /// — ver o comentário de `run`). Enquanto nenhuma migration nova tocasse
+        /// `nodes`, o atalho passava; a 0019 toca, e os três testes caíram com os
+        /// satélites vazios. Um teste de migration que não passa pelo `run()` não
+        /// está testando o upgrade que o usuário recebe.
         fn seeded_at_v17() -> Connection {
             let mut conn = Connection::open_in_memory().unwrap();
             migrations().to_version(&mut conn, 17).unwrap();
@@ -1383,8 +1398,7 @@ mod tests {
         #[test]
         fn the_three_links_go_to_null_and_the_habit_finally_goes() {
             let mut conn = seeded_at_v17();
-            migrations().to_latest(&mut conn).unwrap();
-            conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+            run(&mut conn).unwrap();
 
             conn.execute("DELETE FROM nodes WHERE id = 'h1'", [])
                 .unwrap();
@@ -1429,7 +1443,7 @@ mod tests {
             // atravessar inteiro, incluindo o `counts_from` que a 0009 acrescentou
             // e que um INSERT ... SELECT desatento deixaria para trás.
             let mut conn = seeded_at_v17();
-            migrations().to_latest(&mut conn).unwrap();
+            run(&mut conn).unwrap();
 
             let (kind, target, counts_from): (String, i64, String) = conn
                 .query_row(
@@ -1469,7 +1483,7 @@ mod tests {
             // à mão. Um deles esquecido passaria despercebido até o dia em que o
             // banco aceitasse uma meta incoerente.
             let mut conn = seeded_at_v17();
-            migrations().to_latest(&mut conn).unwrap();
+            run(&mut conn).unwrap();
             conn.execute_batch(
                 "INSERT INTO nodes (id, kind, title, created_at, updated_at)
                       VALUES ('g9', 'goal', 'Incoerente', 0, 0);",
@@ -1510,13 +1524,273 @@ mod tests {
         #[test]
         fn running_the_unlink_twice_is_a_no_op() {
             let mut conn = seeded_at_v17();
-            migrations().to_latest(&mut conn).unwrap();
-            migrations().to_latest(&mut conn).unwrap();
+            run(&mut conn).unwrap();
+            run(&mut conn).unwrap();
 
             for (table, expected) in [
                 ("milestone_details", 1i64),
                 ("challenge_details", 1),
                 ("goal_details", 2),
+            ] {
+                let n: i64 = conn
+                    .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+                    .unwrap();
+                assert_eq!(n, expected, "{table} se multiplicou ou sumiu");
+            }
+        }
+    }
+
+    /// A 0019 termina o serviço da 0018: ela não conserta mais três colunas, ela
+    /// tira do schema a FORMA que produziu as três — `REFERENCES nodes(id)` sem
+    /// cláusula `ON DELETE`, que o SQLite lê como "recuse apagar o pai".
+    ///
+    /// A varredura que achou as últimas três vive em `tests/deletion.rs`
+    /// (`no_foreign_key_to_a_node_refuses_the_delete`), e é ela que impede a
+    /// quarta de nascer. Aqui provamos a subida: o defeito antes, o conserto
+    /// depois, e — porque `nodes` é recriada pela QUINTA vez — que nada se perde
+    /// no caminho.
+    mod delete_is_a_right {
+        use super::*;
+
+        /// Um banco no estado da 0018 com os três casos montados: um projeto com
+        /// tarefa e sub-tarefa, uma rotina com hábito dentro, e um idioma cuja
+        /// escada é uma meta.
+        fn seeded_at_v18() -> Connection {
+            let mut conn = Connection::open_in_memory().unwrap();
+            migrations().to_version(&mut conn, 18).unwrap();
+            conn.execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 INSERT INTO areas (id, name) VALUES ('a1', 'Estudos');
+
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('p1', 'project', 'Reforma', 'a1', 100, 100);
+                 INSERT INTO nodes (id, kind, title, area_id, parent_id, created_at, updated_at)
+                      VALUES ('t1', 'task', 'Pintura', 'a1', 'p1', 100, 100);
+                 INSERT INTO nodes (id, kind, title, area_id, parent_id, created_at, updated_at)
+                      VALUES ('t2', 'task', 'Comprar tinta', 'a1', 't1', 100, 100);
+
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('r1', 'routine', 'Rotina da manha', 'a1', 100, 100);
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('h1', 'habit', 'Beber agua', 'a1', 100, 100);
+                 INSERT INTO habit_details
+                      (node_id, schedule_json, target_value, unit, routine_id,
+                       routine_order, reminder_time)
+                      VALUES ('h1', '{\"kind\":\"daily\"}', 2.0, 'L', 'r1', 3, '07:30');
+
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('g1', 'goal', 'Ingles: Basico a Fluente', 'a1', 100, 100);
+                 INSERT INTO goal_details (node_id, goal_kind, progress_source)
+                      VALUES ('g1', 'staged', 'milestones');
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('s1', 'subject', 'Ingles', 'a1', 100, 100);
+                 INSERT INTO subject_details
+                      (node_id, category, target_minutes, track, course_stage,
+                       expected_end, level_goal_id, summary)
+                      VALUES ('s1', 'Idiomas', 600, 'idioma', NULL,
+                              '2026-12-31', 'g1', 'Conversacao e gramatica');",
+            )
+            .unwrap();
+            conn
+        }
+
+        #[test]
+        fn before_the_fix_the_three_parents_were_indelible() {
+            // O defeito, provado em vez de descrito — e são TRÊS caminhos que o
+            // usuário percorre com um clique de "excluir".
+            let conn = seeded_at_v18();
+            for (what, id) in [
+                ("o projeto com tarefas", "p1"),
+                ("a rotina com um habito", "r1"),
+                ("a meta que e a escada de um idioma", "g1"),
+            ] {
+                assert!(
+                    conn.execute("DELETE FROM nodes WHERE id = ?1", [id])
+                        .is_err(),
+                    "na 0018 {what} era indelevel — se isto passou, a 0019 perdeu o motivo"
+                );
+            }
+        }
+
+        #[test]
+        fn after_the_fix_the_three_parents_go_and_the_children_stay() {
+            let mut conn = seeded_at_v18();
+            run(&mut conn).unwrap();
+
+            for id in ["p1", "r1", "g1"] {
+                conn.execute("DELETE FROM nodes WHERE id = ?1", [id])
+                    .unwrap_or_else(|e| panic!("apagar {id} ainda falha: {e}"));
+            }
+
+            // As tarefas ficaram — soltas, porque quem as leva junto é o
+            // `NodeService::delete` (que apenda um evento por filho), não a FK.
+            // Ver o cabeçalho da 0019: das três formas de errar, SET NULL é a
+            // única que o usuário enxerga e desfaz.
+            let orphan: Option<String> = conn
+                .query_row("SELECT parent_id FROM nodes WHERE id = 't1'", [], |r| {
+                    r.get(0)
+                })
+                .unwrap();
+            assert!(orphan.is_none(), "o parent_id devia ter ido a NULL");
+
+            let routine: Option<String> = conn
+                .query_row(
+                    "SELECT routine_id FROM habit_details WHERE node_id = 'h1'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or_else(|e| panic!("o habito foi junto com a rotina: {e}"));
+            assert!(routine.is_none());
+
+            let ladder: Option<String> = conn
+                .query_row(
+                    "SELECT level_goal_id FROM subject_details WHERE node_id = 's1'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or_else(|e| panic!("o idioma foi junto com a meta: {e}"));
+            assert!(ladder.is_none());
+
+            let mut stmt = conn.prepare("PRAGMA foreign_key_check").unwrap();
+            assert!(
+                stmt.query([]).unwrap().next().unwrap().is_none(),
+                "as tres reconstrucoes nao deixaram referencia orfa"
+            );
+        }
+
+        #[test]
+        fn the_rebuilt_tables_keep_every_column() {
+            // A armadilha que esta migration quase caiu: `subject_details` ganhou
+            // quatro colunas por ALTER na 0016 e uma na 0017, e a primeira versão
+            // da reconstrução esqueceu a `summary`. Um INSERT ... SELECT que
+            // omite uma coluna não dá erro — ele só apaga o dado, e o repositório
+            // (que faz SELECT por nome) só descobre no dia em que alguém lê o
+            // campo. Comparar as duas listas é o único jeito de o esquecimento
+            // fazer barulho na hora.
+            let mut before = Connection::open_in_memory().unwrap();
+            migrations().to_version(&mut before, 18).unwrap();
+            let mut after = Connection::open_in_memory().unwrap();
+            run(&mut after).unwrap();
+
+            let columns = |conn: &Connection, table: &str| -> Vec<String> {
+                let mut stmt = conn
+                    .prepare(&format!(
+                        "SELECT name, type FROM pragma_table_info('{table}')"
+                    ))
+                    .unwrap();
+                stmt.query_map([], |r| {
+                    Ok(format!(
+                        "{} {}",
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?
+                    ))
+                })
+                .unwrap()
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .unwrap()
+            };
+
+            for table in ["nodes", "habit_details", "subject_details"] {
+                assert_eq!(
+                    columns(&before, table),
+                    columns(&after, table),
+                    "a reconstrucao de {table} mudou as colunas — so a clausula \
+                     ON DELETE podia ter mudado"
+                );
+            }
+        }
+
+        #[test]
+        fn the_data_of_the_three_tables_survives_the_rebuild() {
+            let mut conn = seeded_at_v18();
+            run(&mut conn).unwrap();
+
+            let (title, parent): (String, String) = conn
+                .query_row(
+                    "SELECT title, parent_id FROM nodes WHERE id = 't2'",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!((title.as_str(), parent.as_str()), ("Comprar tinta", "t1"));
+
+            let (target, unit, order, reminder): (f64, String, i64, String) = conn
+                .query_row(
+                    "SELECT target_value, unit, routine_order, reminder_time
+                       FROM habit_details WHERE node_id = 'h1'",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                )
+                .unwrap();
+            assert_eq!(
+                (target, unit.as_str(), order, reminder.as_str()),
+                (2.0, "L", 3, "07:30")
+            );
+
+            let (category, minutes, track, expected, summary): (
+                String,
+                i64,
+                String,
+                String,
+                String,
+            ) = conn
+                .query_row(
+                    "SELECT category, target_minutes, track, expected_end, summary
+                       FROM subject_details WHERE node_id = 's1'",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+                )
+                .unwrap();
+            assert_eq!(
+                (
+                    category.as_str(),
+                    minutes,
+                    track.as_str(),
+                    expected.as_str(),
+                    summary.as_str()
+                ),
+                (
+                    "Idiomas",
+                    600,
+                    "idioma",
+                    "2026-12-31",
+                    "Conversacao e gramatica"
+                )
+            );
+        }
+
+        #[test]
+        fn the_search_index_still_points_at_the_right_row() {
+            // `nodes` recriada = `search_index` em risco. A busca é contentless e
+            // se liga ao conteúdo SÓ pelo rowid (0002); uma cópia sem rowid
+            // explícito renumeraria tudo e a busca passaria a devolver a linha
+            // errada, sem erro nenhum. A quinta recriação corre o mesmo risco que
+            // a primeira.
+            let mut conn = seeded_at_v18();
+            run(&mut conn).unwrap();
+
+            let hit: String = conn
+                .query_row(
+                    "SELECT n.id FROM search_index s
+                       JOIN nodes n ON n.rowid = s.rowid
+                      WHERE search_index MATCH 'Reforma'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(hit, "p1");
+        }
+
+        #[test]
+        fn running_it_twice_is_a_no_op() {
+            let mut conn = seeded_at_v18();
+            run(&mut conn).unwrap();
+            run(&mut conn).unwrap();
+
+            for (table, expected) in [
+                ("nodes", 7i64),
+                ("habit_details", 1),
+                ("subject_details", 1),
             ] {
                 let n: i64 = conn
                     .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))

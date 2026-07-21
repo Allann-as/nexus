@@ -6,11 +6,12 @@
 use std::sync::Arc;
 
 use rusqlite::{params, Connection, OptionalExtension, Row};
+use serde_json::json;
 
 use crate::application::ports::{NewNode, NodeFilter, NodePatch, NodeRepository};
 use crate::domain::entities::{Kind, Node, Status};
 use crate::domain::errors::{NexusError, Result};
-use crate::domain::ledger::NewLedgerEvent;
+use crate::domain::ledger::{EventType, NewLedgerEvent};
 use crate::infrastructure::db::Db;
 use crate::infrastructure::repositories::ledger_repo::append_in_tx;
 
@@ -218,10 +219,42 @@ impl NodeRepository for SqliteNodeRepository {
         self.db.with_write(|conn| {
             let tx = conn.transaction()?;
 
-            // Ordem importa: o evento é gravado ANTES do DELETE. Depois o node
-            // não existe mais para ler o título — e `ledger.entity_id` não tem
-            // FK justamente para o evento sobreviver a esta linha sumir.
+            // A ÁRVORE inteira sai junto (v1.3, fase 3c). Apagar um projeto
+            // apaga as tarefas dele; uma matéria, os temas; um objetivo, os
+            // sub-desafios. Deixá-los para trás seria pior que o erro que a 0019
+            // consertou: uma tarefa órfã não aparece em projeto nenhum e não tem
+            // como ser achada para ser apagada.
+            let doomed = descendants_in_tx(&tx, id)?;
+
+            // Ordem importa: os eventos são gravados ANTES dos DELETEs. Depois
+            // os nodes não existem mais para ler título nem kind — e
+            // `ledger.entity_id` não tem FK justamente para o evento sobreviver
+            // a estas linhas sumirem.
             append_in_tx(&tx, event)?;
+            for child in &doomed {
+                // O `deleted` de cada filho carrega o mesmo instante do pai —
+                // eles saíram no mesmo ato — e diz no payload que foi arrastado,
+                // para a Timeline não sugerir que o usuário apagou dez coisas.
+                append_in_tx(
+                    &tx,
+                    &NewLedgerEvent {
+                        ts: event.ts,
+                        day: event.day.clone(),
+                        entity_id: child.id.clone(),
+                        entity_kind: child.kind.into(),
+                        event_type: EventType::Deleted,
+                        payload: json!({ "kind": child.kind.as_str(), "with_parent": id }),
+                        title_snapshot: child.title.clone(),
+                    },
+                )?;
+            }
+
+            // Do mais fundo para o mais raso: `descendants_in_tx` devolve em
+            // ordem de profundidade, e apagar de trás para frente nunca deixa um
+            // pai sumir antes dos filhos dele.
+            for child in doomed.iter().rev() {
+                tx.execute("DELETE FROM nodes WHERE id = ?1", params![child.id])?;
+            }
 
             let changed = tx.execute("DELETE FROM nodes WHERE id = ?1", params![id])?;
             if changed == 0 {
@@ -232,4 +265,34 @@ impl NodeRepository for SqliteNodeRepository {
             Ok(())
         })
     }
+}
+
+/// O que um node arrasta consigo: os filhos, os netos, e assim por diante.
+///
+/// Sai em ordem de PROFUNDIDADE crescente (os filhos diretos primeiro), que é a
+/// ordem em que uma CTE recursiva anda a árvore. Quem apaga percorre ao
+/// contrário.
+///
+/// O `LIMIT` implícito é a própria árvore: não há ciclo possível porque
+/// `parent_id` só é gravado na criação e sempre aponta para um node que já
+/// existia. Se um dia houver, a CTE recursiva do SQLite pararia no primeiro
+/// repetido — mas o `WHERE d.id <> n.parent_id` de nada adiantaria, então a
+/// guarda real continua sendo não deixar um ciclo nascer.
+fn descendants_in_tx(conn: &Connection, root: &str) -> Result<Vec<Node>> {
+    let mut stmt = conn.prepare(
+        "WITH RECURSIVE tree(id, depth) AS (
+             SELECT id, 0 FROM nodes WHERE parent_id = ?1
+             UNION ALL
+             SELECT n.id, tree.depth + 1
+               FROM nodes n JOIN tree ON n.parent_id = tree.id
+         )
+         SELECT n.id, n.kind, n.title, n.area_id, n.parent_id, n.status,
+                n.created_at, n.updated_at, n.archived_at
+           FROM nodes n JOIN tree ON tree.id = n.id
+          ORDER BY tree.depth",
+    )?;
+    let rows = stmt
+        .query_map(params![root], map_node)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
 }

@@ -392,6 +392,214 @@ fn retracting_a_milestone_that_never_existed_is_not_found() {
 }
 
 /* ===================================================================
+COCKPIT fase 3c — a CLASSE do defeito que a 0018 achou
+
+A 0018 consertou TRÊS colunas `habit_id`. Mas o defeito não era das três: era
+da FORMA `REFERENCES nodes(id)` escrita sem cláusula `ON DELETE`, que o SQLite
+lê como NO ACTION — *"recuse apagar o pai"*. Enquanto essa forma existir em
+alguma coluna viva, existe um caminho pelo qual o usuário clica em "excluir" e
+recebe `FOREIGN KEY constraint failed`.
+
+Os testes daqui atacam a forma, não os casos: o primeiro varre o schema inteiro
+e não deixa a próxima coluna nascer errada; os demais exercem os três caminhos
+que a varredura encontrou.
+=================================================================== */
+
+/// Toda FK que aponta para `nodes` declara o que fazer quando o node sai.
+///
+/// `nodes` é a tabela das 16 espécies que o usuário cria — e portanto a única
+/// cujas linhas ele apaga com um clique. Uma FK NO ACTION para cá é um botão de
+/// excluir que o banco recusa. (`areas` e `accounts` ficam de fora de propósito:
+/// nenhuma das duas tem caminho de exclusão — a área se arquiva, e as contas são
+/// semeadas pela migration. No dia em que alguma ganhar um delete, esta guarda
+/// precisa crescer junto.)
+#[test]
+fn no_foreign_key_to_a_node_refuses_the_delete() {
+    let w = setup();
+    let offenders: Vec<String> =
+        w.db.with_read(|c| {
+            let mut tables = c.prepare(
+                "SELECT name FROM sqlite_master
+                  WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+            )?;
+            let names: Vec<String> = tables
+                .query_map([], |r| r.get::<_, String>(0))?
+                .collect::<rusqlite::Result<_>>()?;
+
+            let mut found = Vec::new();
+            for table in names {
+                let mut fks = c.prepare(&format!("PRAGMA foreign_key_list('{table}')"))?;
+                let rows: Vec<(String, String, String)> = fks
+                    .query_map([], |r| {
+                        Ok((
+                            r.get::<_, String>(2)?, // tabela referenciada
+                            r.get::<_, String>(3)?, // coluna daqui
+                            r.get::<_, String>(6)?, // on_delete
+                        ))
+                    })?
+                    .collect::<rusqlite::Result<_>>()?;
+                for (target, column, on_delete) in rows {
+                    if target == "nodes" && on_delete == "NO ACTION" {
+                        found.push(format!("{table}.{column}"));
+                    }
+                }
+            }
+            Ok(found)
+        })
+        .unwrap();
+
+    assert!(
+        offenders.is_empty(),
+        "estas colunas recusam o DELETE do node que elas apontam, \
+         e o usuário vê 'FOREIGN KEY constraint failed': {offenders:?}"
+    );
+}
+
+#[test]
+fn deleting_a_project_takes_its_tasks_with_it_and_records_each_one() {
+    // `nodes.parent_id` é a FK NO ACTION mais antiga do schema (0001) e a de
+    // maior alcance: ela liga projeto→tarefa, matéria→tema (ADR-0077) e
+    // objetivo→sub-desafio. Apagar qualquer pai falhava com o erro de storage.
+    //
+    // A escolha aqui não é `ON DELETE CASCADE` sozinho: um CASCADE silencioso
+    // apagaria as tarefas SEM evento no ledger, e a história de que elas
+    // existiram sumiria com elas — o oposto do ADR-0056. O serviço desce a
+    // árvore, apenda um `deleted` por node e apaga tudo numa transação só.
+    let w = setup();
+    let project = w
+        .nodes
+        .create(
+            nexus_lib::domain::entities::Kind::Project,
+            "Reforma",
+            None,
+            None,
+        )
+        .unwrap();
+    let tasks: Vec<String> = ["Orçamento", "Pintura"]
+        .iter()
+        .map(|t| {
+            w.nodes
+                .create(
+                    nexus_lib::domain::entities::Kind::Task,
+                    t,
+                    None,
+                    Some(&project.id),
+                )
+                .unwrap()
+                .id
+        })
+        .collect();
+    // Um neto, para provar que a descida é recursiva e não de um nível só.
+    let subtask = w
+        .nodes
+        .create(
+            nexus_lib::domain::entities::Kind::Task,
+            "Comprar tinta",
+            None,
+            Some(&tasks[1]),
+        )
+        .unwrap()
+        .id;
+
+    w.nodes.delete(&project.id).unwrap();
+
+    // O ESTADO sai inteiro — nada de tarefa órfã boiando na lista.
+    for id in [&project.id, &tasks[0], &tasks[1], &subtask] {
+        assert_eq!(w.nodes_with(id), 0, "sobrou o node {id}");
+    }
+
+    // E a HISTÓRIA de cada uma fica, com o próprio `deleted`.
+    for id in [&tasks[0], &tasks[1], &subtask] {
+        let events = w.events_of(id);
+        assert!(
+            events.contains(&"deleted".to_string()),
+            "a tarefa {id} sumiu sem o ledger registrar"
+        );
+        assert!(events.contains(&"created".to_string()));
+    }
+}
+
+#[test]
+fn deleting_a_routine_leaves_its_habits_standing() {
+    // `habit_details.routine_id` (0001). O caso é o espelho do projeto: a rotina
+    // é um AGRUPAMENTO, e o hábito existe fora dela. Apagar a "Rotina da manhã"
+    // não pode apagar "Beber água" — nem ser recusado por causa dele.
+    let w = setup();
+    let routine = w.habits.create_routine("Rotina da manhã", None).unwrap();
+    let habit = w
+        .habits
+        .create(
+            "Beber água",
+            None,
+            Schedule::Daily,
+            None,
+            None,
+            Some(routine.clone()),
+            None,
+        )
+        .unwrap()
+        .id;
+
+    w.nodes.delete(&routine).unwrap();
+
+    assert_eq!(w.nodes_with(&routine), 0);
+    assert_eq!(w.nodes_with(&habit), 1, "o hábito foi junto com a rotina");
+    assert!(
+        w.habits.habits.get(&habit).unwrap().routine_id.is_none(),
+        "o vínculo tinha que ir a NULL"
+    );
+}
+
+#[test]
+fn deleting_the_ladder_goal_of_a_language_leaves_the_language() {
+    // `subject_details.level_goal_id` (0016). Um idioma guarda QUAL meta é a
+    // escada dele. Apagar essa meta pela tela de Metas não pode ser recusada
+    // porque um idioma aponta para ela — o idioma só volta a ficar sem escada.
+    let w = setup();
+    let goal = w
+        .goals
+        .create(&metricless("Inglês: Básico a Fluente", GoalKind::Staged))
+        .unwrap();
+    let subject = w
+        .nodes
+        .create(
+            nexus_lib::domain::entities::Kind::Subject,
+            "Inglês",
+            None,
+            None,
+        )
+        .unwrap();
+    w.db.with_write(|c| {
+        c.execute(
+            "INSERT INTO subject_details (node_id, track, level_goal_id)
+             VALUES (?1, 'idioma', ?2)",
+            rusqlite::params![subject.id, goal.id],
+        )?;
+        Ok(())
+    })
+    .unwrap();
+
+    // Uma meta se apaga como todo node se apaga — é o `delete_node` que a tela
+    // de Metas chama.
+    w.nodes.delete(&goal.id).unwrap();
+
+    assert_eq!(
+        w.nodes_with(&subject.id),
+        1,
+        "o idioma foi junto com a meta"
+    );
+    assert_eq!(
+        w.count(
+            "SELECT COUNT(*) FROM subject_details
+              WHERE node_id = ?1 AND level_goal_id IS NULL",
+            &subject.id
+        ),
+        1,
+        "a escada tinha que ir a NULL"
+    );
+}
+
+/* ===================================================================
 Fase C — metas com tipo, contra o CHECK de verdade
 =================================================================== */
 
