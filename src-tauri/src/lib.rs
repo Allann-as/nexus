@@ -295,6 +295,7 @@ pub fn run() {
             commands::security::disable_pin,
             commands::settings::app_settings,
             commands::settings::set_close_to_tray,
+            commands::settings::set_display_name,
         ])
         .build(tauri::generate_context!())
         .expect("não foi possível construir a janela do NEXUS")

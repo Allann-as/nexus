@@ -2565,3 +2565,48 @@ todo antes de qualquer tela de produto. O gate segue verde: `tsc` limpo, 82 test
 passando (o guarda anti-emoji incluso). As Fases 2–7 (nav/home, motor de metas, esferas, telas de
 sistema, tela de bloqueio, entrega) herdam esta fundação. O tema claro foi derivado, não abandonado —
 o fósforo AFUNDA para `#0E9F6E` sobre branco, onde `#33E1A0` seria ilegível.
+
+## ADR-0075 — O nome de exibição mora no `settings.json`, não no banco nem atrás do PIN
+
+**Data:** 2026-07-21 · **Status:** aceito · **v1.3 (COCKPIT), fase 2**
+
+**Contexto.** A saudação do Hub dizia `{greeting()}, Allan` com o nome CRAVADO no JSX. O app vai ser
+compartilhado localmente com outras pessoas (namorada, pessoas próximas), e um nome em código
+significa que a segunda pessoa a abrir o NEXUS é saudada pelo nome da primeira. Precisa ser
+configurável — e a pergunta interessante é ONDE ele mora.
+
+**Decisão.** No **`settings.json`** (`AppSettings.display_name`, `displayName` no JSON), ao lado do
+`closeToTray`. Não no banco, não no ledger, não atrás do PIN. Quatro razões, e a terceira é a que
+decide:
+
+1. **É preferência de CHROME, não dado da vida.** Como o tema e a bandeja: não é um fato que
+   aconteceu, é como o app se apresenta. O ledger guarda o que o usuário FEZ; trocar o próprio nome
+   de exibição não é um acontecimento da vida dele.
+2. **Não deve entrar no backup de dados nem no export.** O `settings.json` já está fora dos dois por
+   construção (ver `backup.rs` §380) — o nome segue a mesma regra sem código novo.
+3. **A tela de bloqueio precisa dele ANTES do PIN.** A fase 6 põe "Boa noite, {nome}" na tela de
+   bloqueio, que roda antes de qualquer abertura de banco. Um nome no SQLite seria ilegível
+   exatamente onde ele é mais necessário — e pôr o banco para abrir antes do PIN inverteria a ordem
+   que o ADR-0054 fixou.
+4. **Um lugar, duas telas.** `lib/greeting.ts` centraliza a faixa de hora (pura, testada, com a hora
+   INJETADA) e o `useDisplayName()`, que compartilha a chave `["app-settings"]` com Configurações —
+   salvar o nome lá reflete no Hub sem recarregar nada.
+
+**A armadilha que quase passou.** `SettingsStore::load` faz
+`serde_json::from_str::<AppSettings>(&s).ok().unwrap_or_default()`. Sem `#[serde(default)]` no campo
+NOVO, todo `settings.json` gravado antes da v1.3 (que não tem `displayName`) falharia a
+desserialização inteira, o `.ok()` engoliria o erro em silêncio e o usuário perderia o `closeToTray`
+que havia escolhido. Os dois campos ganharam default por função, e um teste
+(`a_pre_v13_settings_file_keeps_its_tray_choice`) prende a garantia com o nome dela — a lição do
+ADR-0069: *uma linha de documentação não é uma garantia; toda afirmação de segurança deveria ter um
+teste com o nome dela.*
+
+**Detalhes de comportamento.** O nome é APARADO e limitado a 40 caracteres no BACKEND (não só na UI):
+vazio volta ao padrão `"Allan"`, porque `"Boa noite, "` com o vazio pendurado é pior que qualquer
+nome, e um nome de 200 caracteres quebraria o cabeçalho do Hub. O editor vive em **Configurações ›
+Perfil** e salva sozinho 500 ms depois da última tecla — um botão "Salvar" para um campo só é
+cerimônia, e gravar a cada tecla escreveria no disco uma dúzia de vezes para digitar um nome.
+
+**Consequência.** A saudação do Hub consome o nome nesta fase; a da tela de bloqueio consome o MESMO
+hook na fase 6. A quatro faixas do dia (madrugada/manhã/tarde/noite) que o Hub já tinha desde o M2.5
+foi preservada na centralização — centralizar não podia ser a desculpa para a nuance se perder.

@@ -34,10 +34,12 @@ import { SphereCard } from "./SphereCard";
 import { TodayStrip } from "./TodayStrip";
 import { HorizonBand } from "./HorizonBand";
 import { OnThisDay } from "../timeline/OnThisDay";
+import { greeting, useDisplayName } from "../../lib/greeting";
 
 export function HubScreen() {
   const navigate = useNavigate();
   const [showMath, setShowMath] = useState(false);
+  const displayName = useDisplayName();
 
   const spheres = useQuery({ queryKey: ["spheres", "overview"], queryFn: sphereOverview });
   const today = useQuery({ queryKey: ["dashboard", "today"], queryFn: dashboardToday });
@@ -92,7 +94,7 @@ export function HubScreen() {
         <header className="flex items-start justify-between gap-8">
           <div className="pt-2">
             <h1 className="text-[30px] leading-[36px] font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
-              {greeting()}, Allan
+              {greeting()}, {displayName}
             </h1>
             <p className="mt-1 text-[13px] text-[var(--text-tertiary)]">
               {today.data ? formatDay(today.data.day) : " "}
@@ -308,15 +310,6 @@ function SkeletonGrid() {
       ))}
     </div>
   );
-}
-
-/** A saudação segue o relógio do usuário — é a única parte da tela que fala com ele. */
-function greeting(): string {
-  const h = new Date().getHours();
-  if (h < 5) return "Boa madrugada";
-  if (h < 12) return "Bom dia";
-  if (h < 18) return "Boa tarde";
-  return "Boa noite";
 }
 
 function formatDay(day: string): string {

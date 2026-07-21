@@ -17,3 +17,9 @@ pub fn app_settings(state: State<'_, AppState>) -> AppSettings {
 pub fn set_close_to_tray(state: State<'_, AppState>, value: bool) -> Result<AppSettings> {
     state.settings.set_close_to_tray(value)
 }
+
+/// Troca o nome que as saudações usam (Hub e tela de bloqueio). Ver ADR-0075.
+#[tauri::command]
+pub fn set_display_name(state: State<'_, AppState>, value: String) -> Result<AppSettings> {
+    state.settings.set_display_name(&value)
+}

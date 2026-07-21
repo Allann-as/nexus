@@ -34,6 +34,7 @@ import {
   Sparkles,
   Sun,
   Trophy,
+  UserRound,
   Wrench,
   Zap,
   type LucideIcon,
@@ -42,6 +43,7 @@ import {
 import {
   appSettings,
   setCloseToTray,
+  setDisplayName,
   backupStatus,
   createBackup,
   exportData,
@@ -70,6 +72,7 @@ import { useToasts } from "../../stores/toasts";
 import { useUi } from "../../stores/ui";
 import { useLock } from "../../stores/lock";
 import { allShortcuts } from "./shortcuts";
+import { DEFAULT_DISPLAY_NAME, greeting } from "../../lib/greeting";
 
 interface SettingsSection {
   key: string;
@@ -78,6 +81,7 @@ interface SettingsSection {
 }
 
 const SECTIONS: SettingsSection[] = [
+  { key: "perfil", label: "Perfil", icon: UserRound },
   { key: "aparencia", label: "Aparência", icon: Palette },
   { key: "atalhos", label: "Atalhos", icon: Keyboard },
   { key: "dados", label: "Backup & Dados", icon: Database },
@@ -127,6 +131,7 @@ export function SettingsScreen() {
 
           {/* Conteúdo */}
           <div key={active} className="nx-section-enter min-w-0 flex-1">
+            {active === "perfil" && <ProfileSection />}
             {active === "aparencia" && <AppearanceSection />}
             {active === "atalhos" && <ShortcutsSection />}
             {active === "dados" && <DataSection />}
@@ -137,6 +142,80 @@ export function SettingsScreen() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ===== Perfil ===== */
+
+/**
+ * O nome de exibição (ADR-0075).
+ *
+ * O NEXUS vai ser compartilhado localmente com outras pessoas, então o nome que
+ * as saudações usam não pode estar cravado no código. Mora no `settings.json`
+ * (preferência de chrome, fora do banco e fora do ledger) e é editado aqui.
+ *
+ * Salva SOZINHO, com um respiro de 500ms depois da última tecla: um botão
+ * "Salvar" para um campo só é cerimônia, e gravar a cada tecla escreveria no
+ * disco uma dúzia de vezes para digitar um nome. O rótulo de estado diz o que
+ * aconteceu — o campo nunca fica em dúvida.
+ */
+function ProfileSection() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["app-settings"], queryFn: appSettings });
+  const saved = q.data?.displayName ?? "";
+
+  const [name, setName] = useState<string | null>(null);
+  // `null` = ainda não editado nesta visita; mostra o que veio do backend.
+  const value = name ?? saved;
+
+  const save = useMutation({
+    mutationFn: (v: string) => setDisplayName(v),
+    onSuccess: (s) => {
+      qc.setQueryData(["app-settings"], s);
+      // O backend apara e limita: se ele devolveu outra coisa, o campo obedece.
+      setName(s.displayName);
+    },
+  });
+
+  // O respiro. Só dispara quando o usuário de fato mexeu (`name !== null`) e o
+  // valor difere do que está gravado — senão a montagem salvaria por conta própria.
+  useEffect(() => {
+    if (name === null || name.trim() === saved) return;
+    const t = setTimeout(() => save.mutate(name), 500);
+    return () => clearTimeout(t);
+    // `save` é estável o bastante; incluí-lo re-agendaria a cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, saved]);
+
+  const dirty = name !== null && name.trim() !== saved;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <SettingCard
+        title="Nome de exibição"
+        hint="Como o NEXUS chama você. Aparece na saudação do Hub e na tela de bloqueio. Fica só neste computador — não entra no histórico nem no backup de dados."
+      >
+        <div className="flex flex-col gap-2">
+          <input
+            value={value}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => {
+              if (dirty) save.mutate(name ?? "");
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
+            maxLength={40}
+            placeholder={DEFAULT_DISPLAY_NAME}
+            aria-label="Nome de exibição"
+            className="h-9 w-[260px] rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-3 text-[13px] text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--accent)]"
+          />
+          <span className="font-mono text-[11px] text-[var(--text-tertiary)]">
+            {dirty ? "salvando…" : `${greeting()}, ${value || DEFAULT_DISPLAY_NAME}`}
+          </span>
+        </div>
+      </SettingCard>
     </div>
   );
 }

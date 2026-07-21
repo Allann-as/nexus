@@ -550,6 +550,8 @@ export const exportRetrospective = (year: number) =>
 
 export interface AppSettings {
   closeToTray: boolean;
+  /** O nome que TODA saudação usa (Hub, tela de bloqueio). Ver ADR-0075. */
+  displayName: string;
 }
 
 /** As preferências de SO atuais. */
@@ -558,6 +560,10 @@ export const appSettings = () => call<AppSettings>("app_settings");
 /** Liga/desliga o "fechar a janela minimiza para a bandeja". */
 export const setCloseToTray = (value: boolean) =>
   call<AppSettings>("set_close_to_tray", { value });
+
+/** Troca o nome de exibição. Vazio volta ao padrão; o backend apara e limita a 40. */
+export const setDisplayName = (value: string) =>
+  call<AppSettings>("set_display_name", { value });
 
 export const habitWeekdayStats = (id: string, days = 180) =>
   call<WeekdayStat[]>("habit_weekday_stats", { id, days });
