@@ -2,7 +2,17 @@
 
 > Documento vivo. Atualize-o no mesmo commit que muda a estrutura.
 >
-> **v1.2 BÚSSOLA (em curso)** — o passe da primeira semana de uso REAL. A marca
+> **v1.3 COCKPIT (em curso)** — a refatoração visual + estrutural. O uso real da
+> v1.2 deu o veredito: as ideias certas, a execução visual não. A Fase 1 (feita)
+> troca a linguagem inteira por um sistema de INSTRUMENTOS — grafite + fósforo +
+> mono —, a marca vira o SINAL-N (o N como traço de sinal com nós, ADR-0074), e
+> `design-system/instruments.tsx` nasce como a biblioteca-instrumento (SegBar,
+> StatusList, Heatmap, Ring, Terminal, Chip, SegToggle, BankTile, SphereHeader).
+> A vitrine `/design-system` (`G+d`) é o banco de provas. As Fases 2–7 (nav/home,
+> motor de metas, esferas, telas de sistema, tela de bloqueio, entrega) herdam a
+> fundação. Ver a §7 (O design system) e o ADR-0074.
+>
+> **v1.2 BÚSSOLA** — o passe da primeira semana de uso REAL. A marca
 > deixa de ser o astrolábio e vira a bússola (ADR-0070); o fundo perde quatro das
 > cinco camadas; as metas ganham TIPO (ADR-0071, migration 0016) porque o
 > formulário quantitativo único recusava a vida do dono; e o backup pré-migration,
@@ -389,8 +399,10 @@ obedece:
 design-system/
   tokens.css      as variáveis (dark + light). Hex cru em componente é bug.
   primitives.tsx  Button, Card, Kbd, EmptyState, PageHeader
-  cards.tsx       HeroCard, StatCard, SummaryCard, GlassPanel, CountUp, Val
+  cards.tsx       HeroCard, StatCard, StatTile, SummaryCard, GlassPanel, CountUp, Val
   charts.tsx      Sparkline, Gauge, ProgressRing, ProgressBar (SVG — ADR-0018)
+  instruments.tsx COCKPIT (v1.3): SegBar, Ring, BarSpark, StatusList, Heatmap,
+                  Terminal, Chip, SegToggle, BankTile, SphereHeader (ADR-0074)
   useSphereColor  areaId -> cor, num lugar só. Nenhuma tela reimplementa.
   Checkbox.tsx    o gesto mais repetido do app
   useCountUp.ts   rAF, respeita prefers-reduced-motion, zero animação em idle

@@ -17,6 +17,7 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 import { cx } from "./primitives";
 import { useCountUp } from "./useCountUp";
 import { ProgressRing, Sparkline } from "./charts";
+import { SegBar } from "./instruments";
 
 /* ===== HeroCard ===== */
 
@@ -162,6 +163,8 @@ const TONE_VAR: Record<string, string> = {
   success: "var(--success)",
   warning: "var(--warning)",
   danger: "var(--danger)",
+  cyan: "var(--cyan)",
+  violet: "var(--violet)",
 };
 
 /**
@@ -210,6 +213,7 @@ export function StatTile({
   tone = "sphere",
   spark,
   ring,
+  seg,
   delta,
   onClick,
 }: {
@@ -218,11 +222,13 @@ export function StatTile({
   value: ReactNode;
   unit?: string;
   hint?: ReactNode;
-  tone?: "sphere" | "accent" | "success" | "warning" | "danger";
+  tone?: "sphere" | "accent" | "success" | "warning" | "danger" | "cyan" | "violet";
   /** A série viva (0..1, antigo→recente). Vira sparkline no rodapé do tile. */
   spark?: number[];
-  /** Uma fração 0..1. Vira o anel de progresso à direita — tem precedência sobre spark. */
+  /** Uma fração 0..1. Vira o anel de progresso à direita — tem precedência sobre spark/seg. */
   ring?: number;
+  /** Uma fração 0..1. Vira uma SegBar (medidor segmentado) no rodapé — o vivo do Cockpit. */
+  seg?: number;
   delta?: { value: number; suffix?: string };
   onClick?: () => void;
 }) {
@@ -274,9 +280,10 @@ export function StatTile({
         )}
       </div>
 
-      {/* A sparkline só entra quando não há anel — dois vivos no mesmo tile
-          competem. Full-width por `w-full` sobre o viewBox. */}
-      {ring == null && spark && (
+      {/* O vivo do rodapé só entra quando não há anel — dois vivos no mesmo tile
+          competem. Precedência: SegBar (o medidor do Cockpit) antes da sparkline. */}
+      {ring == null && seg != null && <SegBar value={seg} color={color} className="mt-3" />}
+      {ring == null && seg == null && spark && (
         <Sparkline data={spark} color={color} width={280} height={34} className="mt-3 w-full" />
       )}
     </Tag>
@@ -311,7 +318,7 @@ export function Val({
   tone = "sphere",
 }: {
   children: ReactNode;
-  tone?: "sphere" | "accent" | "success" | "warning" | "danger";
+  tone?: "sphere" | "accent" | "success" | "warning" | "danger" | "cyan" | "violet";
 }) {
   return (
     <strong className="tabular font-semibold" style={{ color: TONE_VAR[tone] }}>

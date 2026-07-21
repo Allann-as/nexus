@@ -25,6 +25,7 @@ import { NotesScreen } from "../features/notes/NotesScreen";
 import { TimelineScreen } from "../features/timeline/TimelineScreen";
 import { FocusScreen } from "../features/focus/FocusScreen";
 import { WeeklyReviewScreen } from "../features/weekly-review/WeeklyReviewScreen";
+import { DesignSystemScreen } from "../features/design-system/DesignSystemScreen";
 import { useUi, applyTheme, applyDensity, applyReducedMotion } from "../stores/ui";
 import { useLock } from "../stores/lock";
 import { lockStatus } from "../lib/ipc";
@@ -83,6 +84,9 @@ const router = createHashRouter([
       { path: "compare", element: <CompareScreen /> },
       { path: "retrospective", element: <RetrospectiveScreen /> },
       { path: "settings", element: <SettingsScreen /> },
+      // A vitrine do design system Cockpit (§1). Fora da rail; alcançável por
+      // `G+d` e pela paleta. É o banco de provas da linguagem visual.
+      { path: "design-system", element: <DesignSystemScreen /> },
     ],
   },
 ]);

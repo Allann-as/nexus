@@ -26,6 +26,7 @@ import {
   FolderKanban,
   Grid3x3,
   History,
+  Shapes,
   Inbox,
   LayoutGrid,
   Medal,
@@ -96,6 +97,9 @@ export const SECONDARY_ROUTES: NavItem[] = [
   { path: "/year-pixels", label: "Ano em Pixels", icon: Grid3x3, jumpKey: "x" },
   { path: "/compare", label: "Comparativo", icon: ArrowLeftRight, jumpKey: "v" },
   { path: "/retrospective", label: "Retrospectiva", icon: ScrollText, jumpKey: "y" },
+  // A vitrine do design system Cockpit (§1) — ferramenta de dev, alcançável por
+  // G+d e pela paleta, fora da rail.
+  { path: "/design-system", label: "Design System", icon: Shapes, jumpKey: "d" },
 ];
 
 /** Tudo que o chord `G+<tecla>` alcança. */

@@ -2514,3 +2514,54 @@ o FATO; o sistema calcula o número.
 **Consequência.** O card mostra o nível 1–10, o "ⓘ como calculamos" com a fórmula e os números reais,
 e a régua de evolução ao longo dos meses (SVG, ADR-0018 — nada de engine de gráfico para isso). O
 convite ao check-in aparece no card quando o mês vira, sem modal bloqueante: o app pede, não cobra.
+
+## ADR-0074 — COCKPIT: a linguagem visual troca de raiz (grafite + fósforo + mono), e a marca vira o SINAL-N
+
+**Data:** 2026-07-20 · **Status:** aceito · **v1.3 (COCKPIT), fase 1**
+
+**Contexto.** A primeira semana de uso real da v1.2 deu um veredito claro: as IDEIAS estão certas, a
+EXECUÇÃO visual não. O navy + índigo do Midnight lia como "mais um dashboard"; faltava a densidade de
+INSTRUMENTO que o app promete ser — um cockpit da própria vida. A v1.3 troca a linguagem inteira por
+um sistema chamado COCKPIT, e a Fase 1 constrói a alavanca antes de tocar em qualquer tela: cada hora
+no componente compartilhado vale por dez na tela isolada.
+
+**Decisão.**
+
+1. **Grafite, não navy.** O fundo é quase-preto (`#060809`), a superfície de um painel de
+   instrumentos. A aurora navy do `.nx-page` saiu; entrou um DOT-GRID de fósforo a 1px e `--dot-alpha`
+   0.05 — a textura de mostrador que a v1.2 removera, mas agora fósforo, esparsa e no limiar da
+   percepção (não a grade navy-clara e densa de antes). Os aros fora de centro tingidos pela Esfera
+   ficam. Uma camada, custo de pintar um gradiente parado.
+
+2. **Fósforo é o accent.** `--accent` vira o verde-fósforo `#33E1A0`, a luz de um mostrador. Âmbar
+   (`--amb`), vermelho (`--red`), ciano (`--cy`) e violeta (`--vi`) são os acentos de estado/Esfera —
+   os dois últimos ganharam nome pela primeira vez (`--cyan`/`--violet`). O `--success` deliberadamente
+   NÃO é o fósforo puro: se tudo verde fosse "ok", o accent perderia o significado de estado.
+
+3. **O vocabulário do plano são ALIASES, não uma reescrita.** O app inteiro já fala
+   `--bg-base`/`--accent`; os nomes do Cockpit (`--bg`, `--panel`, `--tx1`, `--phos`, …) são aliases
+   canônicos — uma cor, uma verdade, dois nomes. Componentes novos escrevem na gramática do plano; os
+   ~40 telas antigas herdam o novo look pela troca de VALOR do token, sem uma linha tocada. É a mesma
+   economia do ADR-0067: um componente, o app inteiro muda junto.
+
+4. **A marca vira o SINAL-N.** A bússola (ADR-0070) resolveu a legibilidade a 32px, mas era a marca do
+   Midnight — a metáfora da navegação. O Cockpit pede um emblema de instrumento: o N desenhado como um
+   TRAÇO DE SINAL/CIRCUITO em fósforo, com dois NÓS acesos na diagonal, sobre um squircle grafite.
+   Inverte a bússola (traço branco sobre índigo → traço fósforo sobre grafite). Uma geometria só em
+   três desenhos: `NexusMark.tsx`, o splash cru do `index.html` e `src-tauri/icons/icon.svg` (o
+   vetor-fonte, de onde `tauri icon` regerou todo o bundle .ico/.png/.icns + Square*Logo).
+
+5. **A biblioteca de instrumentos** (`design-system/instruments.tsx`): SegBar (o medidor segmentado
+   que substitui TODO velocímetro de ponteiro — reprovado pelo dono), Ring, BarSpark, StatusList (LED
+   por linha), Heatmap, Terminal (o painel de operação, base do aporte), Chip, SegToggle, BankTile
+   (monograma na cor da marca até o dono colar as logos), SphereHeader, MonoLabel, Led. O `StatTile`
+   ganhou a SegBar como vivo. Nenhum estilo solto por tela — a régua é uma só.
+
+6. **Raio apertado.** `--radius-lg` desce de 16 para 12 (e as células/tags para 2–4px): o instrumento
+   tem cantos curtos. Muda o app inteiro de uma vez, reforçando a leitura de mostrador.
+
+**Consequência.** A Fase 1 entrega uma vitrine `/design-system` (`G+d`) que prova o sistema como um
+todo antes de qualquer tela de produto. O gate segue verde: `tsc` limpo, 82 testes de frontend
+passando (o guarda anti-emoji incluso). As Fases 2–7 (nav/home, motor de metas, esferas, telas de
+sistema, tela de bloqueio, entrega) herdam esta fundação. O tema claro foi derivado, não abandonado —
+o fósforo AFUNDA para `#0E9F6E` sobre branco, onde `#33E1A0` seria ilegível.

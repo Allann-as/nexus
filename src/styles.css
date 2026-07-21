@@ -123,25 +123,20 @@
     position: relative;
     background-color: var(--bg-base);
 
-    /* A aurora, no alto à direita e MUITO abaixo do que era: ela existe
-       para o fundo não ser chapado, não para ser vista. */
+    /* O DOT-GRID de fósforo (Cockpit) — a textura de mostrador. Um ponto de
+       ~1px a cada 24px, em fósforo a `--dot-alpha` (0.05): quase invisível,
+       mas dá ao grafite chapado a casca de um painel de instrumentos. Não é a
+       grade de pontos ruidosa que a v1.2 removeu — aquela era navy-clara e
+       densa; esta é fósforo, esparsa e no limiar da percepção. Estático,
+       `background-attachment: local` para rolar com o conteúdo. */
     background-image: radial-gradient(
-      1000px 480px at 82% -12%,
-      color-mix(in srgb, var(--sphere) calc(var(--aurora-alpha) * 55%), transparent),
-      transparent 72%
+      circle,
+      color-mix(in srgb, var(--phos) calc(var(--dot-alpha) * 100%), transparent) 1px,
+      transparent 1.4px
     );
-    background-size: 100% 100%;
-    background-repeat: no-repeat;
+    background-size: 24px 24px;
+    background-position: 0 0;
     background-attachment: local;
-  }
-
-  /* No tema claro a mesma aurora pesa mais sobre branco — encolhe. */
-  :root[data-theme="light"] .nx-page {
-    background-image: radial-gradient(
-      1000px 480px at 82% -12%,
-      color-mix(in srgb, var(--sphere) calc(var(--aurora-alpha) * 45%), transparent),
-      transparent 72%
-    );
   }
 
   /* ============================================================

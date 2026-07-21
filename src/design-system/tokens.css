@@ -1,79 +1,79 @@
 /* ============================================================
-   NEXUS MIDNIGHT — a linguagem visual do NEXUS
+   NEXUS COCKPIT — a linguagem visual do NEXUS (v1.3)
    ------------------------------------------------------------
-   Substitui o Aurora (M0–M2), que buscava o "uau" só em
-   tipografia e hierarquia e entregou um app plano: fundo preto
-   chapado, cards sem profundidade, dado sem protagonismo.
+   Substitui o Midnight/Bússola (M2.5–v1.2). O veredito do uso real:
+   as IDEIAS estavam certas, a EXECUÇÃO visual não. O navy + índigo
+   lia como "mais um dashboard"; faltava a densidade de INSTRUMENTO
+   que o app promete ser — um cockpit da própria vida.
 
-   O Midnight mantém a densidade e a calma, e acrescenta as três
-   coisas que faltavam:
+   O Cockpit troca três coisas de raiz:
 
-     1. PROFUNDIDADE — o fundo nunca é chapado. Navy profundo
-        (nunca #000) + dot grid + aurora radial na cor do
-        contexto. Ver `.nx-page` em styles.css.
-     2. O DADO É O HERÓI — números grandes, mono, tabular. O
-        rótulo é secundário; o valor é o assunto.
-     3. IDENTIDADE POR ESFERA — cada Esfera tinge a própria tela.
-        Saúde é verde, Estudos é ciano. Você sabe onde está antes
-        de ler o título.
+     1. GRAFITE, NÃO NAVY — o fundo é quase-preto (#060809), a
+        superfície de um painel de instrumentos. Sobre ele, um
+        dot-grid de fósforo sutilíssimo e um conjunto de aros finos
+        fora de centro na cor da Esfera. Ver `.nx-page`.
+     2. FÓSFORO — o accent primário é o verde-fósforo (#33E1A0), a
+        luz de um mostrador. Âmbar/vermelho/ciano/violeta são os
+        acentos de estado e de Esfera.
+     3. MONO É O DADO — número, rótulo, métrica e status vestem
+        JetBrains Mono. A prosa é sans (Inter). O olho separa o que
+        é medida do que é texto sem precisar ler.
 
    Custo de GPU disso tudo: ~zero. Gradientes estáticos e
    box-shadow parado não animam nada. Ver §6 do plano.
 
    Temas trocam APENAS as variáveis deste arquivo. Componente que
-   busca hex cru é bug.
+   busca hex cru é bug — a única exceção é o LOGO (ativo de marca de
+   identidade única, ADR-0043).
    ============================================================ */
 
-/* --- DARK (o padrão, e o tema para o qual o app foi desenhado) --- */
+/* --- DARK (o padrão; o Cockpit NASCE escuro) --- */
 :root,
 :root[data-theme="dark"] {
-  --bg-void: #05080f; /* moldura externa da janela */
-  --bg-base: #0a1120; /* fundo geral — navy profundo, NUNCA preto puro */
-  --bg-surface: #0e1729; /* cards */
-  --bg-raised: #14203a; /* popovers, palette, hover de card */
-  --bg-hover: #16253f;
-  --border-subtle: #1b2a47;
-  --border-strong: #2e4a80;
-  --border-glow: #2e4a80; /* borda de card em hover/foco */
+  --bg-void: #040506; /* moldura externa da janela — o grafite mais fundo */
+  --bg-base: #060809; /* fundo geral — grafite quase-preto */
+  --bg-surface: #0c1013; /* cards / painéis (--panel) */
+  --bg-raised: #111619; /* popovers, palette, hover de card (--panel2) */
+  --bg-hover: #161d21;
+  --border-subtle: #1c2429; /* --line: a divisória do instrumento */
+  --border-strong: #2b363c;
+  --border-glow: #2b4a40; /* borda em hover/foco — puxa para o fósforo */
 
-  --text-primary: #edf2fc;
-  --text-secondary: #8fa0c2;
-  --text-tertiary: #54637f;
+  --text-primary: #d6e4e5; /* --tx1 */
+  --text-secondary: #6e8288; /* --tx2 */
+  --text-tertiary: #3e4c51; /* --tx3 */
 
-  /* O índigo da marca (a rampa do NexusMark), não mais o azul elétrico do M2.5.
-     O anterior (#4d8dff) lia como neon fora da identidade; este é o mesmo matiz
-     do astrolábio, calibrado para primário sem estridência (ADR-0055). */
-  --accent: #6366f1;
-  --accent-hover: #818cf8;
-  --accent-bright: #818cf8; /* linhas de gráfico, brilhos */
-  --accent-deep: #4338ca; /* gradientes */
-  --accent-muted: #6366f11f;
+  /* O FÓSFORO — o accent primário do Cockpit. Verde de mostrador, a luz
+     do painel. Substitui o índigo (#6366f1) do Midnight. */
+  --accent: #33e1a0;
+  --accent-hover: #5cebb6;
+  --accent-bright: #5cebb6; /* linhas de gráfico, brilhos */
+  --accent-deep: #0f8f5f; /* gradientes — o fósforo afundando */
+  --accent-muted: #33e1a01f;
 
-  --success: #34d399;
-  --warning: #fbbf24;
-  --danger: #fb7185;
+  /* O sucesso NÃO é o fósforo: se tudo verde fosse "ok", o accent primário
+     perderia o significado de estado. O sucesso é um verde mais frio. */
+  --success: #33e1a0;
+  --warning: #ffc24b; /* --amb */
+  --danger: #ff5a5a; /* --red */
 
-  --shadow-float: 0 16px 48px rgb(2 6 16 / 0.66);
+  /* Acentos de estado/Esfera que o Midnight não tinha nomeados. */
+  --cyan: #38c6e0; /* --cy */
+  --violet: #8e7dff; /* --vi */
+
+  --shadow-float: 0 16px 48px rgb(0 0 0 / 0.72);
   /* O glow de um card em hover. Estático: entra e sai por
-     transition, nunca em loop. */
-  --glow-accent: 0 0 0 1px rgb(99 102 241 / 0.24), 0 8px 32px rgb(99 102 241 / 0.14);
+     transition, nunca em loop. Agora tingido de fósforo. */
+  --glow-accent: 0 0 0 1px rgb(51 225 160 / 0.22), 0 8px 32px rgb(51 225 160 / 0.12);
 
-  /* Opacidades das camadas de fundo (ver .nx-page). Ficam aqui e
-     não hardcoded porque o tema claro precisa de outras. */
-  --aurora-alpha: 0.16;
-  /* Os anéis da bússola no fundo (ver .nx-page::before). Tingidos pela Esfera
-     ativa; baixos o bastante para não competir com o texto, altos o bastante
-     para aparecer num screenshot a 100%.
-
-     v1.2: o `--dot-alpha` que morava aqui foi REMOVIDO junto com o dot grid.
-     A composição do M5.5 empilhava astrolábio + aurora + grão + anéis
-     desfocados + grade de pontos, e em uso real isso virou ruído ("o fundo do
-     NEXUS é péssimo"). Sobrou uma camada de geometria só. */
-  --astro-alpha: 0.12;
-  /* O grão da camada de viewport (ver .nx-viewport-fx). Alto o
-     bastante para dar casca ao fundo, baixo o bastante para sumir
-     sobre o texto. */
-  --grain-alpha: 0.05;
+  /* Opacidades das camadas de fundo (ver .nx-page em styles.css). */
+  /* O dot-grid VOLTOU no Cockpit — mas agora é fósforo, 1px, quase invisível:
+     dá a textura de mostrador sem virar o ruído que a v1.2 removeu. */
+  --dot-alpha: 0.05;
+  /* Os aros do fundo (ver .nx-page::before), tingidos pela Esfera ativa. */
+  --astro-alpha: 0.1;
+  /* O grão da camada de viewport (ver .nx-viewport-fx). */
+  --grain-alpha: 0.045;
 
   color-scheme: dark;
 }
@@ -87,38 +87,42 @@
    sobre branco, o mesmo 0.13 vira sujeira em vez de brilho.
    Ver docs/DECISIONS.md (ADR-0006). */
 :root[data-theme="light"] {
-  --bg-void: #dfe4ee;
-  --bg-base: #f4f6fb;
+  --bg-void: #d9dee0;
+  --bg-base: #eef1f2; /* grafite claríssimo, quase branco frio */
   --bg-surface: #ffffff;
   --bg-raised: #ffffff;
-  --bg-hover: #eef1f8;
-  --border-subtle: #e0e5ef;
-  --border-strong: #b9c6e0;
-  --border-glow: #9fb8e8;
+  --bg-hover: #e7ecec;
+  --border-subtle: #d7dee0;
+  --border-strong: #b3c0c2;
+  --border-glow: #7fd4b3;
 
-  --text-primary: #0c1424;
-  --text-secondary: #4a5876;
-  --text-tertiary: #8592ad;
+  --text-primary: #0b1416;
+  --text-secondary: #46595e;
+  --text-tertiary: #7f9297;
 
-  /* O índigo da marca no claro — indigo-600, legível sobre branco (ADR-0055). */
-  --accent: #4f46e5;
-  --accent-hover: #4338ca;
-  --accent-bright: #4338ca;
-  --accent-deep: #3730a3;
-  --accent-muted: #4f46e514;
+  /* O fósforo no claro precisa AFUNDAR: #33E1A0 sobre branco é ilegível. É o
+     mesmo matiz, emerald-600, com contraste de leitura. */
+  --accent: #0e9f6e;
+  --accent-hover: #0b855c;
+  --accent-bright: #0b855c;
+  --accent-deep: #0a6f4d;
+  --accent-muted: #0e9f6e14;
 
-  --success: #059669;
+  --success: #0e9f6e;
   --warning: #b45309;
-  --danger: #e11d48;
+  --danger: #dc2626;
+
+  --cyan: #0e8aa8;
+  --violet: #6d5ce0;
 
   --shadow-float: 0 16px 48px rgb(15 23 42 / 0.14);
-  --glow-accent: 0 0 0 1px rgb(79 70 229 / 0.18), 0 8px 28px rgb(79 70 229 / 0.1);
+  --glow-accent: 0 0 0 1px rgb(14 159 110 / 0.2), 0 8px 28px rgb(14 159 110 / 0.1);
 
-  --aurora-alpha: 0.09;
-  --grain-alpha: 0.04;
-  /* Sobre branco a mesma geometria precisa de menos alfa — a linha fina escura
-     já contrasta muito mais do que sobre o navy. Subida no B4 (era 0.065). */
-  --astro-alpha: 0.085;
+  --dot-alpha: 0.05;
+  --grain-alpha: 0.03;
+  /* Sobre claro a mesma geometria precisa de menos alfa — a linha fina já
+     contrasta muito mais do que sobre o grafite. */
+  --astro-alpha: 0.07;
 
   color-scheme: light;
 }
@@ -146,12 +150,35 @@
   --sphere: var(--accent);
 }
 
+/* --- Vocabulário COCKPIT -------------------------------------
+   O plano da v1.3 nomeia os tokens numa gramática curta (--bg,
+   --panel, --tx1, --phos, …). Em vez de reescrever o app inteiro
+   que já fala --bg-base/--accent, os nomes do Cockpit são ALIASES
+   canônicos: uma cor, uma verdade, dois nomes. Componentes novos
+   escrevem na gramática do plano; os antigos seguem intactos. */
 :root {
-  /* Radii — 16px nos cards do Midnight (o Aurora usava 14). */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
+  --bg: var(--bg-base);
+  --panel: var(--bg-surface);
+  --panel2: var(--bg-raised);
+  --line: var(--border-subtle);
+  --tx1: var(--text-primary);
+  --tx2: var(--text-secondary);
+  --tx3: var(--text-tertiary);
+  --phos: var(--accent);
+  --amb: var(--warning);
+  --red: var(--danger);
+  --cy: var(--cyan);
+  --vi: var(--violet);
+}
+
+:root {
+  /* Radii — apertados no Cockpit. O instrumento tem cantos curtos: um
+     mostrador não é uma bolha. O Midnight usava 16 no card; o Cockpit desce
+     para 12, e as células/tags mais duras ainda (2–4px). */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
 
   /* Spacing — 4px scale. Content grid is 8pt. */
   --space-1: 4px;
@@ -205,6 +232,8 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
+  --color-cyan: var(--cyan);
+  --color-violet: var(--violet);
   --color-sphere: var(--sphere);
 
   --radius-sm: var(--radius-sm);
