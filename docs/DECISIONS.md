@@ -2838,3 +2838,69 @@ só.
 `GoalKind` ganhou `can_measure_by_metric()`, distinta de `is_quantitative()`: **quem tem ALVO** não é
 o mesmo conjunto que **quem tem MÉTRICA**. É o segundo CHECK da 0017 (`goal_kind IN
 ('quantitative','constancia') OR progress_source = 'milestones'`) dito onde o erro sai em português.
+
+---
+
+## ADR-0080 — O INSTRUMENTO da dirigida estava quebrado, não o app; e a janela nascia mais alta que a tela
+
+**Data:** 2026-07-21 · **Status:** aceito · **v1.3 (COCKPIT), fase 3b**
+
+**Contexto.** A dirigida da fase 3b não conseguia abrir o formulário "Nova meta": **o botão não
+existia na tela**. Toda tela aparecia cortada à direita, e redimensionar a janela não refluía nada.
+Parecia violação direta da régua "container central, nada colando na borda".
+
+**Não era.** O app estava certo o tempo todo. **A ferramenta de captura é que estava mentindo.**
+
+O script de screenshot rodava num processo PowerShell **DPI-unaware**. Num monitor a 125%, o Windows
+*virtualiza* as coordenadas para esses processos: `GetWindowRect` devolvia `1294x870` para uma janela
+que tinha **1618x1087 pixels físicos**. O script então capturava um retângulo de 1294x870 pixels
+FÍSICOS a partir do canto da janela — ou seja, **os 80% superior-esquerdos da janela**. O "corte à
+direita" era a borda da minha própria captura.
+
+**Três hipóteses erradas antes de achar isso**, registradas porque cada uma parece óbvia e todas
+custaram tempo:
+
+1. *"Os aros (`.nx-page::before`, em `right: -240px`) criam área rolável horizontal e o `mx-auto`
+   centraliza contra ela."* A primeira metade é **verdade** e foi medida (`scrollWidth` 1282 contra
+   1052 de largura); a segunda é falsa — `overflow-x: clip` não moveu um pixel do layout. A correção
+   ficou no código porque a área rolável fantasma é real, com o comentário dizendo que ela **não**
+   cura o corte.
+2. *"O zoom do WebView ficou desregulado por um `Ctrl+-` da sessão anterior."* Falso: layout idêntico
+   antes e depois.
+3. *"A viewport do WebView é mais larga que a janela."* Foi a leitura que fiz da sonda —
+   `devicePixelRatio=1.25` com `innerWidth=1280` (= 1600 físicos) contra uma janela de "1294". **Erro
+   meu na aritmética da própria medição**: os 1294 vinham do processo virtualizado, e a janela real
+   tinha 1618 físicos ≈ 1294 lógicos ≈ os 1280 CSS que a página reportou. Viewport e janela sempre
+   concordaram. Este ADR chegou a ser escrito com essa causa errada e foi corrigido depois que o log
+   do próprio conserto (`from="1618x1087" ... screen="1920x1080"`) desmentiu o número.
+
+**A prova.** Marcado o processo de captura como `PER_MONITOR_AWARE_V2`, a mesma tela apareceu
+inteira: o botão "Nova meta", o Ring de progresso, os sub-desafios, tudo. Nenhuma linha de CSS mudou
+entre uma captura e outra.
+
+**O defeito REAL que a caçada encontrou de passagem.** O log do conserto mostrou a janela nascendo
+com **1618x1087 físicos numa tela de 1920x1080** — mais alta que a tela inteira, antes mesmo da barra
+de tarefas. `tauri.conf.json` pede `height: 832` em px **lógicos**, o que a 125% vira 1040 físicos, e
+com a moldura passa de 1080. O rodapé da janela nascia fora da tela.
+
+**Decisão.** `fit_window_to_screen` no `setup`: compara o tamanho FÍSICO da janela com o do monitor e
+a encolhe se não couber, recentrando depois. Físico dos dois lados — é a única unidade em que janela
+e monitor falam a mesma língua, e foi justamente misturar lógico com físico que produziu as três
+hipóteses erradas acima. A margem de 80px cobre barra de tarefas e moldura.
+
+**Considerado e RECUSADO: só baixar o número no `tauri.conf.json`.** Puniria telas grandes e
+continuaria errando em qualquer escala diferente da testada. A pergunta não é *"quanto cabe?"* — é
+*"cabe?"*, e só o monitor responde, no boot.
+
+**Falhar aqui nunca impede o app de abrir:** cada passo só registra e desiste. Uma janela do tamanho
+errado é um incômodo; um app que não abre é um app quebrado.
+
+**As duas lições, que valem mais que o conserto.**
+
+1. **Quando a tela discorda do código, meça de dentro da tela.** A sonda de cinco linhas plantada na
+   página deveria ter vindo antes das três hipóteses, não depois.
+2. **Desconfie do instrumento antes de reprojetar o prédio.** Eu quase reescrevi o CSS de todas as
+   telas do app — e depois quase gravei uma causa errada neste arquivo, que é o registro que a
+   próxima sessão vai acreditar sem reverificar. Uma dirigida só vale o que vale a fidelidade da
+   captura: o script de screenshot agora força `PER_MONITOR_AWARE_V2`, e **toda dirigida futura
+   depende disso**.

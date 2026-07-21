@@ -137,6 +137,25 @@
     background-size: 24px 24px;
     background-position: 0 0;
     background-attachment: local;
+
+    /* Os AROS (o `::before` logo abaixo) moram em `right: -240px` — 240px além
+       da borda direita, de propósito, para sangrar pelo canto. Só que toda
+       tela é `.nx-page` com `overflow-y-auto`, e o CSS não deixa um eixo
+       `visible` conviver com o outro `auto`: o X é promovido a `auto` junto.
+       Os aros deixam então de ser decoração sangrando e viram 240px de área
+       ROLÁVEL horizontal — medido: `scrollWidth` 1282 contra 1052 de largura.
+
+       `clip` e não `hidden`: os dois cortam a pintura, mas `hidden` cria um
+       container rolável (a área continua alcançável por script e pela roda do
+       mouse) e `clip` não cria. É para isto que ele existe, e é por isso que
+       pode conviver com `overflow-y: auto` sem mexer no eixo Y.
+
+       O que isto NÃO é: não é a causa do conteúdo aparecer cortado à direita
+       na dirigida da fase 3b. Essa hipótese foi levantada aqui, testada, e
+       FALSIFICADA — a medição de dentro da página mostrou que a viewport do
+       WebView era mais larga que a janela (ver ADR-0080). Fica registrado
+       para ninguém reabrir este caminho achando que resolve aquilo. */
+    overflow-x: clip;
   }
 
   /* ============================================================

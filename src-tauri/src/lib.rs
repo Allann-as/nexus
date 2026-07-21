@@ -98,6 +98,7 @@ pub fn run() {
         )
         .setup(move |app| {
             build_tray(app.handle())?;
+            fit_window_to_screen(app.handle());
             // Registra o atalho global só depois que o app está de pé.
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
             if let Err(e) = app.global_shortcut().register(quick_capture_shortcut) {
@@ -313,6 +314,92 @@ pub fn run() {
                 tracing::info!("NEXUS encerrado");
             }
         });
+}
+
+/// Encolhe a janela para caber na área útil do monitor, se ela não couber.
+///
+/// # O defeito (ADR-0080)
+///
+/// `tauri.conf.json` pede `height: 832` em px **LÓGICOS**. Num monitor a 125% de
+/// escala isso vira 1040 físicos, e com a moldura passa dos 1080 da tela: medido
+/// no boot desta máquina, a janela nascia com **1618x1087 físicos numa tela de
+/// 1920x1080**. O rodapé nascia fora da tela.
+///
+/// Não é caso exótico: 125% é o padrão do Windows em telas de notebook, e num
+/// 1366x768 a 100% a janela também não caberia.
+///
+/// Isto foi achado de passagem, caçando outra coisa — o "corte à direita" da
+/// dirigida, que acabou sendo defeito do script de captura, não do app. A
+/// história inteira, com as três hipóteses erradas, está no ADR-0080; vale a
+/// leitura antes de mexer aqui.
+///
+/// # Por que redimensionar em vez de só diminuir o padrão
+///
+/// Baixar o número no `tauri.conf.json` puniria quem tem tela grande, e ainda
+/// erraria em qualquer escala que não a testada. A pergunta certa não é "quanto
+/// cabe?", é "cabe?" — e só o monitor responde, no boot.
+///
+/// Falhar aqui NUNCA impede o app de abrir: uma janela do tamanho errado é um
+/// incômodo; um app que não abre é um app quebrado. Cada passo apenas registra e
+/// desiste.
+fn fit_window_to_screen(app: &tauri::AppHandle) {
+    use tauri::Manager;
+
+    let Some(window) = app.get_webview_window("main") else {
+        tracing::warn!("janela 'main' não encontrada; tamanho não ajustado");
+        return;
+    };
+
+    let monitor = match window.current_monitor() {
+        Ok(Some(m)) => m,
+        Ok(None) => {
+            tracing::warn!("nenhum monitor reportado; tamanho não ajustado");
+            return;
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "falha ao consultar o monitor; tamanho não ajustado");
+            return;
+        }
+    };
+
+    let outer = match window.outer_size() {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!(error = %e, "falha ao ler o tamanho da janela");
+            return;
+        }
+    };
+
+    // Tudo em FÍSICO: é a única unidade em que a janela e o monitor falam a mesma
+    // língua. A margem cobre a barra de tarefas e a moldura da janela — sem ela,
+    // "cabe exatamente" vira "a barra de título ficou atrás da barra de tarefas".
+    const MARGIN: u32 = 80;
+    let screen = monitor.size();
+    let max_w = screen.width.saturating_sub(MARGIN);
+    let max_h = screen.height.saturating_sub(MARGIN);
+
+    if outer.width <= max_w && outer.height <= max_h {
+        return;
+    }
+
+    let fitted = tauri::PhysicalSize::new(outer.width.min(max_w), outer.height.min(max_h));
+    tracing::info!(
+        from = format!("{}x{}", outer.width, outer.height),
+        to = format!("{}x{}", fitted.width, fitted.height),
+        screen = format!("{}x{}", screen.width, screen.height),
+        "janela não cabia na tela; redimensionada"
+    );
+
+    if let Err(e) = window.set_size(fitted) {
+        tracing::warn!(error = %e, "falha ao redimensionar a janela");
+        return;
+    }
+    // Recentrar depois de encolher: a janela foi criada centrada para o tamanho
+    // ANTIGO, então encolher a deixaria fora de centro e possivelmente com o
+    // canto esquerdo fora da tela.
+    if let Err(e) = window.center() {
+        tracing::warn!(error = %e, "falha ao recentrar a janela");
+    }
 }
 
 /// Constrói o ícone da bandeja e seu menu (ARSENAL — ADR-0065). O clique com o

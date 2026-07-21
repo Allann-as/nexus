@@ -85,6 +85,13 @@ export function NewGoalModal({
   const [habitTitle, setHabitTitle] = useState("");
   const [habitTouched, setHabitTouched] = useState(false);
   const [dailyTarget, setDailyTarget] = useState("");
+  /* Se o USUÁRIO digitou nestes dois. Um booleano e não "o campo está vazio":
+     "vazio" não distingue o que o usuário apagou do que um template anterior
+     preencheu — e foi assim que a dirigida pegou uma constância de Finanças
+     medindo em "dias", porque o valor herdado da esfera anterior grudou. É a
+     mesma distinção que `kindTouched` já fazia para o tipo. */
+  const [unitTouched, setUnitTouched] = useState(false);
+  const [dailyTouched, setDailyTouched] = useState(false);
 
   const tpl = useMemo(
     () => goalTemplateFor(areas.find((a) => a.id === areaId)?.template),
@@ -105,13 +112,16 @@ export function NewGoalModal({
   }, [kind, tpl]);
 
   /* A constância nasce com a unidade e o alvo diário da Esfera já preenchidos —
-     em Finanças isso é "R$ 10", em Saúde é "dias" sem alvo diário nenhum. Como
-     nos degraus, a sugestão só entra enquanto o usuário não digitou por cima. */
+     em Finanças isso é "R$ 10", em Saúde é "dias" sem alvo diário nenhum.
+     Trocar a Esfera TROCA os dois, como troca o resto do formulário; só a
+     digitação do usuário é preservada. Guardar só "enquanto estiver vazio"
+     deixava a unidade da esfera anterior grudada, e uma meta de Finanças
+     media em "dias". */
   useEffect(() => {
     if (kind !== "constancia") return;
-    setUnit((u) => (u === "" ? tpl.constancia.unit : u));
-    setDailyTarget((d) => (d === "" ? tpl.constancia.dailyPlaceholder : d));
-  }, [kind, tpl]);
+    if (!unitTouched) setUnit(tpl.constancia.unit);
+    if (!dailyTouched) setDailyTarget(tpl.constancia.dailyPlaceholder);
+  }, [kind, tpl, unitTouched, dailyTouched]);
 
   const start = Number(startValue.replace(",", "."));
   const target = Number(targetValue.replace(",", "."));
@@ -302,7 +312,10 @@ export function NewGoalModal({
               <div className="grid grid-cols-3 gap-2">
                 <Input
                   value={dailyTarget}
-                  onChange={setDailyTarget}
+                  onChange={(v) => {
+                    setDailyTouched(true);
+                    setDailyTarget(v);
+                  }}
                   placeholder={tpl.constancia.dailyPlaceholder || "opcional"}
                   label="Por dia"
                 />
@@ -314,7 +327,10 @@ export function NewGoalModal({
                 />
                 <Input
                   value={unit}
-                  onChange={setUnit}
+                  onChange={(v) => {
+                    setUnitTouched(true);
+                    setUnit(v);
+                  }}
                   placeholder={tpl.constancia.unit}
                   label="Unidade"
                 />
