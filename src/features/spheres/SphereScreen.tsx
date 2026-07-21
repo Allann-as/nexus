@@ -11,15 +11,13 @@
  * que diz honestamente "M3.5".
  */
 
-import { useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Settings2 } from "lucide-react";
 
 import {
   countNodes,
   getArea,
-  listAccounts,
   sphereOverview,
   toNexusError,
   type Area,
@@ -38,8 +36,8 @@ import { HealthTraining } from "./HealthTraining";
 import { HealthExams } from "./HealthExams";
 import { FinanceDashboard } from "../finance/FinanceDashboard";
 import { ContributionsTab } from "../finance/ContributionsTab";
-import { AporteModal } from "../finance/AporteModal";
 import { CaixinhasTab } from "../fin-goals/CaixinhasTab";
+import { useAporte } from "../../stores/aporte";
 import { CareerContent } from "../career/CareerContent";
 import { StudiesContent } from "../studies/StudiesContent";
 import { SimpleContent } from "../simple/SimpleContent";
@@ -239,36 +237,26 @@ function SphereContent({
 }
 
 /**
- * As Finanças, com o modal de aporte compartilhado entre o Painel e a lista.
+ * As Finanças.
  *
- * O modal vive AQUI e não em cada tab: abrir um aporte do Painel e da lista tem
- * que ser o mesmo gesto, e um modal por tab teria dois estados a sincronizar.
+ * O aporte não mora mais aqui (v1.3, fase 4). A aba "Aportes" tem o Terminal
+ * ABERTO no topo, e quem chama o aporte de outra aba usa o MESMO store global do
+ * Ctrl+K — que é servido pelo `AporteHost` no Shell. Antes havia um modal local
+ * neste componente e outro global no Shell: dois estados para a mesma operação,
+ * cada um com o seu formulário.
  */
 function FinanceContent({ tab, areaId }: { tab: string; areaId: string }) {
-  const client = useQueryClient();
-  const [aporte, setAporte] = useState(false);
-  const { data: accounts = [] } = useQuery({
-    queryKey: ["accounts"],
-    queryFn: listAccounts,
-  });
-
-  const refresh = () => {
-    void client.invalidateQueries({ queryKey: ["finance"] });
-    setAporte(false);
-  };
+  const openAporte = useAporte((s) => s.openAporte);
 
   return (
     <>
       {tab === "contributions" ? (
-        <ContributionsTab onAporte={() => setAporte(true)} />
+        <ContributionsTab />
       ) : tab === "objetivos" ? (
         // Os objetivos financeiros (caixinhas) desta Esfera (REFINO R7).
         <CaixinhasTab areaId={areaId} />
       ) : (
-        <FinanceDashboard onAporte={() => setAporte(true)} />
-      )}
-      {aporte && (
-        <AporteModal accounts={accounts} onClose={() => setAporte(false)} onSaved={refresh} />
+        <FinanceDashboard onAporte={() => openAporte()} />
       )}
     </>
   );

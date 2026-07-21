@@ -14,6 +14,29 @@ export interface ParsedAporte {
   label: string;
 }
 
+/**
+ * O que o usuário digitou no campo de valor → centavos. `null` se não é dinheiro.
+ *
+ * Mora aqui, e não na tela, porque a fase 4 descobriu que existiam DUAS cópias
+ * desta regra: uma no modal de aporte e outra dentro do parser do Ctrl+K. Duas
+ * cópias divergem no dia em que só uma aprende um formato — e o formato aqui é
+ * português: **o ponto é milhar e a vírgula é decimal**. "1.234,56" é mil
+ * duzentos e trinta e quatro reais; ler isso com o `Number` do JavaScript
+ * direto daria `1.234`, ou seja, um real e vinte e três centavos.
+ *
+ * Aceita o "R$" colado e espaços à vontade, porque quem cola um valor de outro
+ * lugar cola com o símbolo junto. Recusa zero e negativo: o SINAL é do modo
+ * (aporte/resgate), nunca do que se digita — um "-100" no campo de um aporte
+ * seria uma segunda forma de dizer resgate, e duas formas discordam.
+ */
+export function parseAporteAmount(raw: string): number | null {
+  const cleaned = raw.replace(/\s|R\$/g, "").replace(/\./g, "").replace(",", ".");
+  if (cleaned === "") return null;
+  const value = Number(cleaned);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return Math.round(value * 100);
+}
+
 /** minúsculas sem acento — para "itaú" casar com o que o usuário digita. */
 export function fold(s: string): string {
   return s

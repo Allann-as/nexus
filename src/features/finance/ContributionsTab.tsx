@@ -15,18 +15,20 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Coins, Plus, Trash2 } from "lucide-react";
+import { Coins, Trash2 } from "lucide-react";
 
 import { Button, EmptyState, cx } from "../../design-system/primitives";
 import { formatMoney } from "../../lib/format";
 import { fromDay } from "../calendar/grid";
 import {
   deleteContribution,
+  financeOverview,
   listAccounts,
   recentContributions,
   type Contribution,
 } from "../../lib/ipc";
 import { useToasts } from "../../stores/toasts";
+import { AporteTerminal } from "./AporteTerminal";
 import { classColour, classLabel } from "./classes";
 
 interface MonthGroup {
@@ -36,7 +38,7 @@ interface MonthGroup {
   items: Contribution[];
 }
 
-export function ContributionsTab({ onAporte }: { onAporte: () => void }) {
+export function ContributionsTab() {
   const qc = useQueryClient();
   const push = useToasts((s) => s.push);
   const pushError = useToasts((s) => s.pushError);
@@ -49,6 +51,13 @@ export function ContributionsTab({ onAporte }: { onAporte: () => void }) {
   const { data: accounts = [] } = useQuery({
     queryKey: ["accounts"],
     queryFn: listAccounts,
+  });
+  /* O painel de agora, que é a BASE do impacto ao vivo do Terminal. Mesma chave
+     do Painel: as duas abas compartilham o cache, e excluir um lançamento aqui
+     já invalida os dois. */
+  const { data: overview } = useQuery({
+    queryKey: ["finance", "overview"],
+    queryFn: financeOverview,
   });
 
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? id;
@@ -84,30 +93,35 @@ export function ContributionsTab({ onAporte }: { onAporte: () => void }) {
     return <div className="h-64 animate-pulse rounded-[var(--radius-lg)] bg-[var(--bg-surface)]" />;
   }
 
-  if (contributions.length === 0) {
-    return (
-      <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--border-subtle)] py-16">
-        <EmptyState
-          icon={Coins}
-          title="Nenhum aporte registrado"
-          hint="Cada aporte que você lançar aparece aqui, agrupado por mês, do mais recente ao mais antigo."
-          action={
-            <Button variant="primary" size="sm" icon={Plus} onClick={onAporte}>
-              Registrar aporte
-            </Button>
-          }
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
-        <Button variant="secondary" size="sm" icon={Plus} onClick={onAporte}>
-          Novo aporte
-        </Button>
-      </div>
+      {/* O Terminal fica ABERTO no topo da aba, e não atrás de um botão: esta é
+          a tela de aportar, e esconder o gesto que dá nome a ela atrás de um
+          "Novo aporte" era um clique cobrado de graça. O Ctrl+K continua
+          abrindo o mesmo componente em modal, de qualquer lugar do app. */}
+      <AporteTerminal
+        accounts={accounts}
+        overview={overview}
+        autoFocus={false}
+        onSaved={() => {
+          /* As invalidações já acontecem dentro do Terminal; aqui não há nada a
+             fazer além de ficar onde está — o extrato abaixo recarrega sozinho
+             e o lançamento novo aparece no topo do mês corrente. */
+        }}
+      />
+
+      {/* O vazio vem DEPOIS do Terminal, e não no lugar dele: a tela sem
+          nenhum aporte ainda é a tela de aportar. Um `EmptyState` que engolisse
+          a página inteira esconderia justamente o gesto que ele pede. */}
+      {contributions.length === 0 && (
+        <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--border-subtle)] py-14">
+          <EmptyState
+            icon={Coins}
+            title="Nenhum aporte registrado"
+            hint="Cada aporte que você lançar acima aparece aqui, agrupado por mês, do mais recente ao mais antigo."
+          />
+        </div>
+      )}
 
       {groups.map((g) => (
         <section key={g.key}>

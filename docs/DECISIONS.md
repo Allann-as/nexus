@@ -3124,3 +3124,72 @@ O gate estava verde nas três.
 A terceira é a mais importante das três, e não é um bug de layout: é o mesmo princípio do ADR-0037 e da
 regra do "número real ou omitido". **Uma tela não pode afirmar mais do que os dados sustentam** — e um
 `sort` estável sobre valores iguais não sustenta nada.
+
+---
+
+## ADR-0084 — Finanças: o aporte vira TERMINAL com impacto ao vivo, e o donut sai por lentidão
+
+**Data:** 2026-07-21 · **Status:** aceito · **v1.3 (COCKPIT), fase 4 — Finanças**
+
+**Contexto.** Segunda das cinco Esferas. Além da migração de vocabulário que o ADR-0083 abriu, Finanças
+tinha três problemas próprios.
+
+**Decisão 1 — o aporte deixa de ser um modal e vira um Terminal aberto na aba.** O modal da v1.0
+resolvia o lançamento em cinco segundos e **não mostrava o efeito**: o usuário digitava, apertava
+Enter, o modal fechava, e ele voltava para um painel que tinha mudado sem ele ver mudar. Lançar
+dinheiro é o ato mais consequente do app e era o mais cego.
+
+O `AporteTerminal` responde com o **impacto ao vivo** à direita: enquanto se digita, a barra da conta
+cresce e o total aportado aparece com o valor de agora RISCADO, o de depois em fósforo, e a variação em
+%. Nada é projeção — é aritmética sobre o que já está na tela, e o painel inteiro SOME com o campo
+vazio, em vez de mostrar "+0,00" e uma barra parada fingindo informação.
+
+**Uma implementação, duas superfícies.** O mesmo componente serve a aba "Aportes" e o modal do Ctrl+K
+(`AporteHost`). Antes eram dois formulários para a mesma operação — e o que faltava no do Ctrl+K era
+justamente o impacto, ou seja, o caminho rápido era o caminho cego. De quebra, o `SphereScreen` tinha
+um TERCEIRO estado de modal local, que saiu: quem chama o aporte de outra aba usa o mesmo store global.
+
+**A entrada é LIVRE; os rápidos são atalho.** Os botões 100/500/1000 existem porque a maioria dos
+aportes é redonda, mas o campo continua sendo texto: **R$ 99,90 se digita**, e o valor nunca é
+arredondado para o rápido mais próximo. Os rápidos SOMAM ao que já está lá — "500 e mais 100" é um
+gesto, não uma correção.
+
+A regra de parsing saiu da tela para `parseAporteAmount`, com testes: havia **duas cópias** dela (uma no
+modal, outra no parser do Ctrl+K), e o caso que uma cópia erraria sozinha é o do português — "1.234,56"
+tem ponto de MILHAR, e lê-lo com o `Number` do JavaScript daria um real e vinte e três. O negativo é
+recusado no campo: o sinal é do MODO (aporte/resgate), e duas formas de dizer resgate discordam no dia
+em que só uma é lida.
+
+**Decisão 2 — o donut de alocação sai, e isso move a fronteira do ADR-0018.** Ele era ECharts e a fatia
+respondia ao mouse com atraso perceptível — o "donut com lag". Já houve uma tentativa de conserto
+(`transitionDuration: 0`) e o atraso ficou, porque parte dele é o custo de instanciar e redesenhar um
+canvas para SETE valores.
+
+Sete valores não pedem um canvas: pedem sete linhas. A cor identifica (a MESMA do chip do Terminal e do
+extrato), a SegBar compara, e o número diz quanto — que é o que o donut **não dizia sem hover**. Um
+donut responde "qual é a maior?"; a lista responde "quanto tem em cada uma?", que é a pergunta de quem
+olha a própria alocação. A ÁREA acumulada continua no ECharts: série longa, eixo e tooltip são análise
+densa de verdade.
+
+**Decisão 3 — "Saldo por conta" vira `BankTile`.** Eram barras relativas: dava para ver qual banco tem
+mais, não quanto cada um tem. O `BankTile` é o mesmo componente que o Terminal usa para escolher a
+conta, com o mesmo monograma na cor da marca — o banco se reconhece pela mesma forma nas duas telas.
+
+### O que a dirigida cobrou
+
+1. **`useState` com o valor de uma prop assíncrona.** `useState(accounts[0]?.id ?? null)` lê o inicial
+   no primeiro render, quando a query ainda devolvia `[]` — então **nenhuma conta ficava selecionada**,
+   o painel de impacto ficava mudo por mais que se digitasse, e o botão de registrar travava sem dizer
+   por quê. O gate estava verde. Corrigido com um efeito que só preenche o VAZIO, sem sobrescrever a
+   escolha do usuário nem a conta que o Ctrl+K mandou.
+
+2. **Uma barra que não representa o número que ela acompanha.** Ao resgatar mais do que foi aportado
+   numa conta, a SegBar ficava em zero ao lado de "−R$ 1.200,00" — exatamente o defeito que o ADR-0083
+   pegou no tile de streak da Saúde. A barra dá lugar a uma frase que diz o que está acontecendo. O app
+   não impede o resgate; ele só não desenha uma proporção que não existe.
+
+A checklist da fase 4 (nenhum gráfico decorativo, nenhum rótulo ilegível, nenhuma afirmação que os dados
+não sustentam) foi aplicada de saída em dois pontos, sem esperar a tela: o tile "Classes" ficou **sem**
+elemento vivo (uma contagem de categorias não tem série nem fração), e o hint "X concentra N%" **não é
+dito quando há empate no topo** — o desempate de um `sort` não vira afirmação sobre o dinheiro de
+ninguém.

@@ -4,10 +4,10 @@
  * Todo o dado vem de UMA chamada (`financeOverview`): a tela abre com sete
  * perguntas, e sete round-trips fariam o painel piscar seção por seção.
  *
- * Os gráficos seguem a fronteira do ADR-0018: a ÁREA acumulada e o DONUT são
- * análise densa (eixo, tooltip, fatias) e usam ECharts; as barras por banco são
- * seis retângulos decorativos e ficam em HTML puro — instanciar uma terceira
- * engine para elas seria pagar caro por uma forma simples.
+ * A fronteira do ADR-0018 continua valendo, e a v1.3 (fase 4) a moveu num ponto:
+ * a ÁREA acumulada segue no ECharts (eixo, tooltip, série longa — análise densa
+ * de verdade), mas o DONUT de alocação saiu. Sete valores não pedem um canvas, e
+ * o atraso da fatia ao hover era o preço de um. Ver `Allocation`.
  */
 
 import { useMemo, useState } from "react";
@@ -16,8 +16,9 @@ import { Info, PiggyBank, Repeat, TrendingUp, Wallet } from "lucide-react";
 import * as echarts from "echarts/core";
 
 import { Chart } from "../../design-system/Chart";
-import { CountUp, HeroCard, StatCard, SummaryCard, Val } from "../../design-system/cards";
+import { CountUp, HeroCard, StatTile, SummaryCard, Val } from "../../design-system/cards";
 import { Gauge } from "../../design-system/charts";
+import { BankTile, SegBar } from "../../design-system/instruments";
 import { EmptyState } from "../../design-system/primitives";
 import { Button } from "../../design-system/primitives";
 import { areaGradient, glowLine } from "../../design-system/nexusTheme";
@@ -53,6 +54,39 @@ export function FinanceDashboard({ onAporte }: { onAporte: () => void }) {
     );
   }
 
+  /* A série do tile "Aporte do mês" é o APORTE POR MÊS — a história do próprio
+     número que ele mostra. Normalizada pelo maior mês, que é o que a sparkline
+     espera (0..1). Com menos de dois pontos ela some: uma linha de um ponto só
+     é um traço, não uma tendência. */
+  const monthlySpark = (() => {
+    if (data.monthly.length < 2) return undefined;
+    const peak = Math.max(...data.monthly.map((m) => m.cents), 1);
+    return data.monthly.map((m) => Math.max(0, m.cents) / peak);
+  })();
+
+  /* "Acima/abaixo da média" só se disser algo: uma diferença de menos de 5% é
+     ruído de arredondamento de mês, e anunciá-la seria afirmar mais do que os
+     dados sustentam. */
+  const monthVsAvg = (() => {
+    if (data.avg6mCents <= 0) return undefined;
+    const ratio = data.thisMonthCents / data.avg6mCents;
+    if (ratio >= 0.95 && ratio <= 1.05) return "na média dos 6 meses";
+    const pct = Math.round(Math.abs(ratio - 1) * 100);
+    return ratio > 1 ? `${pct}% acima da média` : `${pct}% abaixo da média`;
+  })();
+
+  /* A maior classe, e SÓ quando ela é de fato a maior: com empate no topo, a
+     frase não é dita. É a lição do "melhor dia" da Saúde (ADR-0083) — o
+     desempate de um sort não vira afirmação sobre o dinheiro de ninguém. */
+  const topClass = (() => {
+    if (data.byClass.length === 0) return undefined;
+    const sorted = [...data.byClass].sort((a, b) => b.cents - a.cents);
+    if (sorted.length > 1 && sorted[0].cents === sorted[1].cents) return undefined;
+    const total = sorted.reduce((sum, b) => sum + b.cents, 0);
+    if (total <= 0) return undefined;
+    return `${sorted[0].label} concentra ${Math.round((sorted[0].cents / total) * 100)}%`;
+  })();
+
   return (
     <div className="flex flex-col gap-4">
       {/* ===== HeroCard: patrimônio + área acumulada ===== */}
@@ -71,28 +105,37 @@ export function FinanceDashboard({ onAporte }: { onAporte: () => void }) {
         aside={<AccumulatedArea monthly={data.monthly} />}
       />
 
-      {/* ===== StatCards ===== */}
+      {/* ===== os sinais, cada um com o seu vivo =====
+          `spark` só onde a SÉRIE é do próprio número (o aporte mensal), e `seg`
+          só onde há uma razão real a medir. O "Classes" fica sem vivo de
+          propósito: uma contagem de sete categorias não tem série nem fração —
+          pendurar uma barra ali seria decoração, que foi o erro que a Saúde
+          cometeu e a dirigida pegou. */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatCard
+        <StatTile
           icon={Wallet}
           label="Aporte do mês"
           value={formatMoney(data.thisMonthCents)}
+          spark={monthlySpark}
+          hint={monthVsAvg}
         />
-        <StatCard
+        <StatTile
           icon={TrendingUp}
           label="Média 6 meses"
           value={formatMoney(data.avg6mCents)}
         />
-        <StatCard
+        <StatTile
           icon={Repeat}
           label="Meses seguidos"
           value={<CountUp to={data.streakMonths} />}
           unit={data.streakMonths === 1 ? "mês" : "meses"}
+          tone="warning"
         />
-        <StatCard
+        <StatTile
           icon={PiggyBank}
           label="Classes"
           value={<CountUp to={data.byClass.length} />}
+          hint={topClass}
         />
       </div>
 
@@ -103,7 +146,7 @@ export function FinanceDashboard({ onAporte }: { onAporte: () => void }) {
             Alocação por classe
           </h3>
           {data.byClass.length > 0 ? (
-            <AllocationDonut buckets={data.byClass} />
+            <Allocation buckets={data.byClass} />
           ) : (
             <p className="py-8 text-center text-[12px] text-[var(--text-tertiary)]">
               Sem aportes para alocar.
@@ -147,7 +190,7 @@ export function FinanceDashboard({ onAporte }: { onAporte: () => void }) {
               </span>
             </span>
           </div>
-          <BankBars buckets={data.byAccount} />
+          <BankBalances buckets={data.byAccount} />
           {/* Honestidade: isto é o LÍQUIDO APORTADO por conta, não o saldo que o
               banco mostra. O NEXUS sabe o que entrou e o que saiu; o que rendeu
               sozinho ele não tem como saber (sem cotação, sem rede — §1 da
@@ -217,96 +260,81 @@ function AccumulatedArea({ monthly }: { monthly: FinanceOverview["monthly"] }) {
   return <Chart option={option} height={150} className="min-w-[280px]" />;
 }
 
-/** O donut de alocação — cada classe uma fatia, o saldo total no centro. */
-function AllocationDonut({ buckets }: { buckets: Bucket[] }) {
+/**
+ * A alocação por classe — em barras, e não mais num donut.
+ *
+ * ===== Por que o donut saiu =====
+ *
+ * Ele era ECharts com `emphasis` animado, e a fatia respondia ao mouse com um
+ * atraso perceptível — o "donut com lag" que o dono apontou. Já houve uma
+ * tentativa de consertar (`transitionDuration: 0`, `animationDurationUpdate`
+ * curto) e o atraso continuou, porque parte dele é o custo de instanciar e
+ * redesenhar um canvas para SETE valores.
+ *
+ * Sete valores não pedem um canvas. Eles pedem sete linhas: a cor identifica (a
+ * MESMA do chip do Terminal e do extrato), a barra compara, e o número diz
+ * quanto — que era exatamente o que o donut NÃO dizia sem hover. Um donut
+ * responde "qual é a maior?"; a lista responde "quanto tem em cada uma?", que é
+ * a pergunta de quem olha a própria alocação.
+ *
+ * A porcentagem vem primeiro em leitura porque alocação é uma pergunta de
+ * proporção; o valor absoluto fica à direita, na coluna tabular.
+ */
+function Allocation({ buckets }: { buckets: Bucket[] }) {
   const total = useMemo(() => buckets.reduce((s, b) => s + b.cents, 0), [buckets]);
+  const ordered = useMemo(() => [...buckets].sort((a, b) => b.cents - a.cents), [buckets]);
 
-  const option = useMemo<echarts.EChartsCoreOption>(
-    () => ({
-      // O tooltip segue o cursor NA HORA: sem os 400ms de transição padrão, o
-      // hover responde como nativo (REFINO R2). É desenho do ECharts, não React —
-      // nada re-renderiza no mousemove.
-      tooltip: {
-        trigger: "item",
-        transitionDuration: 0,
-        valueFormatter: (v: number) => formatMoney(v),
-      },
-      legend: {
-        type: "scroll",
-        bottom: 0,
-        icon: "circle",
-        textStyle: { fontSize: 11 },
-      },
-      // O realce de fatia entra rápido e curto — o delay que se sentia vinha da
-      // animação de emphasis longa.
-      animationDurationUpdate: 140,
-      animationEasingUpdate: "cubicOut",
-      series: [
-        {
-          type: "pie",
-          radius: ["58%", "76%"],
-          center: ["50%", "42%"],
-          avoidLabelOverlap: true,
-          label: { show: false },
-          emphasis: {
-            scale: true,
-            scaleSize: 6,
-            itemStyle: { shadowBlur: 0 },
-          },
-          data: buckets.map((b) => ({
-            name: b.label,
-            value: b.cents,
-            itemStyle: { color: CLASS_COLOURS[b.key] ?? "#94A3B8" },
-          })),
-        },
-      ],
-    }),
-    [buckets],
-  );
-
-  // O centro da rosca deixa de ser espaço morto: o patrimônio total, em mono,
-  // com o rótulo discreto abaixo. HTML sobreposto (não texto do ECharts) para
-  // ler os tokens do tema e a fonte mono direto. `pointer-events: none` deixa o
-  // hover das fatias passar por baixo.
   return (
-    <div className="relative">
-      <Chart option={option} height={240} />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 flex flex-col items-center"
-        style={{ top: "42%", transform: "translateY(-50%)" }}
-      >
-        <span className="tabular text-[19px] leading-none font-semibold tracking-[-0.02em] text-[var(--text-primary)]">
-          {formatMoneyShort(total)}
-        </span>
-        <span className="mt-1 text-[9px] font-medium tracking-[0.12em] text-[var(--text-tertiary)] uppercase">
-          investido
-        </span>
-      </div>
+    <div className="flex flex-col gap-2.5">
+      {ordered.map((b) => {
+        const share = total > 0 ? b.cents / total : 0;
+        const colour = CLASS_COLOURS[b.key] ?? "var(--text-tertiary)";
+        return (
+          <div key={b.key} className="flex items-center gap-3">
+            <span
+              aria-hidden
+              className="size-2.5 shrink-0 rounded-[3px]"
+              style={{ background: colour }}
+            />
+            <span className="w-28 shrink-0 truncate text-[12px] text-[var(--text-secondary)]">
+              {b.label}
+            </span>
+            <SegBar value={share} segments={20} color={colour} height={9} className="flex-1" />
+            <span className="tabular w-11 shrink-0 text-right text-[12px] font-semibold text-[var(--text-primary)]">
+              {Math.round(share * 100)}%
+            </span>
+            <span className="tabular w-20 shrink-0 text-right text-[11px] text-[var(--text-tertiary)]">
+              {formatMoneyShort(b.cents)}
+            </span>
+          </div>
+        );
+      })}
+      <p className="mt-1 border-t border-[var(--border-subtle)] pt-2.5 text-[11px] text-[var(--text-tertiary)]">
+        Sobre <span className="tabular text-[var(--text-secondary)]">{formatMoney(total)}</span>{" "}
+        aportados.
+      </p>
     </div>
   );
 }
 
-/** Uma barra horizontal por banco — seis retângulos, HTML puro (ADR-0018). */
-function BankBars({ buckets }: { buckets: Bucket[] }) {
-  const max = Math.max(...buckets.map((b) => b.cents), 1);
+/**
+ * O saldo de cada conta, em ladrilhos com a marca do banco.
+ *
+ * Eram barras relativas: dava para ver qual banco tem mais, não quanto cada um
+ * tem — e "quanto tem em cada" é a pergunta. O `BankTile` é o MESMO componente
+ * que o Terminal de aporte usa para escolher a conta, com o mesmo monograma na
+ * cor da marca: o banco se reconhece pela mesma forma nas duas telas.
+ *
+ * A ordem é por saldo, do maior para o menor. Sem barra: aqui não há proporção a
+ * comunicar (a alocação por classe já faz isso, e é ela que responde "onde meu
+ * dinheiro está"); aqui o dado é o NÚMERO.
+ */
+function BankBalances({ buckets }: { buckets: Bucket[] }) {
+  const ordered = [...buckets].sort((a, b) => b.cents - a.cents);
   return (
-    <div className="flex flex-col gap-2.5">
-      {buckets.map((b) => (
-        <div key={b.key} className="flex items-center gap-3">
-          <span className="w-28 shrink-0 truncate text-[12px] text-[var(--text-secondary)]">
-            {b.label}
-          </span>
-          <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-[var(--bg-base)]">
-            <div
-              className="h-full rounded-full bg-[var(--sphere)]"
-              style={{ width: `${(b.cents / max) * 100}%` }}
-            />
-          </div>
-          <span className="tabular w-24 shrink-0 text-right text-[12px] text-[var(--text-primary)]">
-            {formatMoneyShort(b.cents)}
-          </span>
-        </div>
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+      {ordered.map((b) => (
+        <BankTile key={b.key} name={b.label} balance={formatMoney(b.cents)} />
       ))}
     </div>
   );
