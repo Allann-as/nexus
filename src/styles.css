@@ -263,6 +263,42 @@
     opacity: calc(var(--grain-alpha) * 0.2);
   }
 
+  /* ============================================================
+     A TELA DE BLOQUEIO — o mesmo painel, sem os aros da Esfera
+     ------------------------------------------------------------
+     Ela não é uma `.nx-page`: fica ACIMA do router, não tem Esfera
+     ativa (logo, `--sphere` não significa nada aqui) e não rola
+     conteúdo. Mas o CHÃO é o mesmo — grafite mais fundo e o dot-grid
+     de fósforo, com os MESMOS tokens (`--phos`, `--dot-alpha`), para
+     desbloquear e entrar no app ser uma superfície só.
+
+     Os aros ficam no componente (`BezelRings`), e não aqui, porque
+     eles são o bisel do TECLADO — precisam ficar presos à coluna da
+     direita e ficar vermelhos no PIN errado. Fundo não reage; este
+     reage. ============================================================ */
+  .nx-lock {
+    /* `--bg-base` e não `--bg-void`. No ESCURO os dois são o mesmo chão a olho
+       (#060809 contra #040506) — mas o `--bg-void` é a moldura EXTERNA da
+       janela, e no CLARO ele é o cinza mais fechado da paleta (#d9dee0). Uma
+       tela inteira pintada com a cor da moldura lê como desabilitada, e não como
+       a superfície do app. `--bg-base` é o mesmo piso que o app inteiro pisa nos
+       dois temas — desbloquear vira uma troca de conteúdo, não de chão. */
+    background-color: var(--bg-base);
+
+    /* A MESMA razão do `.nx-page` (ADR-0080): a raiz é `overflow-y: auto`, e o
+       CSS não deixa um eixo `visible` conviver com o outro `auto` — o X é
+       promovido junto. Sem isto, o bisel que sobra da coluna vira área ROLÁVEL
+       horizontal em vez de decoração cortada. `clip` e não `hidden` porque
+       `hidden` cria um container rolável e `clip` não. */
+    overflow-x: clip;
+    background-image: radial-gradient(
+      circle,
+      color-mix(in srgb, var(--phos) calc(var(--dot-alpha) * 100%), transparent) 1px,
+      transparent 1.4px
+    );
+    background-size: 24px 24px;
+  }
+
   /* A entrada de uma tela: fade + 12px. Só na montagem. */
   .nx-enter {
     animation: nexus-enter 160ms var(--ease) both;

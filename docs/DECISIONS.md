@@ -4524,3 +4524,99 @@ método.
 correto **hoje** — a v1.3.0 ainda não foi lançada. A Fase 7 precisa subir esse número junto com a
 tag, senão o app instalado se apresentará com a versão anterior no primeiro lugar em que alguém vai
 conferir.
+
+## ADR-0109 — A tela de bloqueio: o log de boot que lê o banco em vez de encenar o boot
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), fase 6 — tela de bloqueio**
+
+**Contexto.** O plano da fase 6 pede a união de dois conceitos: *Boot 01* (linhas de terminal
+aparecendo uma a uma) e *Split 03* (layout assimétrico, identidade de um lado, PIN do outro). A tela
+que existia era a da v1.2 — uma COLUNA centrada (marca · NEXUS · instrução · bolinhas · teclado ·
+versão no rodapé), copiada da tela de bloqueio de um app de banco. Ela resolveu o problema da v1.1,
+que era poluição visual (astrolábio girando dentro de três anéis graduados). Mas resolveu virando
+**genérica**: tirando a marca, aquela tela é a de qualquer app com PIN. O Cockpit pede o oposto — que
+a primeira tela do app já seja o painel ligando.
+
+**Decisão 1 — o split.** À esquerda a IDENTIDADE (SINAL-N, NEXUS, a saudação por hora com o nome de
+quem está na frente, o log de boot); à direita a FUNÇÃO (as seis bolinhas e o teclado). A saudação
+vem de `greeting` + `useDisplayName` — a MESMA fonte do Hub, do `settings.json`, nunca cravada
+(ADR-0075). Vale registrar o que isso implica: o nome aparece **antes** do desbloqueio, para quem
+quer que pegue a máquina. É o comportamento da tela de bloqueio do Windows e é deliberado — a tela
+protege o CONTEÚDO da vida, não a existência do dono (ADR-0054).
+
+**Decisão 2 — o log lê o banco; ele não encena o boot.** Esta é a decisão que importa. As quatro
+linhas que o plano sugere (`> núcleo OK`, `> ledger íntegro`, …) escritas à mão seriam **teatro**:
+quatro afirmações sobre integridade que ninguém verificou, na única tela do app onde a afirmação
+nunca seria contestada — a mesma classe do "+10 XP" em prosa (ADR-0105) e da retenção de backup
+digitada na frase (ADR-0108), só que pior, porque aqui a frase fala de INTEGRIDADE.
+
+E o dado já estava lá. `system_info` devolve `appVersion`, `schemaVersion`, `ledgerCount`,
+`nodeCount`, `areaCount`, `dbSizeBytes`, `dataDir` e `isCustomDataDir` — nove campos. A tela de
+bloqueio da v1.2 chamava esse comando e usava **um**: `appVersion`, para um rodapé de 11px com
+`opacity: 60`. É exatamente a lente do "o backend manda dado que a tela descarta" (ADR-0103/0104),
+numa tela que ninguém pensaria em auditar por isso. O log agora diz a versão, o esquema do banco e o
+tamanho do ledger, e o rodapé sumiu — a versão passou a morar na primeira linha do log, que é onde
+ela significa alguma coisa.
+
+A regra que o log obedece: **só entra na lista a linha que tem um dado por trás.** Se `system_info`
+ainda não voltou, ou falhou, as três primeiras linhas não existem e a revelação começa direto na
+única que é verdade sempre (`aguardando operador`). Por isso a sequência só dispara quando a query
+ASSENTA: sem isso, "aguardando operador" apareceria primeiro e as linhas de dado brotariam ACIMA
+dele, que é o inverso de um log. A dependência do efeito é a QUANTIDADE de linhas, não o array — o
+react-query revalida `system_info` em background, e depender da identidade do array faria o log
+inteiro rebobinar do zero a cada refetch.
+
+Entrou também a advertência de `isCustomDataDir` como quinta linha. A aba "Seus dados" já a dava, mas
+só depois de navegar até ela; no log ela chega **antes de qualquer clique**, que é onde ela evita
+confundir uma dirigida com o app real (ADR-0048).
+
+**Decisão 3 — os aros viraram o BISEL do teclado.** Na v1.2 eles ficavam atrás da coluna inteira, de
+enfeite. Aqui emolduram só o teclado — é o que transforma uma grade de botões num mostrador — e são a
+ÚNICA coisa que reage ao PIN errado: ficam vermelhos pelos mesmos 450ms que sacodem as bolinhas. O
+erro precisa ser visível na periferia, porque o olho de quem digita está no teclado, não nas
+bolinhas. Os 450ms viraram um `const` só: a v1.2 tinha o `450` do `setTimeout` e o `450ms` da classe
+do tremor escritos separados, e duas cópias de uma duração divergem no dia em que só uma é ajustada.
+
+**Decisão 4 — o cursor é desenhado, não é o caractere.** `U+258C` (meio-bloco) depende de a fonte ter
+a faixa de Block Elements e de a métrica dela bater com a linha; o que sobra quando não bate é um
+retângulo desalinhado. Um `span` com fundo lê igual em qualquer fonte. Ele é a única animação em
+idle da tela: `nx-loop` (congela com a janela sem foco, §A6) e `steps(2)` terminando ACESO, para o
+congelamento por `prefers-reduced-motion` deixar um cursor visível e não um espaço vazio.
+
+**Três defeitos que só a dirigida achou.**
+
+*O bisel era maior que a coluna que ele emoldura.* Com `640px` cravados, contra uma coluna de 569px
+na janela de 1296 — e de 427px na largura MÍNIMA da janela —, o aro externo cruzava a divisória para
+dentro da coluna da identidade de um lado e era cortado pela borda da janela do outro. Um círculo
+cortado lê como falha de render, não como sangria. E pior que o visual: a raiz é `overflow-y: auto`,
+o CSS promove o eixo X junto, e a sobra virava **área rolável horizontal** — a armadilha do ADR-0080,
+já documentada no `.nx-page`, reaparecendo num elemento novo que não é `.nx-page`. `min(100%, 520px)`
+no aro e `overflow-x: clip` na `.nx-lock` fecham os dois.
+
+*No tema CLARO, a divisória do split era invisível.* Medida na foto: `#D7DEE0` sobre `#D9DEE0` —
+dois pontos de diferença num canal. A única linha que estrutura o layout sumia e sobravam dois blocos
+flutuando. No escuro a `--border-subtle` aparecia, que é como o defeito passou despercebido; a
+divisória agora é `--border-strong`. Junto veio o fundo: a v1.2 pintava a tela com `--bg-void`, que
+no escuro é o mesmo chão a olho (`#060809` contra `#040506`) mas no claro é o cinza mais fechado da
+paleta (`#d9dee0`) — a cor da MOLDURA da janela. Uma tela inteira pintada com ela lê como
+desabilitada. Agora é `--bg-base`, o mesmo piso que o app pisa nos dois temas.
+
+*O splash tinha um vão morto que nenhum `gap` explicava.* `.nx-splash` é `position: fixed; inset: 0`
+com `display: grid; place-items: center; gap: 22px` — só que as linhas ESTICAM para preencher a
+altura, então o `gap` nunca valia: a marca ficava centrada no meio de cima e a legenda no meio de
+baixo. `align-content: center` faz as linhas se abraçarem, e o splash vira o mesmo empilhamento
+compacto da coluna da identidade. O splash ganhou também a primeira linha do log (`> iniciando`, com
+o mesmo cursor): a tela de bloqueio continua exatamente dali, então o splash não é uma tela ANTES do
+app — é o log começando. "iniciando" é a única coisa verdadeira antes de qualquer leitura do banco.
+
+**Como o splash foi conferido.** Ele não sobrevive a uma foto normal: a janela do Tauri só fica
+visível depois que o WebView está pronto, e nesse ponto o React já limpou o `#root`. Um `F5` não
+resolve (a tecla é bloqueada no WebView) e matar só o `nexus.exe` derruba o servidor do Vite junto —
+o que rendeu uma foto de `ERR_CONNECTION_REFUSED`. O que funcionou foi atrasar o `createRoot` por
+20s, fotografar, e desfazer — a mesma técnica usada para segurar o estado de erro do PIN, que dura
+450ms e por isso também não cabe no obturador. Fica registrado para a próxima pessoa não repetir as
+três tentativas que falharam.
+
+**O que NÃO mudou.** A lógica do PIN (hash+salt no backend, veredito booleano, atraso progressivo do
+3º erro) está intacta — a fase 6 é de composição, e mexer no que guarda a senha para trocar um
+layout seria trocar risco por estética.

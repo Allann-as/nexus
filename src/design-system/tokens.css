@@ -395,6 +395,19 @@
   }
 }
 
+/* O cursor do log de boot da tela de bloqueio. Termina o ciclo ACESO de
+   propósito: quando o reduced-motion congela a animação no último quadro, o que
+   fica é um cursor visível, não um espaço vazio. Só opacity, e o `.nx-loop` de
+   quem o usa o para com a janela sem foco. */
+@keyframes nexus-caret {
+  0% {
+    opacity: 0.15;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
 /* O PIN errado: um tremor curto e seco, e os círculos se apagam. Só transform. */
 @keyframes nexus-shake {
   0%,

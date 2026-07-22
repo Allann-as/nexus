@@ -25,6 +25,12 @@
         inset: 0;
         display: grid;
         place-items: center;
+        /* `align-content: center` é o que faz o `gap` valer. Sem ele, a grade
+           ocupa a altura inteira do `inset: 0` e as linhas ESTICAM: a marca
+           ficava centrada no meio de cima e a legenda no meio de baixo, com um
+           vão morto no meio que nenhum `gap` explicava. O empilhamento agora é
+           um bloco só, como a coluna da identidade na tela de bloqueio. */
+        align-content: center;
         gap: 22px;
         background:
           radial-gradient(56% 52% at 50% 42%, rgba(51, 225, 160, 0.1), transparent 70%),
@@ -49,6 +55,51 @@
         letter-spacing: 0.28em;
         color: #33e1a0;
         animation: nx-splash-in 0.6s ease 0.1s both;
+        display: grid;
+        justify-items: center;
+        gap: 12px;
+      }
+
+      /* A primeira linha do log de boot. A tela de bloqueio continua exatamente
+         daqui — mesmo mono, mesmo prompt, mesmo cursor —, então o splash não é
+         uma tela ANTES do app: é o log começando. Diz "iniciando", que é a única
+         coisa verdadeira antes de qualquer leitura do banco. */
+      .nx-splash-boot {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 11px;
+        font-weight: 400;
+        letter-spacing: 0.02em;
+        color: #3e4c51;
+      }
+      html[data-theme="light"] .nx-splash-boot {
+        color: #7f9297;
+      }
+      .nx-splash-boot i {
+        font-style: normal;
+        color: #33e1a0;
+        opacity: 0.7;
+      }
+      .nx-splash-boot b {
+        width: 6px;
+        height: 12px;
+        background: #33e1a0;
+        animation: nx-splash-caret 1.06s steps(2, jump-none) infinite;
+      }
+      html[data-theme="light"] .nx-splash-boot i {
+        color: #0e9f6e;
+      }
+      html[data-theme="light"] .nx-splash-boot b {
+        background: #0e9f6e;
+      }
+      @keyframes nx-splash-caret {
+        0% {
+          opacity: 0.15;
+        }
+        100% {
+          opacity: 1;
+        }
       }
       @keyframes nx-splash-in {
         from { opacity: 0; transform: translateY(6px); }
@@ -61,7 +112,8 @@
       @media (prefers-reduced-motion: reduce) {
         .nx-splash svg,
         .nx-splash .nx-splash-core,
-        .nx-splash figcaption {
+        .nx-splash figcaption,
+        .nx-splash-boot b {
           animation: none;
         }
       }
@@ -104,7 +156,10 @@
             <circle cx="156" cy="164" r="12" fill="#33E1A0" />
           </g>
         </svg>
-        <figcaption>NEXUS</figcaption>
+        <figcaption>
+          NEXUS
+          <span class="nx-splash-boot"><i>&gt;</i>iniciando<b></b></span>
+        </figcaption>
       </figure>
     </div>
     <script type="module" src="/src/main.tsx"></script>
