@@ -28,7 +28,7 @@ use nexus_lib::domain::entities::{
     AssetClass, Direction, GoalKind, Kind, MilestoneKind, ProgressSource, Template,
 };
 use nexus_lib::domain::recurrence::Recurrence;
-use nexus_lib::domain::schedule::{format_day, parse_day, Schedule};
+use nexus_lib::domain::schedule::{format_day, parse_day, week_start, Schedule};
 use nexus_lib::domain::streak::TickStatus;
 use nexus_lib::infrastructure::clock::{SystemClock, Uuid7Gen};
 use nexus_lib::infrastructure::db::Db;
@@ -243,13 +243,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let today = parse_day(&clock.today_local())?;
     let mut ticks = 0;
 
+    // ===== As semanas PERFEITAS do seed =====
+    //
+    // Sem isto não existia NENHUMA, e a tela de Semana Perfeita (mais as
+    // conquistas 4/12/26 que dependem dela) nunca teve como ser vista com dado.
+    // A causa era aritmética, não intenção: "Ler" é `Daily` e deixava de ser
+    // marcado sempre que `n % 7 == 0`; como `n` cai de um em um, isso acerta um
+    // dia de CADA semana — todas elas, sem exceção. "Água" (`n % 9`) e "Dormir"
+    // (`n % 5`) reforçavam. Uma semana perfeita não admite abono, então bastava
+    // um desses para reprovar as 17 semanas do histórico.
+    //
+    // As semanas escolhidas por índice, contando da última COMPLETA para trás:
+    // {0,1} dão a sequência atual (2), {4,5,6} dão o recorde (3), e a 10 fecha o
+    // total em 6 — o bastante para o marco de 4 CAIR (estado desbloqueado) e os
+    // de 12 e 26 mostrarem progresso real. Determinístico, como o resto do seed.
+    let last_complete_ws = week_start(today) - chrono::Duration::weeks(1);
+    let perfect_weeks: std::collections::HashSet<chrono::NaiveDate> = [0i64, 1, 4, 5, 6, 10]
+        .iter()
+        .map(|k| last_complete_ws - chrono::Duration::weeks(*k))
+        .collect();
+
     for n in (1i64..=120).rev() {
         let day = today - chrono::Duration::days(n);
         let d = format_day(day);
+        // Numa semana perfeita, TUDO que está agendado sai como `Done`. As regras
+        // de falha abaixo continuam valendo em todas as outras.
+        let perfect = perfect_weeks.contains(&week_start(day));
 
         // "Ler": falha a cada 7 dias, pula a cada 11 — dá streaks realistas.
-        if n % 7 != 0 {
-            let status = if n % 11 == 0 {
+        if perfect || n % 7 != 0 {
+            let status = if !perfect && n % 11 == 0 {
                 TickStatus::Skipped
             } else {
                 TickStatus::Done
@@ -263,7 +286,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // é o que faz o gráfico de "ofensores" ter o que mostrar.
         if correr.schedule.is_scheduled_on(day) {
             let is_friday = nexus_lib::domain::schedule::weekday_index(day) == 5;
-            let status = if is_friday && n % 3 == 0 {
+            let status = if !perfect && is_friday && n % 3 == 0 {
                 TickStatus::Failed
             } else {
                 TickStatus::Done
@@ -273,7 +296,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // "Água": quase todo dia.
-        if n % 9 != 0 {
+        if perfect || n % 9 != 0 {
             habits.tick(
                 &agua.id,
                 Some(&d),
@@ -292,13 +315,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // O par correlacionado. "Dormir cedo" em ~80% dos dias; "Acordar cedo"
         // depende FORTE dele: quase sempre quando dormiu cedo, quase nunca quando
-        // não — o que produz lift alto e phi acima do piso do template.
-        let dormiu = n % 5 != 0;
+        // não — o que produz lift alto e phi acima do piso do template. A semana
+        // perfeita liga os dois juntos, então ela REFORÇA a correlação em vez de
+        // diluí-la.
+        let dormiu = perfect || n % 5 != 0;
         if dormiu {
             habits.tick(&dormir.id, Some(&d), TickStatus::Done, None)?;
             ticks += 1;
         }
-        let acordou = if dormiu { n % 13 != 0 } else { n % 4 == 0 };
+        let acordou = if perfect {
+            true
+        } else if dormiu {
+            n % 13 != 0
+        } else {
+            n % 4 == 0
+        };
         if acordou {
             habits.tick(&acordar.id, Some(&d), TickStatus::Done, None)?;
             ticks += 1;

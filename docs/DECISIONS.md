@@ -3930,3 +3930,74 @@ sido outro.
 `checkout` escreve o mesmo que o índice guarda, e a conversão implícita deixa de existir. A regra passa
 a viajar junto com o clone. Fica também um convite útil para a fase 7: quando o `tauri build` gerar
 artefatos, `.exe` e `.msi` já estão declarados como binários.
+
+---
+
+## ADR-0100 — Semana Perfeita: a tela nunca tinha sido vista com dado
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), fase 5 — grupo B, Semana Perfeita**
+
+**Contexto.** A tela existia desde o ARSENAL e o domínio (`domain::perfect_week`) é sólido — regras
+explícitas, sem abono, semana vazia neutra, tudo derivado. O trabalho era o idioma COCKPIT e as
+conquistas 4/12/26 que o plano pedia. O achado maior não estava em nenhum dos dois.
+
+**O achado — o seed tornava a semana perfeita ARITMETICAMENTE IMPOSSÍVEL.** A dirigida abriu a tela e
+mostrou quatro zeros, faixa inteira cinza, três marcos bloqueados. Não era bug de tela: o
+`seed_demo` deixava de marcar "Ler" sempre que `n % 7 == 0`, e como `n` decresce de um em um ao longo
+dos 120 dias, essa condição acerta **um dia de cada semana, todas elas**. "Ler" é `Daily`; uma semana
+perfeita não admite abono; logo as 17 semanas do histórico eram reprovadas por construção. "Água"
+(`n % 9`) e "Dormir cedo" (`n % 5`) faziam o mesmo em outro passo. **Nenhuma dirigida desta tela, em
+nenhuma fase, jamais viu o caminho verde** — nem o estado desbloqueado das conquistas que dependem
+dele. O seed agora marca seis semanas escolhidas por índice a partir da última semana completa
+(`{0,1}` para a sequência atual, `{4,5,6}` para o recorde, `{10}` para fechar o total em 6), de forma
+determinística como o resto dele. O resultado na tela: sequência 2, recorde 3, 6 de 17 no ano, marco de
+4 conquistado e os de 12 e 26 com progresso real — os dois lados de cada estado, fotografados.
+
+**A lição vale além desta tela:** um seed que não produz um estado faz esse estado **invisível para o
+processo inteiro**, e a ausência não se anuncia — ela se parece com "o usuário ainda não chegou lá".
+Ao dirigir uma tela, perguntar *"os dados de teste conseguem produzir o estado principal desta tela?"*
+é tão necessário quanto olhar o layout.
+
+**Decisão 1 — `streak.total` sai do lixo (a quarta vez do mesmo padrão).** O backend devolve
+`current`, `record` **e** `total`; a tela mostrava os dois primeiros. E `total` é precisamente a métrica
+que as conquistas 4/12/26 medem (`Metric::PerfectWeeks`) — o número sem o qual a seção que o plano
+pedia não teria como ser honesta. Virou o quarto `StatTile` ("Total de sempre"). Depois de `summary`,
+`notes`, `unlockedAt`, `setOn` e `previous`, o padrão está estabelecido: **ao redesenhar uma tela,
+listar o que o comando devolve antes de olhar o que ela desenha.**
+
+**Decisão 2 — os marcos vêm do BANCO, não de `total >= limiar`.** Derivar o estado aqui seria trivial e
+estaria errado: uma semana perfeita é **derivada** e some ao desmarcar um tick, mas a conquista que já
+caiu está no ledger e não volta atrás. Com a derivação, esta tela diria "faltam 4" para algo que a
+galeria mostra como conquistado — a tela contradizendo o banco (ADR-0096), agora entre duas telas.
+A `queryKey` é a **mesma** de Conquistas (`["gamification"]`), de propósito: as duas leem a mesma
+entrada de cache e não têm como divergir. Consequência de desenho: o marco conquistado mostra a data,
+não uma barra — exibir "3 de 26" ao lado de uma conquista já ganha é o que aconteceria se o estado
+fosse derivado, e seria confuso mesmo estando certo.
+
+**Decisão 3 — "O ano em semanas" passou a mostrar o ano.** A faixa desenhava só as semanas que o
+backend devolve, que começam no primeiro tick: em março. A seção se chamava "o ano" e mostrava de
+março a julho, encolhida a um terço do cartão, com vazio dos dois lados. Agora a régua é o ano inteiro
+— todas as segundas-feiras dele — e as semanas anteriores ao primeiro tick aparecem como `empty`, que
+é o que elas **legitimamente são** pelo domínio (nenhum hábito rastreado, semana neutra) e o que a
+legenda já explicava. O `flex-wrap` de antes também morreu: **a sequência é o assunto da tela, e uma
+sequência só se enxerga se as semanas vizinhas forem vizinhas na tela** — quebrar em linhas parte a
+corrida de três ao meio.
+
+**Decisão 4 — a semana futura não é desenhada, e isso é a informação.** Pintá-la como "sem hábito"
+(tracejado) afirmaria que nada estava agendado nela; ela simplesmente ainda não aconteceu. São dois
+fatos diferentes e um instrumento não pode dar o mesmo desenho para os dois (ADR-0091). O espaço vazio
+à direita, com o marcador `hoje`, **é** a leitura correta. Como consequência o SVG é dimensionado pelo
+que foi desenhado e centralizado — a mesma decisão, pelo mesmo motivo, que o Ano em Pixels tomou no
+ADR-0098.
+
+**Medidor só onde há escala, de novo.** "Sequência atual" ganhou barra porque tem um teto de verdade —
+o próprio recorde, que é sempre maior ou igual a ela. "Perfeitas no ano" ganhou porque o denominador
+são as semanas **julgáveis** (as que tinham algum hábito agendado), não 52: contar as 52 diria "6 de
+52" para quem começou a rastrear em março e a fração seria aritmeticamente certa e enganosa — a mesma
+armadilha do denominador do Ano em Pixels. "Recorde" e "Total de sempre" não têm teto nenhum e ficaram
+só com o número.
+
+**Um teste para uma função de quatro linhas.** `mondaysOf` saiu do componente para
+`weekStrip.ts` porque tem uma borda real: o dia da semana em que cai 1º de janeiro decide a primeira
+segunda, e o caso "1º de janeiro já é segunda" (2024) é o que uma conta ingênua erra por sete dias.
+Seis testes, sem montar React.
