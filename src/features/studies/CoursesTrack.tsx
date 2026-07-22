@@ -12,7 +12,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, CheckCircle2, Clock, MonitorPlay, Plus } from "lucide-react";
+import { Archive, CheckCircle2, Clock, MonitorPlay, Pencil, Plus } from "lucide-react";
 
 import { ArmedDelete } from "../../design-system/ArmedDelete";
 import { DatePicker } from "../../design-system/DatePicker";
@@ -24,12 +24,14 @@ import {
   listSubjects,
   setCourseStage,
   setSubjectExpectedEnd,
+  setSubjectSummary,
   subjectProgress,
   type CourseStage,
   type Subject,
 } from "../../lib/ipc";
 import { toHours } from "./studyFormat";
 import { LogSessionModal } from "./LogSessionModal";
+import { SubjectChecklist } from "./SubjectChecklist";
 
 const STAGES: Array<{ key: CourseStage; label: string; hint: string }> = [
   { key: "fazendo", label: "Fazendo", hint: "o que está em curso agora" },
@@ -89,6 +91,12 @@ export function CoursesTrack({ areaId }: { areaId: string }) {
 
   const expected = useMutation({
     mutationFn: (v: { id: string; day: string | null }) => setSubjectExpectedEnd(v.id, v.day),
+    onSuccess: () => invalidate(),
+    onError: pushError,
+  });
+
+  const summarize = useMutation({
+    mutationFn: (v: { id: string; summary: string | null }) => setSubjectSummary(v.id, v.summary),
     onSuccess: () => invalidate(),
     onError: pushError,
   });
@@ -187,6 +195,7 @@ export function CoursesTrack({ areaId }: { areaId: string }) {
                       subject={c}
                       onStage={(st) => stage.mutate({ id: c.id, stage: st })}
                       onExpectedEnd={(day) => expected.mutate({ id: c.id, day })}
+                      onSummary={(summary) => summarize.mutate({ id: c.id, summary })}
                       onLog={() => setLogFor(c.id)}
                       onArchive={() => archive.mutate(c.id)}
                       archiving={archive.isPending && archive.variables === c.id}
@@ -211,10 +220,74 @@ export function CoursesTrack({ areaId }: { areaId: string }) {
   );
 }
 
+/**
+ * O texto curto do que o curso ensina — editável no lugar onde é lido.
+ *
+ * Sem descrição, o card oferece o gesto ("Descrever o que ensina") em vez de uma
+ * linha vazia: um campo em branco permanente seria enfeite; um convite é função.
+ */
+function CourseSummary({
+  subject,
+  onSave,
+}: {
+  subject: Subject;
+  onSave: (summary: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(subject.summary ?? "");
+
+  const commit = () => {
+    setEditing(false);
+    const next = text.trim();
+    // Nada mudou? Não gasta uma escrita — e o card não pisca à toa.
+    if (next === (subject.summary ?? "")) return;
+    onSave(next || null);
+  };
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") {
+            setText(subject.summary ?? "");
+            setEditing(false);
+          }
+        }}
+        placeholder="O que este curso ensina…"
+        aria-label={`O que ${subject.title} ensina`}
+        className="h-7 w-full rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-2 text-[12px] text-[var(--text-primary)] outline-none focus:border-[var(--sphere)] placeholder:text-[var(--text-tertiary)]"
+      />
+    );
+  }
+
+  return (
+    <button
+      onClick={() => {
+        setText(subject.summary ?? "");
+        setEditing(true);
+      }}
+      className="text-left text-[12px] text-[var(--text-secondary)] transition-colors duration-[var(--dur-fast)] hover:text-[var(--text-primary)]"
+    >
+      {subject.summary ?? (
+        <span className="inline-flex items-center gap-1 text-[11px] text-[var(--text-tertiary)]">
+          <Pencil size={11} strokeWidth={2.2} />
+          Descrever o que ensina
+        </span>
+      )}
+    </button>
+  );
+}
+
 function CourseCard({
   subject,
   onStage,
   onExpectedEnd,
+  onSummary,
   onLog,
   onArchive,
   archiving,
@@ -222,6 +295,7 @@ function CourseCard({
   subject: Subject;
   onStage: (stage: CourseStage) => void;
   onExpectedEnd: (day: string | null) => void;
+  onSummary: (summary: string | null) => void;
   onLog: () => void;
   onArchive: () => void;
   archiving: boolean;
@@ -287,6 +361,17 @@ function CourseCard({
           </button>
         ))}
       </div>
+
+      {/* O que o curso ENSINA (a coluna `summary`, viva no schema desde a 0017 e
+          sem escritor até a 0020 — ADR-0092). Fica logo abaixo do título porque é
+          identidade do curso, não progresso: "React avançado" sozinho não diz se
+          é hooks ou renderização no servidor. */}
+      <CourseSummary subject={subject} onSave={onSummary} />
+
+      {/* A CHECKLIST de conteúdos — a mesma lista dos temas de uma matéria, e por
+          isso o mesmo componente (ADR-0092). Some no curso concluído: uma lista
+          de conteúdos a fazer num curso terminado é passado, não trabalho. */}
+      {!done && <SubjectChecklist subjectId={subject.id} track={subject.track} />}
 
       {/* A previsão só faz sentido enquanto não terminou: num curso concluído,
           "previsão" já virou passado. */}

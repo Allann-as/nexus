@@ -3597,3 +3597,46 @@ nunca numa ordem que muda a cada leitura (lição 3: um `sort` que desempata soz
 **Uma guarda que o schema sozinho não daria.** `add_item` verifica que a matéria existe antes de
 inserir. Sem ela a FK reclamaria — mas o usuário leria *"FOREIGN KEY constraint failed"* em vez de
 *"matéria não encontrada"*. A FK é o piso; a mensagem é o comportamento.
+
+---
+
+## ADR-0093 — A lista na tela, e o vocabulário que pertence à COISA, não à tela
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), fase 4 — Estudos: Matérias e Cursos**
+
+**Contexto.** Com a 0020 paga, os temas e a checklist chegaram à UI num componente só
+(`SubjectChecklist`), porque são uma forma só (ADR-0092). A dirigida reprovou **três** coisas, e a mais
+importante delas nenhuma leitura de código teria pego.
+
+**Decisão 1 — o substantivo vem da TRILHA da matéria, não da aba que a desenha.** A primeira versão
+recebia `noun`/`nounPlural` por prop: "tema" em Matérias, "conteúdo" em Cursos. A dirigida mostrou o
+furo: **a aba "Matérias" lista TODAS as trilhas** (ADR-0072 — ela sempre listou), então um curso aparece
+nas duas telas, e a MESMA lista se chamava "temas" numa e "conteúdos" na outra. Era exatamente a
+divergência que a tabela única existiu para evitar, reintroduzida uma camada acima.
+
+O vocabulário passou a ser um mapa indexado por `SubjectTrack` dentro do componente. Na tela final, na
+mesma aba e lado a lado, "Matematica" diz TEMAS e "React avançado" diz CONTEÚDOS. **O nome pertence ao
+objeto; a tela só o mostra.**
+
+**Decisão 2 — a frase do vazio não é template.** Ela era montada: *"Sem {plural} — quebre em
+{singular}s do que trava"*. Em Matérias lia "quebre em temas do que trava" (repetindo a palavra); em
+Cursos teria dito que os módulos anunciados numa ementa são "o que trava", que é falso. Cada trilha
+escreve a sua frase inteira. **Frase por template diz a coisa errada em metade dos lugares onde é
+usada** — e o custo de acertar é uma linha de texto por caso.
+
+**Decisão 3 — os segmentos da barra acompanham a LISTA.** `SegBar` nasceu com 12 segmentos fixos: numa
+lista de dois itens, cada item acendia seis casas de uma régua que só sabe contar até dois — precisão
+que o dado não tem. Agora é `min(12, itens)`; acima de doze a régua para de crescer, porque aí a
+leitura vira proporção e não contagem. É o mesmo critério que reprovou o `BarSpark` na distribuição por
+hora (ADR-0091): **instrumento genérico cuja semântica não bate com o dado mente.**
+
+**O que a dirigida CONFIRMOU, e vale registrar porque é a regra sendo obedecida sozinha.** Ao apagar o
+último item, o card volta ao vazio **sem barra nenhuma** — "0 de 0" não é 0%, é "ainda não há o que
+medir" (ADR-0087), e a lista some junto com a régua enquanto a frase do vazio fica. Nenhum ajuste foi
+preciso: a condição `list.length > 0` já era a regra.
+
+**Duas escolhas menores, ditas para não serem revisitadas.** (1) O campo de "novo item" **não fecha**
+depois de gravar: quem decompõe uma matéria escreve vários de uma vez, e fechar obrigaria a reabrir a
+cada tema. (2) O excluir de um item **não tem confirmação armada** (ao contrário do arquivar da
+matéria): um tema custa três palavras para reescrever, e o modal custaria mais que o erro. O
+`ArmedDelete` continua onde o estrago é caro.

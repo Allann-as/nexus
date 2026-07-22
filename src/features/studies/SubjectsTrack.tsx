@@ -24,6 +24,7 @@ import {
 } from "../../lib/ipc";
 import { formatMinutes, toHours, shortDay } from "./studyFormat";
 import { LogSessionModal } from "./LogSessionModal";
+import { SubjectChecklist } from "./SubjectChecklist";
 import { HabitTracker } from "../habits/HabitTracker";
 
 export function SubjectsTrack({ areaId }: { areaId: string }) {
@@ -302,6 +303,11 @@ function SubjectCard({
           ))}
         </div>
       )}
+
+      {/* Os TEMAS de dificuldade (0020): "Matemática → regra de 3, Bháskara".
+          Ficam ACIMA do botão de registrar sessão porque respondem à pergunta que
+          vem antes dele — "o que eu estudo agora?". */}
+      <SubjectChecklist subjectId={subject.id} track={subject.track} />
 
       <button
         onClick={onLog}
