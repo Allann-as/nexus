@@ -109,6 +109,24 @@ pub fn format_day(d: NaiveDate) -> String {
     d.format("%Y-%m-%d").to_string()
 }
 
+/// O DIA LOCAL de um instante em epoch ms — 'YYYY-MM-DD'.
+///
+/// Local, não UTC, pela mesma razão do `Clock::today_local`: o dia de um fato é
+/// o dia do usuário. Quem precisa disto é quem grava um evento cujo `ts` não é
+/// "agora" — o `day` tem que acompanhar o instante, senão a Timeline mostra o
+/// fato num dia e o `ts` diz outro.
+pub fn day_of_ms(ms: i64) -> String {
+    use chrono::TimeZone;
+    chrono::Local
+        .timestamp_millis_opt(ms)
+        .single()
+        .map(|dt| dt.format("%Y-%m-%d").to_string())
+        // Um instante que não existe no fuso (a hora que a DST pula) não deve
+        // derrubar uma gravação: cai no dia de hoje, que é o comportamento que
+        // já valeria se o chamador não tivesse passado instante nenhum.
+        .unwrap_or_else(|| chrono::Local::now().format("%Y-%m-%d").to_string())
+}
+
 /// Rótulo curto do dia da semana, para os "ofensores" do BI.
 pub fn weekday_label(idx: u8) -> &'static str {
     match idx {

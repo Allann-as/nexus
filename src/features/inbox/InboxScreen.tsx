@@ -17,9 +17,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Inbox as InboxIcon, Clock } from "lucide-react";
+import { Inbox as InboxIcon, Clock, Plus } from "lucide-react";
 
 import {
+  captureInbox,
   listNodes,
   triageInboxItem,
   deleteNode,
@@ -34,6 +35,8 @@ import {
   Kbd,
   cx,
 } from "../../design-system/primitives";
+import { MonoLabel } from "../../design-system/instruments";
+import { kindLabel } from "../../lib/kindLabel";
 import { SphereIcon } from "../hub/SphereIcon";
 import { useToasts } from "../../stores/toasts";
 
@@ -50,6 +53,7 @@ export function InboxScreen() {
   // `null` = não escolheu, e é o caminho rápido: T/H/P sozinho continua
   // triando sem Esfera, como sempre fez.
   const [pendingArea, setPendingArea] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
 
   const { data: items = [], isPending } = useQuery({
@@ -81,9 +85,26 @@ export function InboxScreen() {
       push(
         "success",
         sphere
-          ? `${node.title} → ${KIND_LABEL[node.kind]} em ${sphere.name}`
-          : `${node.title} → ${KIND_LABEL[node.kind]}`,
+          ? `${node.title} → ${kindLabel(node.kind)} em ${sphere.name}`
+          : `${node.title} → ${kindLabel(node.kind)}`,
       );
+    },
+    onError: pushError,
+  });
+
+  /* A CAPTURA na própria tela.
+
+     Ela existia só como modal global (`Ctrl+Shift+N`) e pela paleta, e o vazio
+     do Inbox dizia "Ctrl+Shift+N captura qualquer coisa" — a tela ensinava um
+     atalho em vez de oferecer o campo. Quem abre o Inbox para esvaziá-lo quase
+     sempre tem mais uma coisa para jogar dentro, e mandá-lo decorar um atalho
+     para isso é fricção onde o plano pedia "captura rápida + triagem". O modal
+     continua: ele serve ao caso em que o app está em segundo plano. */
+  const capture = useMutation({
+    mutationFn: captureInbox,
+    onSuccess: () => {
+      setDraft("");
+      invalidate();
     },
     onError: pushError,
   });
@@ -156,10 +177,18 @@ export function InboxScreen() {
     return () => window.removeEventListener("keydown", onKey);
   }, [items, selected, busy, triage, discard, areas, pendingArea]);
 
-  // Mudou o item em foco, a Esfera escolhida some: ela era daquele item. Sem
-  // isto, descer a lista carregaria a escolha anterior e o item seguinte seria
-  // triado para uma Esfera que ninguém pediu para ele.
-  useEffect(() => setPendingArea(null), [selected]);
+  /* Mudou o item em foco, a Esfera escolhida some: ela era daquele item.
+
+     A dependência é o ID do item, não o ÍNDICE — e essa distinção é o defeito
+     que a dirigida achou. Triar o item selecionado encurta a lista, o próximo
+     escorrega para a MESMA posição, e o índice não muda: o efeito não dispara e
+     a Esfera escolhida para o item que acabou de sair fica armada sobre o item
+     seguinte. O próprio comentário original descrevia esse risco ("o item
+     seguinte seria triado para uma Esfera que ninguém pediu para ele") e o
+     guard não cobria o caso em que a lista encolhe debaixo do cursor — que é o
+     caso NORMAL desta tela, já que triar é o que se faz aqui. Ver ADR-0107. */
+  const focusedId = items[selected]?.id;
+  useEffect(() => setPendingArea(null), [focusedId]);
 
   const ageing = items.filter((i) => isAgeing(i)).length;
 
@@ -191,12 +220,24 @@ export function InboxScreen() {
           }
         />
 
+        <div className="px-8 pb-4">
+          <CaptureField
+            value={draft}
+            pending={capture.isPending}
+            onChange={setDraft}
+            onSubmit={() => {
+              const t = draft.trim();
+              if (t && !capture.isPending) capture.mutate(t);
+            }}
+          />
+        </div>
+
         {items.length === 0 && !isPending ? (
           <div className="min-h-0 flex-1 pb-16">
             <EmptyState
               icon={InboxIcon}
               title="Inbox zerada"
-              hint="Nada esperando decisão. Ctrl+Shift+N captura qualquer coisa, de qualquer tela."
+              hint="Nada esperando decisão. O campo acima captura daqui; Ctrl+Shift+N captura de qualquer tela, mesmo com o app em segundo plano."
             />
           </div>
         ) : (
@@ -233,24 +274,52 @@ const TRIAGE_KEYS: Record<string, Kind | undefined> = {
   p: "project",
 };
 
-const KIND_LABEL: Record<Kind, string> = {
-  task: "Tarefa",
-  note: "Nota",
-  project: "Projeto",
-  goal: "Meta",
-  habit: "Hábito",
-  routine: "Rotina",
-  event: "Evento",
-  file: "Arquivo",
-  inbox_item: "Inbox",
-  milestone: "Sub-desafio",
-  fin_goal: "Caixinha",
-  book: "Livro",
-  annual_goal: "Meta anual",
-  challenge: "Temporada",
-  skill: "Competência",
-  subject: "Matéria",
-};
+/**
+ * O campo de captura.
+ *
+ * Sem botão de "salvar": Enter captura, e é só isso. O gesto tem que ser mais
+ * barato que a decisão que ele adia — um alvo de mouse a mais já é caro demais
+ * para o lugar do app cuja única função é não custar nada.
+ *
+ * O teclado da triagem ignora o que é digitado em `input` (o guard `typing` no
+ * handler global), então escrever "tarefa nova" aqui não tria três itens pelo
+ * caminho.
+ */
+function CaptureField({
+  value,
+  pending,
+  onChange,
+  onSubmit,
+}: {
+  value: string;
+  pending: boolean;
+  onChange: (v: string) => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2.5 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 focus-within:border-[var(--border-glow)]">
+      <Plus size={15} className="shrink-0 text-[var(--accent)]" aria-hidden />
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onSubmit();
+          }
+        }}
+        disabled={pending}
+        placeholder="Capturar…"
+        aria-label="Capturar no Inbox"
+        className="h-10 w-full bg-transparent text-[13.5px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] disabled:opacity-60"
+      />
+      <span className="flex shrink-0 items-center gap-1.5">
+        <Kbd>Enter</Kbd>
+        <MonoLabel>captura</MonoLabel>
+      </span>
+    </div>
+  );
+}
 
 function isAgeing(item: Node): boolean {
   return Date.now() - item.createdAt > AGEING_DAYS * DAY_MS;

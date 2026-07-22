@@ -51,6 +51,7 @@ import {
 
 import { bankName } from "../../design-system/bankBrand";
 import { lucideByName } from "../../design-system/DynamicIcon";
+import { KIND_LABEL as KINDS } from "../../lib/kindLabel";
 import { tierColor } from "../../design-system/tiers";
 import { formatMoney } from "../../lib/format";
 import type { LedgerEntry } from "../../lib/ipc";
@@ -127,34 +128,14 @@ export const ALL_ENTITY_KINDS = [
   "skill_checkin",
 ] as const;
 
-/** Rótulo humano de cada `entityKind` — usado nos filtros e no fallback. */
-export const KIND_LABEL: Record<string, string> = {
-  note: "Nota",
-  task: "Tarefa",
-  project: "Projeto",
-  goal: "Meta",
-  habit: "Hábito",
-  routine: "Rotina",
-  event: "Evento",
-  file: "Arquivo",
-  inbox_item: "Entrada",
-  milestone: "Sub-desafio",
-  fin_goal: "Caixinha",
-  book: "Livro",
-  subject: "Matéria",
-  challenge: "Temporada",
-  annual_goal: "Meta anual",
-  skill: "Competência",
-  contribution: "Aporte",
-  career_milestone: "Marco",
-  achievement: "Conquista",
-  daily_score: "Score",
-  study_session: "Estudo",
-  focus_session: "Foco",
-  weekly_review: "Revisão",
-  personal_record: "Recorde",
-  skill_checkin: "Check-in",
-};
+/**
+ * Rótulo humano de cada `entityKind` — usado nos filtros e no fallback.
+ *
+ * Mora em `lib/kindLabel` desde a v1.3: o Inbox tinha a segunda cópia da mesma
+ * tabela, com 16 das 25 entradas (ADR-0107). Reexportado aqui porque a Timeline
+ * inteira e os testes dela já a chamavam por este nome.
+ */
+export { KIND_LABEL } from "../../lib/kindLabel";
 
 const ASSET_CLASS_LABEL: Record<string, string> = {
   renda_fixa: "Renda fixa",
@@ -290,7 +271,7 @@ export function describe(entry: LedgerEntry): string {
   // Uma conquista (`completed` com `achievement`) já tem `titleSnapshot` humano
   // — "Terminou 'X' (5/5)", "Objetivo alcançado — Y". A chave crua do
   // payload ('book_finished') é vocabulário interno, não texto de tela.
-  return title || KIND_LABEL[entry.entityKind] || prettify(entry.eventType);
+  return title || KINDS[entry.entityKind] || prettify(entry.eventType);
 }
 
 /**
@@ -406,6 +387,6 @@ export function dayScore(entry: LedgerEntry): number | null {
  */
 export function searchHaystack(entry: LedgerEntry): string {
   return `${entry.titleSnapshot} ${describe(entry)} ${detail(entry) ?? ""} ${
-    KIND_LABEL[entry.entityKind] ?? ""
+    KINDS[entry.entityKind] ?? ""
   } ${meta(entry).label}`.toLowerCase();
 }

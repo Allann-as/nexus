@@ -930,13 +930,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ===== Inbox =====
+    //
+    // Dois itens capturados HOJE e dois VELHOS. O Inbox marca em âmbar o que
+    // está parado há mais de 7 dias e conta quantos são no cabeçalho — é o que
+    // transforma uma fila em dívida visível. Com tudo capturado agora, esse
+    // aviso nunca aparecia: a tela só existia no estado "tudo fresco".
     for title in [
         "Ideia: newsletter sobre arquitetura de software",
         "Renegociar plano de internet",
-        "Pesquisar tênis de corrida",
     ] {
         nodes.capture_inbox(title)?;
     }
+    let day_ms = 86_400_000i64;
+    for (title, days_ago) in [
+        ("Pesquisar tênis de corrida", 12i64),
+        ("Trocar o óleo do carro", 34),
+    ] {
+        nodes.capture_inbox_at(title, clock.now_ms() - days_ago * day_ms)?;
+    }
+    println!("  4 itens no inbox (2 envelhecidos)");
 
     // ===== Uma nota =====
     nodes.create(

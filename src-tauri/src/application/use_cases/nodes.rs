@@ -10,6 +10,7 @@ use crate::application::ports::{
 use crate::domain::entities::{validate_title, Kind, Node, Status};
 use crate::domain::errors::{NexusError, Result};
 use crate::domain::ledger::{EventType, NewLedgerEvent};
+use crate::domain::schedule::day_of_ms;
 
 pub struct NodeService {
     pub nodes: Arc<dyn NodeRepository>,
@@ -66,6 +67,44 @@ impl NodeService {
     /// as pessoas não capturarem.
     pub fn capture_inbox(&self, title: &str) -> Result<Node> {
         self.create(Kind::InboxItem, title, None, None)
+    }
+
+    /// Captura com o INSTANTE explícito — um item que já nasce velho.
+    ///
+    /// Existe para o **seed**, e só para ele. O Inbox marca em âmbar o item
+    /// parado há mais de 7 dias e conta quantos são no cabeçalho: é o desenho
+    /// que transforma uma fila em DÍVIDA visível. Mas o envelhecimento só existe
+    /// com a passagem do tempo, e um seed que captura tudo agora produz uma
+    /// tela onde esse aviso nunca aparece — nem quebrado, nem visto (ADR-0107).
+    ///
+    /// **Não é exposto como command, de propósito.** Deixar o cliente escolher
+    /// quando um item foi capturado é deixá-lo apagar a própria dívida: bastaria
+    /// recapturar com a data de hoje para o Inbox parar de cobrar.
+    pub fn capture_inbox_at(&self, title: &str, at: i64) -> Result<Node> {
+        let title = validate_title(title)?;
+        let id = self.ids.new_id();
+        let event = NewLedgerEvent {
+            ts: at,
+            // O `day` acompanha o instante: o `created` desta captura tem que
+            // cair no dia em que ela aconteceu, senão a Timeline mostra um item
+            // nascendo hoje com o node datado de duas semanas atrás.
+            day: day_of_ms(at),
+            entity_id: id.clone(),
+            entity_kind: Kind::InboxItem.into(),
+            event_type: EventType::Created,
+            payload: json!({ "kind": Kind::InboxItem.as_str() }),
+            title_snapshot: title.clone(),
+        };
+        self.nodes.create_with_event(
+            &id,
+            &NewNode {
+                kind: Kind::InboxItem,
+                title,
+                area_id: None,
+                parent_id: None,
+            },
+            &event,
+        )
     }
 
     /// Triagem: transforma um `inbox_item` no que ele realmente é.

@@ -4422,3 +4422,55 @@ ausência, e a linha existe para mostrar o que a nota tem.
 **Defeito 4 — o ano sumia das datas.** `relativeTime` devolvia `12/03` acima de 7 dias, sem ano: uma
 nota de março passado e uma de 2024 ficavam idênticas, numa tela cujo subtítulo promete "um formato
 eterno". O ano entra quando a nota é de outro ano.
+
+---
+
+## ADR-0107 — Inbox: a Esfera que vazava para o item seguinte
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), fase 5 — grupo C, Inbox**
+
+**Contexto.** O plano dava permissão explícita para simplificar o Inbox se ele não fizesse sentido no
+fluxo. **Faz.** A triagem teclado-primeiro (T/H/P, ⌫, ↑/↓, 1–9 opcional) é o desenho certo, e o
+argumento de por que a Esfera é opcional está escrito no próprio código e continua válido: exigir a
+Esfera no mesmo gesto reintroduziria a fricção que a captura existe para remover. Nada a cortar. O
+que a tela tinha eram três buracos.
+
+**Defeito 1 — a Esfera escolhida vazava para o item seguinte.** Apertar `1–9` arma uma Esfera de
+destino para o item em foco; `T/H/P` confirma. O guard que limpa a escolha ao mudar de item existia —
+e o comentário dele descrevia exatamente o risco: *"sem isto, descer a lista carregaria a escolha
+anterior e o item seguinte seria triado para uma Esfera que ninguém pediu para ele"*. Mas a
+dependência do efeito era o **índice** selecionado, não o item. Triar encurta a lista, o próximo item
+escorrega para a MESMA posição, o índice não muda, o efeito não dispara — e a Esfera fica armada
+sobre um item que ninguém escolheu. O caso não é exótico: é o caso NORMAL da tela, porque triar é o
+que se faz nela. Na dirigida, o chip da Esfera reapareceu sobre o item seguinte logo após uma
+triagem. A dependência passou a ser o `id` do item em foco.
+
+Vale registrar a classe: **um guard escrito contra "mudou de item" que observa a POSIÇÃO só funciona
+enquanto a lista não muda de tamanho** — e listas de fila (Inbox, triagem, revisão) encolhem por
+construção. O mesmo cuidado vale para o `scrollIntoView` e para o clamp da seleção, que continuam
+corretos por observarem tamanho, não identidade.
+
+**Defeito 2 — não dava para capturar do Inbox.** A captura existia só como modal global
+(`Ctrl+Shift+N`) e pela paleta. Abrir o Inbox e não ter onde escrever é estranho por si só; pior, o
+estado vazio *ensinava o atalho* (“Ctrl+Shift+N captura qualquer coisa”) em vez de oferecer o campo —
+a tela mandava decorar uma tecla para fazer ali o que ela não deixava fazer. O plano pedia "captura
+rápida + triagem" e só a segunda metade estava na tela. Entrou um campo com Enter e **sem botão de
+salvar**: o gesto tem que ser mais barato que a decisão que ele adia, e um alvo de mouse a mais já é
+caro demais no único lugar do app cuja função é não custar nada. O modal continua existindo — ele
+serve ao caso que o campo não cobre: capturar com o app em segundo plano.
+
+**Defeito 3 — o envelhecimento nunca tinha sido visto.** O Inbox marca em âmbar o item parado há mais
+de 7 dias e conta quantos são no cabeçalho: é o desenho que transforma uma fila em **dívida**. O seed
+capturava tudo agora, então esse aviso nunca apareceu — nem quebrado, nem visto. É o mesmo buraco de
+`focus_sessions` (ADR-0105) e dos anexos (ADR-0106), pela terceira vez em três telas seguidas.
+Entrou `NodeService::capture_inbox_at`, com o instante explícito, **fora dos commands de propósito**:
+deixar o cliente escolher quando um item foi capturado é deixá-lo apagar a própria dívida — bastaria
+recapturar com a data de hoje para o Inbox parar de cobrar. O `day` do evento acompanha o instante
+(`domain::schedule::day_of_ms`), senão a Timeline mostraria um item nascendo hoje com o node datado de
+duas semanas atrás.
+
+**`KIND_LABEL` era a segunda cópia.** O Inbox traduzia os 16 `Kind` de node; a Timeline traduzia esses
+mais os 9 fatos que não são node. Duas tabelas do mesmo vocabulário divergem no dia em que só uma
+ganha a entrada nova — e foi exatamente assim que a Timeline passou três versões escrevendo
+`achievement_unlocked` na tela (ADR-0104). Foram para `lib/kindLabel.ts`, como os metais foram para
+`design-system/tiers.ts` (ADR-0104) e o gesto armado para `ArmedDelete` (v1.2).
