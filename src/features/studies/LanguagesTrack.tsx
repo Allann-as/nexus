@@ -35,6 +35,7 @@ import {
 } from "../../lib/ipc";
 import { toHours } from "./studyFormat";
 import { LogSessionModal } from "./LogSessionModal";
+import { SubjectChecklist } from "./SubjectChecklist";
 import { HabitTracker } from "../habits/HabitTracker";
 
 /** Os degraus sugeridos de uma língua. O usuário renomeia depois, no card da meta. */
@@ -356,6 +357,11 @@ function LanguagePanel({
             : ""}
         </span>
       </div>
+
+      {/* Os TEMAS (0020) — aqui, o que ainda não sai na fala. A aba "Matérias"
+          lista todas as trilhas e já desenhava esta lista para um idioma; sem
+          ela aqui, a MESMA língua tinha temas numa tela e não tinha na outra. */}
+      <SubjectChecklist subjectId={subject.id} track={subject.track} />
 
       <button
         onClick={onLog}

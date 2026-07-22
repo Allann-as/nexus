@@ -38,18 +38,20 @@ export function computePace(finished: number, goal: number): Pace {
   const ahead = finished - expected;
   const n = Math.round(Math.abs(ahead));
 
+  // "5 livros atrasado" não concorda — quem está atrasado é a pessoa, e o número
+  // é a distância. "atrasado em 5 livros" diz a mesma coisa e se lê.
   if (ahead > 0.5) {
     return {
       ahead,
       tone: "success",
-      label: `${n} ${n === 1 ? "livro" : "livros"} adiantado`,
+      label: `adiantado em ${n} ${n === 1 ? "livro" : "livros"}`,
     };
   }
   if (ahead < -0.5) {
     return {
       ahead,
       tone: "warning",
-      label: `${n} ${n === 1 ? "livro" : "livros"} atrasado`,
+      label: `atrasado em ${n} ${n === 1 ? "livro" : "livros"}`,
     };
   }
   return { ahead, tone: "sphere", label: "no ritmo" };

@@ -3697,3 +3697,45 @@ perceber. É a mesma extração do `careerTime.ts` (ADR-0089), pelo mesmo motivo
 desenha dois e marca a contagem "3" num canto discreto que só aparece no hover. O dado não se perde, mas
 a leitura de relance esconde o terceiro. **Não mexi aqui**: o Calendário é tela da fase 5, e o conserto
 pertence a ela — fica anotado para não ser redescoberto.
+
+---
+
+## ADR-0095 — Idiomas e Biblioteca: o que a dirigida achou quando não havia o que construir
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), fase 4 — Estudos fecha**
+
+**Contexto.** As duas últimas abas de Estudos estavam implementadas e nunca tinham sido FOTOGRAFADAS.
+O plano supunha trabalho nas duas ("dirigir Idiomas", "o add-livro precisa do redesenho Cockpit"). A
+dirigida mostrou que a suposição maior estava errada e que os defeitos reais eram outros, menores e
+invisíveis a qualquer leitura de código.
+
+**O que a dirigida APROVOU sem tocar.** A escada de um idioma funciona ponta a ponta: criar a língua dá
+um card honesto (*"sem nível registrado ainda"* — sem inventar degrau), o convite monta a meta `staged`
+com Básico→Fluente, e marcar o primeiro degrau move o cabeçalho para "Básico" com 1/4 e 25%. O motor de
+Metas da fase 3 serve Idiomas sem uma linha própria, como o ADR-0091 dizia.
+
+**Decisão 1 — o add-livro NÃO precisava de redesenho, e dizer isso é o trabalho.** O plano o listava
+como pendência de design. Na tela, ele já é Cockpit: `Modal` do design system, rótulos mono em
+maiúsculas, as estantes existentes como `Chip` clicável e um campo livre ao lado. Reescrevê-lo para
+"cumprir a tarefa" trocaria uma tela que funciona por outra igual, com risco e sem ganho. **Uma
+pendência de plano não é uma pendência de produto até a tela dizer que é.**
+
+**Decisão 2 — "5 livros atrasado" não concorda.** Quem está atrasado é a pessoa; o número é a
+distância. Virou *"atrasado em 5 livros"* (e *"adiantado em N livros"*), que diz o mesmo e se lê.
+
+**Decisão 3 — "no dia" era honesto e ilegível.** Quando a média de dias para terminar um livro arredonda
+para zero, a faixa mostrava a string "no dia" como VALOR de 22px sob o rótulo "tempo médio p/ terminar".
+Aritmeticamente correto, e ninguém o lê como duração — parece texto quebrado. Virou **"< 1 dia"**. É a
+lição 2 na sua forma mais escorregadia: o defeito não estava no número, estava em como ele se apresenta
+como número.
+
+**Decisão 4 — a lista de temas chega a Idiomas, por simetria obrigatória.** O `SubjectChecklist` tinha
+ido para Matérias, Cursos e Faculdade. Como a aba "Matérias" lista TODAS as trilhas (ADR-0072), um
+idioma já aparecia lá COM a lista — e no card de Idiomas, sem. A mesma língua tinha temas numa tela e
+não tinha na outra. É o mesmo defeito de simetria do ADR-0093, agora em presença/ausência em vez de
+vocabulário: **quando uma tela lista o que outra também lista, as duas mostram a mesma coisa ou uma
+delas mente por omissão.**
+
+**Com isto a Esfera Estudos fecha**: Painel, Matérias, Metas, Idiomas, Faculdade, Cursos e Biblioteca —
+as sete abas dirigidas e fotografadas. Uma migration na Esfera inteira (a 0020), duas colunas mudas
+ligadas (`summary` e `notes`), e nenhum kind novo.

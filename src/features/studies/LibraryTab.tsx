@@ -276,7 +276,10 @@ function ReadingStatsRow({ stats }: { stats: ReadingStats }) {
     const d = Math.round(stats.avgDaysToFinish);
     cells.push({
       label: "Tempo médio p/ terminar",
-      value: d === 0 ? "no dia" : `${d} ${d === 1 ? "dia" : "dias"}`,
+      // "no dia" era honesto e ilegível: como VALOR de 22px sob "tempo médio",
+      // ele não se lê como duração nenhuma — parece string quebrada. "< 1 dia"
+      // diz o mesmo e se reconhece de relance.
+      value: d === 0 ? "< 1 dia" : `${d} ${d === 1 ? "dia" : "dias"}`,
     });
   }
   if (stats.pagesThisYear > 0) {
