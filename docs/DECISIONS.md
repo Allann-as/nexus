@@ -3317,3 +3317,56 @@ nunca teve check-in (ADR-0037): dois donos do mesmo número seria a contradiçã
 de naturezas opostas no mesmo cartão continuam sem poder aparecer juntos. E a fórmula não foi tocada —
 inclusive o fato de um único mês excelente já levar a nível 9, que é comportamento documentado e
 explicado pelo próprio "ⓘ como calculamos" com o tamanho da amostra à vista.
+
+---
+
+## ADR-0087 — Projetos volta para DENTRO da Esfera; e o BarSpark desenhava zero como se fosse alguma coisa
+
+**Data:** 2026-07-21 · **Status:** aceito · **v1.3 (COCKPIT), fase 4 — Carreira, Projetos**
+
+**Contexto.** A aba "Projetos" da Carreira não mostrava projeto nenhum: mostrava uma **lista de nomes**,
+e o clique em qualquer um deles fazia `navigate("/projects")` — a tela global. Quem abria a Esfera para
+ver como o projeto está tinha que sair da Esfera, perder o contexto e voltar. A checklist, a barra de
+progresso e o histórico existiam, mas todos do outro lado daquele salto.
+
+**Decisão 1 — o projeto se abre AQUI.** O cartão passa a trazer a checklist de tarefas (marcar,
+adicionar, excluir), o progresso, a evolução dos últimos 14 dias e a meta a que o projeto serve
+(`contributes_to`, o link que o M4.6 já tinha). A tela global continua existindo e continua sendo a
+visão de TODOS os projetos do app — o que sai é a obrigação de ir até lá para responder "quanto falta
+neste aqui". A checklist mora atrás de um clique porque um projeto de 20 tarefas viraria uma parede
+numa grade de cartões; mas o clique abre no lugar, não em outra tela.
+
+**Decisão 2 — três regras de dado, todas da lente.**
+
+1. **A barra de progresso é a CONTAGEM**, `done/total`, com os dois números escritos ao lado. Projeto
+   sem tarefa não ganha barra: 0 de 0 não é 0% — é "ainda não há o que medir" —, e uma barra vazia
+   diria que o projeto está parado quando ele só não foi decomposto.
+2. **A evolução diária declara a própria escala.** Uma série de contagens por dia não tem teto natural,
+   então a altura é relativa ao pico da janela — e por isso **o pico vai por extenso ao lado** ("pico de
+   3/dia"), junto com o total do período. Escala relativa sem o número é exatamente o que a régua de
+   nível perdeu no ADR-0086; aqui ela fica, mas DECLARADA.
+3. **Sem tarefa concluída na janela, sem gráfico.** Catorze colunas vazias não informam que nada
+   aconteceu; informam que o app está com defeito.
+
+### O que a dirigida cobrou — duas correções no INSTRUMENTO, não na tela
+
+1. **O `track` do ADR-0086 tinha contorno, e o contorno virou uma cerca.** O trilho nasceu com `fill` +
+   `stroke`, e funcionava nas DUAS barras largas da régua de nível. Nos **14 dias estreitos** dos
+   Projetos, 13 slots vazios com 1px de contorno cada viraram uma cerca de piquetes que competia
+   visualmente com a única barra cheia. A moldura de um slot vazio não pode pesar mais que o dado do
+   slot cheio: o trilho é FUNDO, não moldura — o `stroke` saiu.
+
+2. **O `BarSpark` desenhava o zero como se fosse alguma coisa** — e este é um defeito ANTIGO, que só
+   ficou visível com o trilho e uma série esparsa. O piso `Math.max(1.5, valor * altura)` existia para
+   um valor PEQUENO não sumir; o efeito colateral é que **o zero também ganhava 1,5px**, de modo que um
+   dia sem nenhuma tarefa concluída desenhava a mesma marca de um dia com uma tarefa quase invisível.
+   O gráfico afirmava que houve algo onde não houve — a lição 1 na sua forma mais literal, escondida
+   dentro de um `Math.max` desde que o instrumento foi escrito.
+
+   Agora zero não desenha nada, e é o trilho que mostra que o slot existe e está vazio. O piso continua
+   valendo para todo valor maior que zero, que é o caso para o qual ele foi criado.
+
+Vale registrar o padrão: das três correções de honestidade das últimas duas sessões (a escala da régua,
+a cerca do trilho, o zero com altura), **nenhuma foi pega pelo gate e todas foram pegas por olhar um
+pixel ampliado da tela real**. O gate protege o que o código promete; só a dirigida protege o que a
+tela diz.

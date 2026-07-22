@@ -150,6 +150,12 @@ export function BarSpark({
    * significativa; deixe desligado onde a série é sempre cheia e o trilho só
    * somaria ruído. Descoberto na régua de nível da Carreira, onde um mês fraco
    * ao lado de um mês forte parecia um mês inexistente.
+   *
+   * O trilho é FUNDO, não moldura: preenchimento sem contorno. A primeira versão
+   * tinha `stroke` e funcionava nas duas barras largas da régua de nível, mas nos
+   * 14 dias estreitos dos Projetos os contornos viraram uma CERCA que competia
+   * com a única barra cheia — a moldura de um slot vazio não pode pesar mais que
+   * o dado do slot cheio.
    */
   track?: boolean;
   className?: string;
@@ -173,13 +179,16 @@ export function BarSpark({
             height={maxH}
             rx={1.5}
             fill="var(--bg-base)"
-            stroke="var(--border-subtle)"
-            strokeWidth={1}
           />
         ))}
       {data.map((v, i) => {
         const clamped = Math.max(0, Math.min(1, v));
-        const bh = Math.max(1.5, clamped * maxH);
+        // O piso de 1.5px existe para um valor PEQUENO não sumir — mas o zero não
+        // é pequeno, é ausente, e desenhá-lo com a mesma altura mínima faz o
+        // gráfico afirmar que houve algo onde não houve. Zero não desenha nada; é
+        // o trilho que mostra que o slot existe e está vazio.
+        const bh = clamped <= 0 ? 0 : Math.max(1.5, clamped * maxH);
+        if (bh === 0) return null;
         const x = i * (bw + gap);
         const last = i === data.length - 1;
         return (
