@@ -31,7 +31,7 @@ import { SPHERE_SECTIONS, resolveIndicator, type IndicatorView } from "./section
 import { GoalsList } from "../goals/GoalsList";
 import { SphereDashboard } from "./SphereDashboard";
 import { HealthDashboard } from "./HealthDashboard";
-import { HealthCheckpoints } from "./HealthCheckpoints";
+import { SphereCheckpoints } from "./SphereCheckpoints";
 import { HealthTraining } from "./HealthTraining";
 import { HealthExams } from "./HealthExams";
 import { FinanceDashboard } from "../finance/FinanceDashboard";
@@ -207,7 +207,7 @@ function SphereContent({
   if (tab === "goals") return <GoalsList areaId={sphere.id} />;
 
   if (sphere.template === "health") {
-    if (tab === "checkpoints") return <HealthCheckpoints areaId={sphere.id} />;
+    if (tab === "checkpoints") return <SphereCheckpoints areaId={sphere.id} />;
     if (tab === "training") return <HealthTraining areaId={sphere.id} colour={sphere.color} />;
     if (tab === "exams") return <HealthExams areaId={sphere.id} />;
     return <HealthDashboard sphere={sphere} card={card} />;
@@ -268,5 +268,8 @@ const TEMPLATE_LABEL: Record<Template, string> = {
   fin_goals: "Objetivos financeiros",
   career: "Carreira",
   studies: "Estudos",
-  simple: "Agenda e checklists",
+  // Era "Agenda e checklists" — as duas seções que a fase 4 tirou (ADR-0096).
+  // Um subtítulo que anuncia abas que não existem mais é a primeira coisa que o
+  // usuário lê e a primeira que o desmente.
+  simple: "Hábitos, metas e notas",
 };

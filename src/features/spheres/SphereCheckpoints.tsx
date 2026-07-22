@@ -2,6 +2,11 @@
  * Os checkpoints do dia (§3.1) — recomposto na v1.1 (C2) como o CORAÇÃO do jogo
  * diário, não uma lista de lembretes.
  *
+ * Chamava-se `HealthCheckpoints` e **nunca foi da Saúde**: recebe `areaId` e lê os
+ * hábitos daquela Esfera, qualquer uma. O nome era a única coisa específica, e um
+ * nome específico numa coisa genérica é como um segundo componente igual nasce
+ * quando a próxima Esfera precisa do mesmo (ADR-0096).
+ *
  * "Checkpoints" não é um conceito novo — são os hábitos REAIS do core, filtrados
  * pela Esfera. Beber água, treinar, tomar sol: cada um já é um hábito com schedule
  * e streak. Marcar aqui é o mesmo tick que marca no módulo de Hábitos — um dado,
@@ -25,7 +30,7 @@ import { useToasts } from "../../stores/toasts";
 import { habitsToday, tickHabit, untickHabit, type HabitWithStats } from "../../lib/ipc";
 import { HabitCreateForm, describeSchedule } from "../habits/HabitsScreen";
 
-export function HealthCheckpoints({ areaId }: { areaId: string }) {
+export function SphereCheckpoints({ areaId }: { areaId: string }) {
   const client = useQueryClient();
   const pushError = useToasts((s) => s.pushError);
   const push = useToasts((s) => s.push);

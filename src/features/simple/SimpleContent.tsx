@@ -1,15 +1,17 @@
 /**
- * O conteúdo de uma Esfera 'simple' — o template do que o usuário cria.
+ * O conteúdo de uma Esfera 'simple' — a Casa, e toda Esfera que o usuário criar.
  *
- * Deliberadamente raso (§2.4): Agenda (compromissos no calendário) + Checklists
- * (listas de checkboxes) + o painel genérico. É o template de "Espiritualidade",
- * "Casa", "Pets" — sem dashboard complexo, só a cor da Esfera e o essencial.
+ * Alinhada ao padrão do app na fase 4 (ADR-0096): Painel, Checkpoints, Metas e
+ * Notas. Nada aqui é uma tela própria do template — os Checkpoints são os MESMOS
+ * de todas as Esferas e as Notas são as mesmas da tela global, recortadas por
+ * Esfera. Uma Esfera genérica não merece componentes genéricos piores: merece os
+ * mesmos.
  */
 
 import type { Area, SphereCard } from "../../lib/ipc";
+import { SphereCheckpoints } from "../spheres/SphereCheckpoints";
 import { SphereDashboard } from "../spheres/SphereDashboard";
-import { AgendaTab } from "./AgendaTab";
-import { ChecklistsTab } from "./ChecklistsTab";
+import { SphereNotes } from "./SphereNotes";
 
 export function SimpleContent({
   sphere,
@@ -20,7 +22,7 @@ export function SimpleContent({
   card: SphereCard | undefined;
   tab: string;
 }) {
-  if (tab === "agenda") return <AgendaTab areaId={sphere.id} />;
-  if (tab === "checklists") return <ChecklistsTab areaId={sphere.id} />;
+  if (tab === "checkpoints") return <SphereCheckpoints areaId={sphere.id} />;
+  if (tab === "notes") return <SphereNotes areaId={sphere.id} />;
   return <SphereDashboard sphere={sphere} card={card} />;
 }

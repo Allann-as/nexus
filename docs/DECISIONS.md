@@ -3739,3 +3739,56 @@ delas mente por omissão.**
 **Com isto a Esfera Estudos fecha**: Painel, Matérias, Metas, Idiomas, Faculdade, Cursos e Biblioteca —
 as sete abas dirigidas e fotografadas. Uma migration na Esfera inteira (a 0020), duas colunas mudas
 ligadas (`summary` e `notes`), e nenhum kind novo.
+
+---
+
+## ADR-0096 — A Casa entra no padrão, e o componente que nunca foi da Saúde
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), fase 4 — Casa (fecha a fase)**
+
+**Contexto.** A Casa é a única Esfera do template `simple` — o mesmo que toda Esfera que o usuário
+criar. Ela tinha **Painel · Metas · Agenda · Checklists**, enquanto as cinco especializadas tinham
+Checkpoints. A Esfera mais doméstica do app, justo a de regar as plantas e tirar o lixo, era a única
+sem a tela dos hábitos do dia.
+
+**Decisão 1 — `simple` vira Painel · Checkpoints · Metas · Notas.** As duas que saíram não eram
+funcionalidade perdida, eram recortes piores de coisas que já existem melhor:
+
+- **Agenda** desenhava os `event` daquela Esfera. É literalmente o Calendário global filtrado — mesma
+  tabela, mesmos eventos. Uma segunda janela para a mesma agenda só cria o lugar onde o usuário procura
+  e não acha.
+- **Checklists** era um `project` com `task`s como caixinhas. É o que uma **Meta com sub-desafios** faz,
+  com régua, peso e progresso — e a Meta é universal.
+
+**O custo, dito em vez de escondido.** Um `project` criado pela antiga aba Checklists **continua no
+banco** (nada foi apagado — a mudança é de navegação), mas perde a tela em que era marcado: passa a ser
+alcançável pela busca global (Ctrl+K). Quem tinha uma checklist ali vai reencontrá-la, não vai poder
+riscá-la no mesmo lugar. É uma troca deliberada, e o motivo de estar escrita aqui é que ela não deve ser
+redescoberta como bug.
+
+**Decisão 2 — `HealthCheckpoints` vira `SphereCheckpoints`, e é o mesmo componente.** Ele recebe
+`areaId` e lê os hábitos daquela Esfera — **nunca teve nada de Saúde além do nome**. Manter o nome
+específico numa coisa genérica é exatamente como um segundo componente igual nasce: a próxima Esfera
+precisa da mesma tela, o autor não reconhece a existente como sua, e escreve outra. A Casa usa hoje o
+MESMO arquivo da Saúde; um dia de divergência entre os dois seria um bug em dois lugares.
+
+**Decisão 3 — as Notas por Esfera reusam a nota global, inclusive o editor.** `listNotes` sempre aceitou
+`areaId`; o que faltava era o recorte. O editor mora DENTRO da aba em vez de um clique que leva à tela
+global — porque a tela global seleciona sozinha a primeira nota e não tem rota por nota: mandar o
+usuário para lá abriria **outra** nota. Um botão que responde a coisa errada é pior que um botão que não
+existe.
+
+**O que a dirigida achou, e é o achado que justifica a dirigida.** Criar o primeiro hábito pelo botão
+contextual do Painel deixava a tela dizendo **"Casa começa aqui"** com o hábito já gravado. O
+`HabitCreateForm` invalidava `["habits"]` e `["dashboard"]`, mas não `["spheres","overview"]` — que é
+justamente a query que sabe se a Esfera está vazia. **A tela afirmava o contrário do banco**, e nenhum
+teste pegaria: os dois lados estavam certos sozinhos. Corrigido na raiz (no formulário, não na Casa),
+então vale para toda Esfera.
+
+**E mais duas frases que prometiam abas mortas.** O subtítulo do template dizia *"Agenda e checklists"*,
+e o empty state do Painel convidava a visitar *"Metas, Agenda e Checklists nas abas acima"*. Texto que
+nomeia navegação é a primeira coisa que o usuário lê e a primeira que o desmente quando a navegação
+muda. Ambas atualizadas — e fica a regra: **mexeu nas seções, procure quem as cita por nome.**
+
+**Com isto a FASE 4 fecha**: as seis Esferas (Saúde, Finanças, Objetivos, Carreira, Estudos, Casa) estão
+no idioma COCKPIT, dirigidas e fotografadas.

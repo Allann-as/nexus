@@ -27,7 +27,7 @@ import {
   MonitorPlay,
   BookOpen,
   Brain,
-  CalendarDays,
+  FileText,
   Flame,
   Milestone,
   type LucideIcon,
@@ -95,11 +95,21 @@ export const SPHERE_SECTIONS: Record<Template, SphereSection[]> = {
     { key: "courses", label: "Cursos", icon: MonitorPlay },
     { key: "library", label: "Biblioteca", icon: BookOpen, indicator: "reading" },
   ],
+  /**
+   * A Esfera genérica — a Casa, e toda Esfera que o usuário criar.
+   *
+   * Alinhada ao padrão do app (ADR-0096). Ela tinha "Agenda" e "Checklists", que
+   * eram recortes de coisas que já vivem melhor em outro lugar: a agenda É o
+   * Calendário global (mesmo evento, mesma tabela), e uma checklist é o que uma
+   * Meta com sub-desafios faz com régua e progresso. No lugar entram as duas
+   * seções que TODA Esfera tem e que faltavam justo na mais doméstica:
+   * Checkpoints (regar as plantas, tirar o lixo) e Notas.
+   */
   simple: [
     { key: "dashboard", label: "Painel", icon: LayoutDashboard, indicator: "streak" },
+    { key: "checkpoints", label: "Checkpoints", icon: ListChecks, indicator: "habits_today" },
     { key: "goals", label: "Metas", icon: Target, indicator: "active_goals" },
-    { key: "agenda", label: "Agenda", icon: CalendarDays },
-    { key: "checklists", label: "Checklists", icon: ListChecks },
+    { key: "notes", label: "Notas", icon: FileText },
   ],
 };
 

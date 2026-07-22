@@ -314,6 +314,12 @@ export function HabitCreateForm({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["habits"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
+      // O overview das Esferas é quem sabe se uma Esfera está VAZIA. Sem esta
+      // linha, criar o primeiro hábito da Casa pelo botão contextual do Painel
+      // deixava a tela dizendo "Casa começa aqui" com o hábito já criado — a
+      // tela afirmando o contrário do banco (ADR-0096).
+      qc.invalidateQueries({ queryKey: ["spheres", "overview"] });
+      qc.invalidateQueries({ queryKey: ["nodes", "count"] });
       onDone();
     },
     onError: pushError,

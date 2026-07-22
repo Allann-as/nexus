@@ -306,13 +306,13 @@ function CreateWizard({ onDone }: { onDone: () => void }) {
         <Field label="Template">
           <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-base)] px-3 py-2.5">
             <p className="text-[12px] font-medium text-[var(--text-primary)]">
-              Agenda simples
+              Esfera padrão
             </p>
             <p className="mt-0.5 text-[11px] leading-[17px] text-[var(--text-tertiary)]">
-              Compromissos com data e hora, checklists e hábitos linkados. As
-              Esferas com painel especializado (Saúde, Finanças, Objetivos,
-              Carreira, Estudos) já vêm instaladas — duplicá-las dividiria os
-              mesmos dados em duas telas.
+              Painel, Checkpoints, Metas e Notas — as quatro seções que toda
+              Esfera tem. As Esferas com painel especializado (Saúde, Finanças,
+              Objetivos, Carreira, Estudos) já vêm instaladas — duplicá-las
+              dividiria os mesmos dados em duas telas.
             </p>
           </div>
         </Field>

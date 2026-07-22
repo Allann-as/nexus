@@ -48,7 +48,11 @@ export function SphereDashboard({
             <EmptyState
               icon={Repeat}
               title={`${sphere.name} começa aqui`}
-              hint="Um hábito é o primeiro batimento de uma Esfera: crie um agendado para hoje e o painel — anel do dia, streak, tendência de 30 dias — ganha vida. Metas, Agenda e Checklists também são desta Esfera, nas abas acima."
+              /* As abas citadas aqui têm que ser as que EXISTEM: o texto dizia
+                 "Agenda e Checklists", que a fase 4 removeu (ADR-0096). Uma
+                 frase de empty state que aponta para abas inexistentes é a
+                 primeira coisa que o usuário lê e a primeira que o desmente. */
+              hint="Um hábito é o primeiro batimento de uma Esfera: crie um agendado para hoje e o painel — anel do dia, streak, tendência de 30 dias — ganha vida. Checkpoints, Metas e Notas também são desta Esfera, nas abas acima."
               action={
                 <Button variant="primary" size="sm" icon={Plus} onClick={() => setAdding(true)}>
                   Adicionar hábito
