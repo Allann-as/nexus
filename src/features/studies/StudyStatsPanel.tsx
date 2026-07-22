@@ -10,10 +10,14 @@
 
 import { CalendarClock, Flame, Sunrise } from "lucide-react";
 
-import { StatCard } from "../../design-system/cards";
+import { StatTile } from "../../design-system/cards";
 import { Formula } from "../../design-system/Formula";
+import { MonoLabel } from "../../design-system/instruments";
 import type { StudyStats } from "../../lib/ipc";
 import { toHours, hourLabel, formatMinutes } from "./studyFormat";
+
+/** A janela da constância — os mesmos 30 dias que o backend conta. */
+const JANELA_CONSTANCIA = 30;
 
 export function StudyStatsPanel({ stats }: { stats: StudyStats }) {
   const weekH = toHours(stats.minutesLast7);
@@ -22,26 +26,37 @@ export function StudyStatsPanel({ stats }: { stats: StudyStats }) {
 
   return (
     <section className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {/*
+         * Só a constância ganha medidor, e por um motivo: ela é a ÚNICA das três
+         * que tem denominador. "Dias ativos em 30" é uma fração de verdade; horas
+         * na semana não têm teto (quantas horas seriam 100%?) e um horário do dia
+         * não é quantidade nenhuma. Barra sem denominador é enfeite (ADR-0088).
+         */}
+        <StatTile
           icon={CalendarClock}
           label="Nesta semana"
           value={weekH}
           unit="h"
           // A tendência só aparece quando houve semana anterior para comparar.
           delta={stats.minutesPrev7 > 0 ? { value: deltaH, suffix: "h" } : undefined}
+          hint={stats.minutesPrev7 > 0 ? `${prevH} h na semana anterior` : undefined}
         />
-        <StatCard
+        <StatTile
           icon={Flame}
           label="Constância (30d)"
           value={stats.activeDays30}
-          unit="dias"
+          unit={`de ${JANELA_CONSTANCIA} dias`}
           tone="accent"
+          seg={stats.activeDays30 / JANELA_CONSTANCIA}
         />
-        <StatCard
+        <StatTile
           icon={Sunrise}
           label="Melhor horário"
           value={stats.bestHour != null ? hourLabel(stats.bestHour) : "—"}
+          hint={
+            stats.bestHour != null ? `${formatMinutes(stats.bestHourMinutes)} acumulados` : undefined
+          }
           tone="success"
         />
       </div>
@@ -49,9 +64,7 @@ export function StudyStatsPanel({ stats }: { stats: StudyStats }) {
       {stats.byHour.length > 0 && (
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
           <div className="mb-3 flex items-baseline justify-between">
-            <h3 className="text-[10px] font-semibold tracking-[0.14em] text-[var(--text-tertiary)] uppercase">
-              Quando você estuda
-            </h3>
+            <MonoLabel>Quando você estuda</MonoLabel>
             {stats.bestHour != null && (
               <span className="text-[11px] text-[var(--text-tertiary)]">
                 pico às{" "}

@@ -3469,3 +3469,63 @@ uma afirmação falsa sobre a vida de quem tem projetos.
 causa era eu: editei o arquivo ENQUANTO o gate rodava, com o componente novo já referenciado e ainda
 não escrito. Um gate que roda sobre uma árvore em movimento não mede nada. Rodar o gate é o último
 passo antes do commit, nunca em paralelo com a edição.
+
+---
+
+## ADR-0091 — Estudos: as sete abas JÁ EXISTIAM; o Painel dizia o ritmo e não dizia em QUÊ
+
+**Data:** 2026-07-21 · **Status:** aceito · **v1.3 (COCKPIT), fase 4 — Estudos, Painel**
+
+**Contexto — o segundo levantamento que economizou trabalho.** O plano tratava Estudos como a Esfera a
+CONSTRUIR ("6 abas; provavelmente > 1 sessão"). O levantamento antes de escrever mostrou que **as sete
+abas já estão implementadas e nenhuma é stub**: Painel, Matérias, Metas, Idiomas, Faculdade, Cursos e
+Biblioteca todas renderizam telas reais, com 9 testes de integração em Rust por trás
+(`src-tauri/tests/studies.rs`).
+
+Mais que isso: não existe schema separado para idioma, curso ou faculdade. As quatro seções são a MESMA
+tabela `subject_details` com uma coluna `track` discriminando — e a escada de nível de um idioma reusa o
+motor de Metas (`goalKind: 'staged'`, com os degraus Básico→Fluente). É o mesmo padrão de reuso que o
+ADR-0086 encontrou na Carreira, e pela mesma razão: alguém já tinha feito o levantamento certo antes.
+
+**Decisão 1 — o Painel ganha as MATÉRIAS ATIVAS.** Ele respondia "qual o meu ritmo" (horas na semana,
+constância, melhor horário) e "como vai a leitura", mas não respondia **em quê** essas horas foram. Para
+saber isso era preciso abrir Matérias, depois Idiomas, depois Faculdade, depois Cursos — quatro abas
+para uma pergunta só. Agora elas aparecem juntas, cada uma com a sua trilha escrita ao lado, e o
+trabalho continua em cada aba. É a mesma divisão "resumo no painel, trabalho na aba" do ADR-0090.
+
+A barra é o progresso contra a META DE HORAS da matéria, e existe só para quem tem meta: sem
+`targetMinutes` não há denominador. Quem não tem meta mostra as horas acumuladas — e **aparece na lista
+assim mesmo**, porque estudar sem meta definida não é motivo para sumir do painel.
+
+**Decisão 2 — `StatCard` → `StatTile`, e só a constância ganha medidor.** Das três estatísticas de
+ritmo, só uma tem denominador: "dias ativos em 30" é uma fração de verdade. Horas na semana não têm teto
+(quantas horas seriam 100%?) e um horário do dia não é quantidade nenhuma. As duas ficam com o número e
+a tendência; a constância ganha a SegBar. É o critério do ADR-0088 aplicado antes de a tela existir, em
+vez de depois de a dirigida reprovar.
+
+**Decisão 3 — o `TRACK_META` sai de dentro de uma tela.** O rótulo e o ícone de cada trilha viviam soltos
+no `LegacyStudyProjects`. Com o Painel listando matérias de todas as trilhas juntas, duas listas de
+rótulos seria como uma trilha vira "Curso" numa tela e "Cursos" na outra.
+
+**O que o gráfico de horas NÃO virou.** Tentei trocar o `HourChart` artesanal pelo `BarSpark`, e não
+serve: o `BarSpark` destaca a ÚLTIMA barra (semântica de série temporal, "o mais recente"), e numa
+distribuição por hora do dia a barra das 23h não tem nada de especial — quem tem que se destacar é o
+PICO. O gráfico artesanal já fazia isso certo, e já desenhava a hora vazia como trilho neutro. Ficou.
+Nem toda tela deve usar o instrumento genérico: quando a semântica não bate, o instrumento mente.
+
+### O que ficou de fora (o levantamento em BATCH para a próxima sessão)
+
+Três lacunas reais de Estudos, e todas pedem a MESMA coisa — o que é exatamente o tipo de coincidência
+que uma migration em batch resolve por um preço só (ADR-0077):
+
+1. **Matérias: "temas de dificuldade como subtarefas"** (Matemática → regra de 3, Bháskara). Não existe
+   mecanismo. Os dois candidatos genéricos estão FECHADOS na camada de use-case, não por convenção:
+   `TaskService::create` recusa um `project_id` que não seja `Kind::Project`, e `GoalService::add_milestone`
+   exige `Kind::Goal`. Nenhum dos dois aceita um `subject` como pai hoje.
+2. **Cursos: checklist de conteúdos** — a MESMA forma do item 1 (lista ordenada de itens nomeados sob
+   uma matéria, cada um feito/não-feito). Uma tabela serve os dois.
+3. **Cursos: o "texto curto do que ensina"** — um `ALTER TABLE subject_details ADD COLUMN`.
+
+Fora do batch: **Faculdade** (entregas e provas com D-dias) provavelmente NÃO precisa de schema — a
+Saúde já resolve a mesma forma reusando `event` genérico filtrado por categoria (`category='exame'`), e
+o mesmo padrão serve para entrega/prova.

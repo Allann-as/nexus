@@ -8,27 +8,31 @@
  */
 
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, CheckCircle2, Clock, Library, Trash2 } from "lucide-react";
 
 import { CountUp, HeroCard, StatCard, SummaryCard, Val } from "../../design-system/cards";
 import { ProgressBar, ProgressRing } from "../../design-system/charts";
+import { MonoLabel, StatusList, type StatusRow } from "../../design-system/instruments";
 import { Button, EmptyState } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
 import {
   deleteStudySession,
+  listSubjects,
   recentStudySessions,
   studiesOverview,
   studyStats,
+  subjectProgress,
   type Book,
   type StudySession,
 } from "../../lib/ipc";
+import { TRACK_META } from "./tracks";
 import { coverStyle, bookInitials } from "./bookCover";
 import { computePace, SetGoalInline } from "./readingGoal";
 import { StudyStatsPanel } from "./StudyStatsPanel";
 import { LogSessionModal } from "./LogSessionModal";
 import { LegacyStudyProjects } from "./LegacyStudyProjects";
-import { formatMinutes, shortDay } from "./studyFormat";
+import { formatMinutes, shortDay, toHours } from "./studyFormat";
 
 export function StudiesDashboard({ areaId }: { areaId: string }) {
   const client = useQueryClient();
@@ -120,6 +124,8 @@ export function StudiesDashboard({ areaId }: { areaId: string }) {
           }
         />
       )}
+
+      <MateriasAtivas areaId={areaId} />
 
       {sessions.length > 0 && <RecentSessions sessions={sessions} onChanged={refreshAfterLog} />}
 
@@ -327,5 +333,68 @@ function ReadingRow({ book }: { book: Book }) {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * As matérias ativas — de TODAS as trilhas, com o quanto cada uma acumulou.
+ *
+ * O Painel respondia "qual o meu ritmo" (as horas, a constância, o horário) e
+ * "como vai a leitura", mas não respondia **em quê** essas horas foram. Para
+ * saber isso era preciso abrir Matérias, depois Idiomas, depois Faculdade,
+ * depois Cursos — quatro abas para uma pergunta só. Aqui elas aparecem juntas,
+ * cada uma com a sua trilha escrita ao lado, e o trabalho continua em cada aba.
+ *
+ * A barra é o progresso contra a META DE HORAS da matéria, e existe só para quem
+ * tem meta: sem `targetMinutes` não há denominador, e uma barra ali seria enfeite
+ * (ADR-0088/0090). Quem não tem meta mostra as horas acumuladas, que é o número
+ * honesto — e a linha aparece assim mesmo, porque estudar sem meta definida não
+ * é motivo para sumir do painel.
+ */
+function MateriasAtivas({ areaId }: { areaId: string }) {
+  const materias = useQuery({
+    queryKey: ["subjects", areaId, "todas"],
+    queryFn: () => listSubjects(areaId),
+  });
+  const items = materias.data ?? [];
+
+  const progressos = useQueries({
+    queries: items.map((s) => ({
+      queryKey: ["subject-progress", s.id],
+      queryFn: () => subjectProgress(s.id),
+    })),
+  });
+
+  // Enquanto não se sabe, não se diz nada — um vazio piscando é uma afirmação.
+  if (materias.isLoading || items.length === 0) return null;
+
+  const rows: StatusRow[] = items.map((s, i) => {
+    const prog = progressos[i]?.data;
+    const minutos = prog?.totalMinutes ?? 0;
+    const meta = s.targetMinutes;
+    const trilha = TRACK_META[s.track];
+    return {
+      id: s.id,
+      icon: trilha.icon,
+      label: s.title,
+      sub: trilha.label,
+      value: meta != null ? `${toHours(minutos)}h / ${toHours(meta)}h` : `${toHours(minutos)}h`,
+      tone: "sphere" as const,
+      progress: meta != null && meta > 0 ? Math.min(1, minutos / meta) : undefined,
+    };
+  });
+
+  return (
+    <section>
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <MonoLabel>Matérias ativas</MonoLabel>
+        <span className="tabular text-[11px] text-[var(--text-tertiary)]">
+          {items.length} {items.length === 1 ? "trilha" : "trilhas"}
+        </span>
+      </div>
+      <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-1">
+        <StatusList rows={rows} />
+      </div>
+    </section>
   );
 }
