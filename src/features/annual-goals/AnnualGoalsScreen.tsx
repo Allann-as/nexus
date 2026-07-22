@@ -24,7 +24,7 @@ import {
   type YearOverview,
 } from "../../lib/ipc";
 import { Button, Card, EmptyState, PageHeader, PAGE_CONTAINER, cx } from "../../design-system/primitives";
-import { ProgressBar } from "../../design-system/charts";
+import { SegBar } from "../../design-system/instruments";
 import { useToasts } from "../../stores/toasts";
 import { NodeLinkSection } from "../links/NodeLinkSection";
 import { HabitTracker } from "../habits/HabitTracker";
@@ -149,7 +149,10 @@ function Meter({ label, value, color }: { label: string; value: number; color: s
         <span>{label}</span>
         <span className="tabular">{pct(value)}%</span>
       </div>
-      <ProgressBar value={value} color={color} />
+      {/* SegBar: os dois medidores do cabeçalho existem para serem COMPARADOS
+          ("estou em 55% do ano com 40% das metas"), e o segmento discreto lê a
+          diferença melhor que duas barras contínuas. */}
+      <SegBar value={value} segments={28} height={9} color={color} />
     </div>
   );
 }
@@ -223,12 +226,30 @@ function GoalCard({
         <StatusBadge status={goal.status} />
       </div>
 
-      {quantitative && (
-        <p className="tabular mt-2 text-[12px] text-[var(--text-tertiary)]">
-          {effective} / {goal.targetValue} {goal.unit ?? goal.metricName}
+      {/* O medidor é SÓ da meta quantitativa. Uma meta binária ("correr uma
+          meia-maratona") não tem gradação: ela desenhava uma SegBar de 20
+          segmentos vazia, sem número nenhum ao lado — um instrumento graduado
+          para um dado que só tem dois estados, que é a mesma mentira do BarSpark
+          na distribuição por hora (ADR-0091). O estado dela já está dito pelo
+          selo no cabeçalho e pelo botão "Concluir". Ver ADR-0098. */}
+      {quantitative ? (
+        <>
+          <p className="tabular mt-2 text-[12px] text-[var(--text-tertiary)]">
+            {effective} / {goal.targetValue} {goal.unit ?? goal.metricName}
+          </p>
+          <SegBar
+            value={goal.progressRatio}
+            segments={20}
+            height={8}
+            color={color}
+            className="mt-2"
+          />
+        </>
+      ) : (
+        <p className="mt-2 text-[12px] text-[var(--text-tertiary)]">
+          {goal.status === "done" ? "Concluída." : "Ou você faz, ou não faz — sem meio-termo."}
         </p>
       )}
-      <ProgressBar value={goal.progressRatio} color={color} className="mt-2" />
 
       {/* O indicador de RITMO (REFINO R7): "no ritmo atual fecha em X". É o que
           faz de uma meta de constância ("correr 100 dias") algo vivo. Lê o valor

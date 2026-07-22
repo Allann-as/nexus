@@ -9,7 +9,6 @@
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Lock } from "lucide-react";
 
 import {
   gamificationOverview,
@@ -21,8 +20,8 @@ import {
   type GalleryEntry,
   type Level,
 } from "../../lib/ipc";
-import { Card, PageHeader, PAGE_CONTAINER } from "../../design-system/primitives";
-import { ProgressBar } from "../../design-system/charts";
+import { Card, PageHeader, PAGE_CONTAINER, cx } from "../../design-system/primitives";
+import { MonoLabel, SegBar } from "../../design-system/instruments";
 import { DynamicIcon } from "../../design-system/DynamicIcon";
 import { Formula } from "../../design-system/Formula";
 import { ChallengesSection } from "./ChallengesSection";
@@ -131,7 +130,15 @@ function OverallCard({ level }: { level: Level }) {
           nível {level.level + 1}
         </p>
       </div>
-      <ProgressBar value={level.span > 0 ? level.intoLevel / level.span : 0} height={10} className="mt-4" />
+      {/* SegBar, não ProgressBar: o medidor do COCKPIT. E ele cabe aqui porque
+          há denominador de verdade — quanto falta para o próximo nível. */}
+      <SegBar
+        value={level.span > 0 ? level.intoLevel / level.span : 0}
+        segments={32}
+        height={10}
+        color="var(--accent)"
+        className="mt-4"
+      />
       <Formula>
         XP soma o que você fez: hábito cumprido 10 · tarefa concluída 15 · checkpoint de meta 20 ·
         sub-desafio 25 · livro terminado 60 · caixinha fechada 80 · temporada vencida 120 · meta
@@ -160,54 +167,156 @@ function SphereXpRow({ area, level }: { area: Area | undefined; level: Level }) 
           Nível {level.level}
         </span>
       </div>
-      <ProgressBar
+      <SegBar
         value={level.span > 0 ? level.intoLevel / level.span : 0}
+        segments={20}
+        height={8}
         color={color}
         className="mt-3"
       />
       <p className="tabular mt-2 text-[11px] text-[var(--text-tertiary)]">
         {level.xp.toLocaleString("pt-BR")} XP
+        {/* Quanto falta para o próximo nível — a mesma frase do card geral, que
+            aqui faltava: a barra mostrava a fração e nenhum número a explicava. */}
+        {level.span > 0 && (
+          <span className="text-[var(--text-tertiary)]">
+            {" · "}
+            {(level.span - level.intoLevel).toLocaleString("pt-BR")} para o nível {level.level + 1}
+          </span>
+        )}
       </p>
     </Card>
   );
 }
 
+/** O rótulo de cada tier — o mesmo vocabulário da cor, escrito. */
+const TIER_LABEL: Record<string, string> = {
+  bronze: "Bronze",
+  silver: "Prata",
+  gold: "Ouro",
+  platinum: "Platina",
+};
+
+/** A ordem em que os tiers aparecem — do mais fácil ao mais raro. */
+const TIER_ORDER = ["bronze", "silver", "gold", "platinum"];
+
 function Gallery({ entries }: { entries: GalleryEntry[] }) {
+  const unlocked = entries.filter((e) => e.unlocked).length;
+
+  /* Agrupada por TIER, e dentro do tier as desbloqueadas primeiro. Uma galeria
+     em ordem de catálogo não responde "o que eu já tenho" nem "o que vem a
+     seguir"; agrupada por raridade, as duas perguntas se leem de relance. */
+  const byTier = useMemo(() => {
+    const groups = new Map<string, GalleryEntry[]>();
+    for (const t of TIER_ORDER) groups.set(t, []);
+    for (const e of entries) {
+      if (!groups.has(e.tier)) groups.set(e.tier, []);
+      groups.get(e.tier)!.push(e);
+    }
+    for (const list of groups.values()) {
+      list.sort((a, b) => Number(b.unlocked) - Number(a.unlocked));
+    }
+    return [...groups.entries()].filter(([, list]) => list.length > 0);
+  }, [entries]);
+
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-      {entries.map((a) => (
-        <AchievementTile key={a.key} entry={a} />
-      ))}
-    </div>
+    <>
+      {/* A fração TEM denominador (o catálogo é fechado), então ela ganha
+          medidor — é o critério do ADR-0088. */}
+      {entries.length > 0 && (
+        <div className="mb-4 flex items-center gap-3">
+          <span className="tabular shrink-0 text-[12px] text-[var(--text-secondary)]">
+            {unlocked} de {entries.length}
+          </span>
+          <SegBar value={unlocked / entries.length} segments={24} height={8} className="flex-1" />
+        </div>
+      )}
+
+      <div className="flex flex-col gap-5">
+        {byTier.map(([tier, list]) => {
+          const feitas = list.filter((e) => e.unlocked).length;
+          return (
+            <section key={tier}>
+              <div className="mb-2 flex items-baseline gap-2">
+                <span
+                  className="size-2 rounded-full"
+                  style={{ background: TIER_COLOR[tier] ?? "var(--accent)" }}
+                  aria-hidden
+                />
+                <MonoLabel>{TIER_LABEL[tier] ?? tier}</MonoLabel>
+                <span className="tabular text-[10.5px] text-[var(--text-tertiary)]">
+                  {feitas}/{list.length}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                {list.map((a) => (
+                  <AchievementTile key={a.key} entry={a} />
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    </>
   );
+}
+
+/** "12 mar 2026" — quando a conquista caiu. */
+function unlockedDay(ms: number): string {
+  return new Date(ms).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function AchievementTile({ entry }: { entry: GalleryEntry }) {
   const color = TIER_COLOR[entry.tier] ?? "var(--accent)";
   return (
     <div
-      className="flex flex-col items-center gap-2 rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 text-center"
-      style={{ opacity: entry.unlocked ? 1 : 0.55 }}
+      className={cx(
+        "flex flex-col gap-1.5 rounded-[var(--radius-lg)] border bg-[var(--bg-surface)] p-3",
+        entry.unlocked ? "border-[var(--border-subtle)]" : "border-dashed border-[var(--border-subtle)]",
+      )}
     >
-      <div
-        className="flex size-12 items-center justify-center rounded-full"
-        style={{
-          background: entry.unlocked
-            ? `color-mix(in oklab, ${color} 18%, transparent)`
-            : "var(--bg-base)",
-          color: entry.unlocked ? color : "var(--text-tertiary)",
-        }}
-      >
-        {entry.unlocked ? (
-          <DynamicIcon name={entry.icon} size={22} />
-        ) : (
-          <Lock size={18} aria-hidden />
-        )}
+      <div className="flex items-center gap-2">
+        {/* A bloqueada mostra o PRÓPRIO ícone em silhueta, não um cadeado. Um
+            cadeado é igual para todas e não diz o que se está perdendo — a
+            galeria existe justamente para responder "o que ainda dá para
+            conquistar" (ADR-0098). */}
+        <span
+          className="grid size-9 shrink-0 place-items-center rounded-full"
+          style={{
+            background: entry.unlocked
+              ? `color-mix(in oklab, ${color} 18%, transparent)`
+              : "var(--bg-base)",
+            color: entry.unlocked ? color : "var(--text-tertiary)",
+            opacity: entry.unlocked ? 1 : 0.55,
+          }}
+        >
+          <DynamicIcon name={entry.icon} size={18} />
+        </span>
+        <h3
+          className={cx(
+            "min-w-0 flex-1 text-[12px] leading-tight font-semibold",
+            entry.unlocked ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)]",
+          )}
+        >
+          {entry.title}
+        </h3>
       </div>
-      <h3 className="text-[12px] font-semibold text-[var(--text-primary)]">{entry.title}</h3>
-      <p className="text-[11px] leading-[15px] text-[var(--text-tertiary)]">
-        {entry.unlocked ? entry.description : "Bloqueada"}
-      </p>
+
+      {/* A descrição é o CRITÉRIO — o que falta fazer. Ela aparece bloqueada ou
+          não: escrever "Bloqueada" no lugar dela troca a única informação útil
+          do card por uma que o próprio desenho já dá. */}
+      <p className="text-[11px] leading-[15px] text-[var(--text-tertiary)]">{entry.description}</p>
+
+      {/* Quando caiu — o dado já vinha do backend e a tela o descartava. */}
+      {entry.unlocked && entry.unlockedAt != null && (
+        <p className="tabular mt-auto text-[10px] text-[var(--text-tertiary)]">
+          {unlockedDay(entry.unlockedAt)}
+        </p>
+      )}
     </div>
   );
 }

@@ -9,13 +9,17 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, LayoutGrid } from "lucide-react";
+import { Activity, ChevronLeft, ChevronRight, LayoutGrid, Trophy } from "lucide-react";
 
 import { yearInPixels, type ScoreCell } from "../../lib/ipc";
 import { PageHeader, PAGE_CONTAINER, Card, EmptyState, cx } from "../../design-system/primitives";
 import { Formula } from "../../design-system/Formula";
+import { StatTile } from "../../design-system/cards";
 
-const CELL = 13;
+/* 15px por célula, não 13: a grade é o assunto DA TELA (não um enfeite de canto
+   de dashboard), e num ano inteiro cada pixel a mais é a diferença entre ver a
+   forma do ano e apertar os olhos. 53 colunas × 18px ainda cabem no container. */
+const CELL = 15;
 const GAP = 3;
 const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
@@ -34,6 +38,19 @@ export function YearPixelsScreen() {
     (b, c) => (b == null || (c.value ?? 0) > (b.value ?? 0) ? c : b),
     null,
   );
+
+  /* O denominador de "dias com nota": num ano PASSADO são todos os dias dele;
+     no ano corrente, só os já decorridos. Dividir por 365 em fevereiro diria
+     que o ano está 12% preenchido quando ele mal começou — uma fração
+     aritmeticamente certa e completamente enganosa. */
+  const elapsedDays = useMemo(() => {
+    const now = new Date();
+    const total = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 366 : 365;
+    if (year < now.getFullYear()) return total;
+    if (year > now.getFullYear()) return 0;
+    const start = new Date(year, 0, 1);
+    return Math.floor((now.getTime() - start.getTime()) / 86_400_000) + 1;
+  }, [year]);
 
   return (
     <div className="nx-page nx-enter flex h-full flex-col overflow-y-auto">
@@ -75,19 +92,40 @@ export function YearPixelsScreen() {
           </Card>
         ) : (
           <Card className="p-5">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-5">
-                <Stat label="Média do ano" value={avg != null ? String(avg) : "—"} />
-                <Stat
-                  label="Melhor dia"
-                  value={best?.value != null ? String(best.value) : "—"}
-                  sub={best ? niceDay(best.day) : undefined}
-                />
-                <Stat label="Dias com nota" value={String(scored.length)} />
-              </div>
+            {/* Os três números viraram `StatTile` — o mesmo instrumento do resto
+                do app. "Dias com nota" ganha MEDIDOR porque tem denominador (os
+                dias já decorridos do ano); os outros dois não têm teto nenhum e
+                ficam só com o número, que é o critério do ADR-0088. */}
+            <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3">
+              <StatTile
+                icon={Activity}
+                label="Média do ano"
+                value={avg != null ? avg : "—"}
+                hint="score médio dos dias com nota"
+              />
+              <StatTile
+                icon={Trophy}
+                label="Melhor dia"
+                value={best?.value != null ? best.value : "—"}
+                hint={best ? niceDay(best.day) : "ainda sem dia pontuado"}
+              />
+              <StatTile
+                icon={LayoutGrid}
+                label="Dias com nota"
+                value={scored.length}
+                unit={`de ${elapsedDays}`}
+                seg={elapsedDays > 0 ? scored.length / elapsedDays : undefined}
+                hint="dias do ano já decorridos"
+              />
+            </div>
+
+            <div className="mb-3 flex justify-end">
               <Legend />
             </div>
-            <div className="overflow-x-auto pb-1">
+
+            {/* `justify-center`: numa janela larga a grade encostava à esquerda e
+                deixava um vazio do tamanho dela à direita. */}
+            <div className="flex justify-center overflow-x-auto pb-1">
               <PixelGrid cells={cells} year={year} />
             </div>
             <Formula>
@@ -98,20 +136,6 @@ export function YearPixelsScreen() {
           </Card>
         )}
       </div>
-    </div>
-  );
-}
-
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div>
-      <div className="flex items-baseline gap-1.5">
-        <span className="font-mono text-[22px] leading-none font-semibold tabular-nums text-[var(--text-primary)]">
-          {value}
-        </span>
-        {sub && <span className="text-[11px] text-[var(--text-tertiary)]">{sub}</span>}
-      </div>
-      <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{label}</p>
     </div>
   );
 }

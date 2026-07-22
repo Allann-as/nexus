@@ -3842,3 +3842,53 @@ número, fotografei, o "+N" apareceu cortado; corrigi a altura, fotografei, aind
 que o problema era estrutural (ele estava dentro do bloco que corta) em vez de continuar raspando
 pixels. **Três fotos, três hipóteses, e a terceira é que era a certa** — nenhuma leitura de código teria
 separado as três.
+
+---
+
+## ADR-0098 — Grupo A da fase 5: o idioma COCKPIT, e três dados que a tela jogava fora
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), fase 5 — Conquistas, Recordes, Metas
+Anuais, Ano em Pixels**
+
+**Contexto.** As quatro telas já tinham a lógica pronta; o trabalho era o idioma e a lente. O achado que
+se repete é o mesmo dos ADRs 0092 e 0094, agora numa terceira forma: **o backend mandava o dado e a
+tela o descartava.**
+
+**A varredura da armadilha de data veio LIMPA.** O plano avisava que Recordes, Ano em Pixels, Timeline,
+Comparativo e Retrospectiva fazem aritmética sobre strings `AAAA-MM-DD`. Varri as cinco: todas já usam
+formas locais — `new Date(y, m-1, d)`, `new Date(\`${dia}T12:00:00\`)` ou clonagem de objeto `Date`. As
+outras ocorrências de `new Date(x)` recebem epoch em ms. **O Calendário era o único lugar com o
+defeito** (ADR-0097). Fica registrado que a varredura foi feita — para a fase 8 não a refazer no escuro.
+
+**Decisão 1 — os medidores viram `SegBar`.** Nível geral, XP por Esfera, "% do ano vs progresso das
+metas" e progresso de meta anual usavam `ProgressBar`. Todos têm denominador de verdade, então todos
+podem ter medidor — e o medidor do COCKPIT é o segmentado. No cabeçalho das Metas Anuais isso é mais que
+estética: as duas barras existem para serem **comparadas** ("estou em 56% do ano com 21% das metas"), e
+o segmento discreto lê a diferença melhor que duas barras contínuas.
+
+**Decisão 2 — a conquista bloqueada mostra o PRÓPRIO ícone, não um cadeado.** Um cadeado é igual para
+todas e não diz o que se está perdendo; a descrição virava a palavra "Bloqueada", trocando o critério
+("100 dias seguidos de um hábito") por uma informação que o desenho já dava. A galeria existe para
+responder *"o que ainda dá para conquistar"* — e não respondia. Agora: ícone em silhueta, critério
+sempre visível, agrupamento por **tier** com a fração de cada um, e a data em que cada uma caiu
+(`unlockedAt`, que vinha do backend e era descartado).
+
+**Decisão 3 — Recordes: `setOn` e `previous` estavam na mão e fora da tela.** O `PersonalRecord` traz
+`setOn` (o dia em que o recorde caiu) e a tela **nunca o usava**; `previous` só aparecia enquanto
+`isNew` fosse verdade. "Por quanto eu superei" continua sendo a pergunta um mês depois — esconder o
+anterior fazia o card mais antigo dizer menos que o mais novo com o mesmo dado disponível. Os dois
+passaram a aparecer sempre que existem, e a formatação do dia usa `fromDay` **por prevenção**, não por
+conserto.
+
+**Decisão 4 — a meta anual BINÁRIA não ganha medidor.** "Correr uma meia-maratona" desenhava uma SegBar
+de 20 segmentos vazia, sem número nenhum ao lado: um instrumento graduado para um dado que só tem dois
+estados. É a mesma mentira do `BarSpark` na distribuição por hora (ADR-0091). O estado dela já está no
+selo do cabeçalho e no botão "Concluir"; no lugar da barra entrou a frase que descreve o tipo dela.
+**Só a quantitativa tem régua, porque só ela tem escala.**
+
+**Decisão 5 — Ano em Pixels: a grade é o assunto, então ela cresce.** A célula passou de 13px para 15px
+e a grade foi centralizada (numa janela larga ela encostava à esquerda e deixava um vazio do tamanho
+dela à direita). Os três números soltos viraram `StatTile` — e só **"dias com nota"** ganhou medidor,
+porque só ele tem denominador. O denominador, aliás, é o número de dias **já decorridos** do ano, não
+365: dividir por 365 em fevereiro diria que o ano está 12% preenchido quando ele mal começou — uma
+fração aritmeticamente certa e completamente enganosa.

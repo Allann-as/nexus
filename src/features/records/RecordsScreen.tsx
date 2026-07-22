@@ -13,6 +13,7 @@ import { Trophy, Flame, BookOpen, TrendingUp, Sparkles, Timer, type LucideIcon }
 import { personalRecords, type PersonalRecord, type RecordFormat } from "../../lib/ipc";
 import { PageHeader, PAGE_CONTAINER, Card, EmptyState, cx } from "../../design-system/primitives";
 import { formatMoneyShort } from "../../lib/format";
+import { fromDay } from "../calendar/grid";
 
 const ICONS: Record<string, LucideIcon> = {
   habit_streak: Flame,
@@ -88,15 +89,42 @@ function RecordCard({ record }: { record: PersonalRecord }) {
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--text-tertiary)]">
         {record.context && <span>{record.context}</span>}
-        {record.isNew && record.previous != null && (
-          <span className="inline-flex items-center gap-1 text-[var(--success)]">
+        {/* O recorde ANTERIOR aparece sempre que existe, não só quando o atual
+            acabou de cair: "por quanto eu superei" continua sendo a pergunta um
+            mês depois, e escondê-la fazia o card mais antigo dizer menos que o
+            mais novo com o mesmo dado na mão (ADR-0098). */}
+        {record.previous != null && (
+          <span
+            className={cx(
+              "inline-flex items-center gap-1",
+              record.isNew && "text-[var(--success)]",
+            )}
+          >
             <TrendingUp size={11} />
             superou {formatValue(record.previous, record.format)}
           </span>
         )}
+        {/* QUANDO caiu. O backend já mandava `setOn` e a tela o descartava. */}
+        {record.setOn && <span className="tabular">em {recordDay(record.setOn)}</span>}
       </div>
     </Card>
   );
+}
+
+/**
+ * "12 mar 2026" — o dia em que o recorde caiu.
+ *
+ * `fromDay` e NUNCA `new Date(setOn)`: `setOn` é uma string 'AAAA-MM-DD', e o
+ * ECMAScript a parseia como meia-noite UTC — em UTC-3 o recorde apareceria um
+ * dia antes do que foi. É a armadilha do ADR-0097, aqui prevenida em vez de
+ * consertada depois.
+ */
+function recordDay(day: string): string {
+  return fromDay(day).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function formatValue(value: number, format: RecordFormat): string {
