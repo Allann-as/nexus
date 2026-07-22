@@ -3435,3 +3435,37 @@ um lado começa a contar diferente do outro sem ninguém perceber.
 Habilidades e Marcos. Nenhuma migration foi escrita na Esfera inteira — as três tabelas de que ela
 precisava (`skill_details`, `skill_checkins`, e o `tasks`/`project` genérico) já existiam, e o link
 projeto→meta reusou o `contributes_to` do M4.6.
+
+---
+
+## ADR-0090 — "Sem espaços vazios" se paga com DADO, e a diferença entre resumo e enchimento
+
+**Data:** 2026-07-21 · **Status:** aceito · **v1.3 (COCKPIT), fase 4 — Carreira, Painel (fecho)**
+
+**Contexto.** Depois que a linha do tempo saiu para a aba Marcos (ADR-0089), o Painel da Carreira ficou
+curto com pouco dado. A regra de design diz "sem espaços vazios"; a lição 1 diz "nenhum elemento
+decorativo". As duas se encontram exatamente aqui, e a tentação é resolver com um gráfico bonito.
+
+**Decisão — o vazio vira os PROJETOS ATIVOS (nome + barra de progresso).** O teste que separa resumo de
+enchimento não é estético, é este: **a seção responde uma pergunta que a pessoa realmente faz?** "O que
+estou tocando agora e quanto falta" é uma pergunta central de um painel de carreira, e ela não estava
+respondida em lugar nenhum do Painel — só dentro da aba Projetos, um clique adiante.
+
+É a mesma divisão que os Marcos ganharam: **resumo no painel, trabalho na aba.** Aqui é nome + barra;
+lá é a checklist, a evolução diária e a meta ligada. A mesma lista não se desenha duas vezes, e nenhuma
+das duas telas existe só para ocupar altura.
+
+Compare com o medidor reprovado do ADR-0088 (a fração "marcos no ano / total de marcos"): aquele também
+era dado real, também era aritmeticamente verdadeiro, e mesmo assim saiu — porque ninguém faz aquela
+pergunta. **Dado real é condição necessária e não suficiente; a pergunta é que decide.**
+
+**A regra do 0 de 0 vale igual.** Projeto sem tarefa não ganha barra (0 de 0 não é 0%, é "ainda não há
+o que medir" — ADR-0087), mas **aparece na lista** escrito "sem tarefas": existir e não estar decomposto
+é uma informação, e escondê-lo faria o painel mentir por omissão sobre quantos projetos estão abertos.
+E enquanto o carregamento não termina a seção não desenha nada: um "nenhum projeto ativo" piscando é
+uma afirmação falsa sobre a vida de quem tem projetos.
+
+**Nota de método, aprendida no próprio commit.** O gate de baseline desta sessão falhou no `tsc` — e a
+causa era eu: editei o arquivo ENQUANTO o gate rodava, com o componente novo já referenciado e ainda
+não escrito. Um gate que roda sobre uma árvore em movimento não mede nada. Rodar o gate é o último
+passo antes do commit, nunca em paralelo com a edição.

@@ -28,13 +28,20 @@
  */
 
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Award, Briefcase, Plus, Target, TrendingUp } from "lucide-react";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Award, Briefcase, FolderKanban, Plus, Target, TrendingUp } from "lucide-react";
 
 import { StatTile } from "../../design-system/cards";
 import { MonoLabel, StatusList, type StatusRow } from "../../design-system/instruments";
 import { Button, EmptyState } from "../../design-system/primitives";
-import { listGoals, listSkills, careerMilestones, skillsEvolving } from "../../lib/ipc";
+import {
+  careerMilestones,
+  listGoals,
+  listNodes,
+  listSkills,
+  projectProgress,
+  skillsEvolving,
+} from "../../lib/ipc";
 import { RecordMilestoneModal } from "./RecordMilestoneModal";
 import { daysBetween, humanize, isoDay, parseMilestone, todayLocal } from "./careerTime";
 
@@ -186,7 +193,89 @@ export function CareerDashboard({ areaId }: { areaId: string }) {
         </section>
       )}
 
+      {/* ===== Os projetos ativos, com o quanto cada um andou ===== */}
+      <ProjetosAtivos areaId={areaId} />
+
       {recording && <RecordMilestoneModal onClose={() => setRecording(false)} onSaved={refresh} />}
     </div>
+  );
+}
+
+/**
+ * Os projetos ativos da Esfera, com o quanto cada um andou.
+ *
+ * Por que isto é DADO e não enchimento: "o que estou tocando agora e quanto
+ * falta" é uma pergunta que um painel de carreira tem que responder, e ela não
+ * estava respondida em lugar nenhum do Painel — só dentro da aba Projetos, um
+ * clique adiante. Aqui é o RESUMO (nome + barra); lá é o trabalho (checklist,
+ * evolução, meta ligada). A mesma divisão de "resumo no painel, história na aba"
+ * que os Marcos ganharam no ADR-0089.
+ *
+ * A barra é a CONTAGEM de tarefas, com a mesma regra do cartão: projeto sem
+ * tarefa não ganha barra, porque 0 de 0 não é 0% — é "ainda não há o que medir"
+ * (ADR-0087). Ele aparece na lista assim mesmo, escrito "sem tarefas": existir e
+ * não estar decomposto É uma informação, e escondê-lo faria o painel mentir por
+ * omissão sobre quantos projetos estão abertos.
+ */
+function ProjetosAtivos({ areaId }: { areaId: string }) {
+  const projetos = useQuery({
+    queryKey: ["nodes", "project", areaId],
+    queryFn: () => listNodes({ kind: "project", areaId, status: "active", limit: 50 }),
+  });
+  const items = projetos.data ?? [];
+
+  // Uma consulta de progresso por projeto. `useQueries` porque o `StatusList`
+  // recebe uma lista PRONTA — não há como cada linha buscar a sua.
+  const progressos = useQueries({
+    queries: items.map((p) => ({
+      queryKey: ["project-progress", p.id],
+      queryFn: () => projectProgress(p.id),
+    })),
+  });
+
+  // Enquanto não se sabe, não se diz: um "nenhum projeto ativo" piscando durante
+  // o carregamento é uma afirmação falsa sobre a vida de quem tem projetos.
+  if (projetos.isLoading) return null;
+
+  if (items.length === 0) {
+    return (
+      <section>
+        <MonoLabel className="mb-2 block">Projetos</MonoLabel>
+        <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-5 text-center">
+          <p className="text-[12.5px] leading-[18px] text-[var(--text-tertiary)]">
+            Nenhum projeto ativo. Uma migração, um lançamento, uma iniciativa que você lidera — eles
+            moram na aba Projetos.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  const rows: StatusRow[] = items.map((p, i) => {
+    const prog = progressos[i]?.data;
+    const total = prog?.total ?? 0;
+    const done = prog?.done ?? 0;
+    return {
+      id: p.id,
+      icon: FolderKanban,
+      label: p.title,
+      value: total > 0 ? `${done}/${total}` : "sem tarefas",
+      tone: total > 0 ? ("sphere" as const) : ("muted" as const),
+      progress: total > 0 ? done / total : undefined,
+    };
+  });
+
+  return (
+    <section>
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <MonoLabel>Projetos</MonoLabel>
+        <span className="tabular text-[11px] text-[var(--text-tertiary)]">
+          {items.length} {items.length === 1 ? "ativo" : "ativos"}
+        </span>
+      </div>
+      <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-1">
+        <StatusList rows={rows} />
+      </div>
+    </section>
   );
 }
