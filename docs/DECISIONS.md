@@ -4046,3 +4046,47 @@ quanto "520 hábitos contra 0". É a leitura correta *dentro* da linha (um é tu
 números estão ao lado, mas o olho compara entre linhas. Normalizar entre linhas é impossível — não há
 régua comum entre minutos, reais e contagens — e a alternativa seria não ter barra nenhuma, que é
 justamente o que escondia o tamanho. Fica declarado no "ⓘ" em vez de disfarçado.
+
+---
+
+## ADR-0102 — Retrospectiva: meio ano chamado de ano, num arquivo que dura para sempre
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), fase 5 — grupo B, Retrospectiva**
+
+**Contexto.** A retrospectiva monta o quadro do ano e exporta um Markdown com retenção de 2 anos
+(ADR-0064). O serviço sempre esteve certo: para o ano corrente ele corta o intervalo em
+`min(31/12, hoje)`. Quem não dizia isso era a saída.
+
+**O defeito — o recorte estava na conta e não no texto.** A tela anunciava "Retrospectiva 2026" com
+"Estudo", "Aportes", "Tarefas" do jeito que se anuncia um ano fechado; em 22 de julho aqueles números
+eram de meio ano. O arquivo exportado repetia: `# NEXUS — Retrospectiva 2026`, `## Números do ano`.
+**No arquivo é pior**, porque ele é permanente e regenerável só enquanto o app existir: lido daqui a
+três anos, "Retrospectiva 2026" com os totais de julho é um retrato do ano que não é o ano, e nada no
+documento permite desconfiar. O serviço passou a devolver `through` — o último dia coberto — em vez de
+deixar cada consumidor adivinhar. A tela mostra "ano em andamento · os números vão de 1º de janeiro
+até 22 de julho"; o arquivo ganha uma linha de citação no topo e o título da seção vira "Números do
+ano **até aqui**". **Quem fez o recorte é quem tem que declará-lo** — comparar `year` com o ano atual
+na tela seria reimplementar a regra do serviço num lugar onde ela pode divergir.
+
+**Decisão — a simetria cobrou "hábitos cumpridos" aqui também.** A métrica que entrou no Comparativo
+(ADR-0101) já estava disponível em `RawPeriodStats`, que a retrospectiva também consome, e a
+retrospectiva a ignorava. Entrou na tela, no arquivo e na conta de "ano vazio": sem ela, um ano em que
+a pessoa **só** marcou hábitos era rotulado "Pouca coisa em 2026" — um template de vazio mentindo
+sobre um ano de 520 marcações.
+
+**Decisão — volumes são tiles, marcos são contagens.** Com "Semanas perfeitas" entre os `StatTile`, a
+grade de sete ficava com uma última linha de um tile e dois buracos. A correção não foi mexer no
+número de colunas: os seis tiles medem **volume** (quanto tempo, quanto dinheiro, quantas marcações,
+que nota média) e "semanas perfeitas" é um **marco do ano**, como conquistas, recordes e livros — foi
+para o cartão "Conquistas do ano", que passou a ter seis contagens em duas linhas exatas. As duas
+grades ficaram retangulares por consequência da divisão certa, não por ajuste de pixel.
+
+**Medidor só onde há escala, pela terceira vez.** Entre os seis tiles, só "Score médio" ganhou barra:
+0–100 é escala de verdade. Estudo, foco, aportes, tarefas e hábitos não têm teto. "Semanas perfeitas"
+poderia usar 52 como denominador e seria a armadilha do ADR-0098 outra vez — em julho, dividir por 52
+descreveria um ano que ainda não aconteceu.
+
+**Verificação.** A dirigida conferiu os dois lados: a tela e o **arquivo gerado**, número por número
+(R$ 7 mil, 2 tarefas, 520 hábitos, score 61 com pico 75, 6 semanas perfeitas, 4 conquistas, 2 livros).
+As seis semanas perfeitas batem com a tela de Semana Perfeita — a simetria que o método pede,
+confirmada em vez de assumida.

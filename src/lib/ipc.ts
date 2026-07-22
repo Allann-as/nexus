@@ -520,10 +520,14 @@ export interface RetroHighlight {
 
 export interface Retrospective {
   year: number;
+  /** O último dia coberto: 31/12 num ano fechado, hoje no ano corrente. */
+  through: string;
   studyMinutes: number;
   focusMinutes: number;
   contributionCents: number;
   tasksCompleted: number;
+  /** Marcações de hábito com `done` no período coberto. */
+  habitsDone: number;
   scoreAvg: number | null;
   scoreBest: number | null;
   perfectWeeks: number;

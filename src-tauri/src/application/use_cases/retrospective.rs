@@ -36,10 +36,15 @@ pub struct RetrospectiveService {
 #[serde(rename_all = "camelCase")]
 pub struct Retrospective {
     pub year: i64,
+    /// O ÚLTIMO dia coberto. Num ano fechado é 31/12; no ano corrente é hoje —
+    /// e sem isso tanto a tela quanto o arquivo exportado chamam de "o ano" um
+    /// total que para em julho.
+    pub through: String,
     pub study_minutes: i64,
     pub focus_minutes: i64,
     pub contribution_cents: i64,
     pub tasks_completed: i64,
+    pub habits_done: i64,
     pub score_avg: Option<f64>,
     pub score_best: Option<u8>,
     pub perfect_weeks: u32,
@@ -81,10 +86,12 @@ impl RetrospectiveService {
 
         Ok(Retrospective {
             year,
+            through: to_s.clone(),
             study_minutes: raw.study_minutes,
             focus_minutes: raw.focus_minutes,
             contribution_cents: raw.contribution_cents,
             tasks_completed: raw.tasks_completed,
+            habits_done: raw.habits_done,
             score_avg,
             score_best,
             perfect_weeks,
@@ -159,6 +166,16 @@ impl RetrospectiveService {
     }
 }
 
+/// `'AAAA-MM-DD'` → `'DD/MM/AAAA'`, para o texto do arquivo.
+fn br_day(day: &str) -> String {
+    let p: Vec<&str> = day.split('-').collect();
+    if p.len() == 3 {
+        format!("{}/{}/{}", p[2], p[1], p[0])
+    } else {
+        day.to_string()
+    }
+}
+
 /// Extrai o ano de "retrospectiva-YYYY.md".
 fn year_of(name: &str) -> Option<i64> {
     name.strip_prefix("retrospectiva-")?
@@ -172,11 +189,26 @@ fn render_markdown(r: &Retrospective) -> String {
     let money = |cents: i64| format!("R$ {:.2}", cents as f64 / 100.0);
     let mut s = String::new();
     s.push_str(&format!("# NEXUS — Retrospectiva {}\n\n", r.year));
-    s.push_str("## Números do ano\n\n");
+    // O arquivo é permanente: se ele foi gerado em julho, tem que dizer isso na
+    // primeira linha. "Retrospectiva 2026" com os números até julho, lida daqui a
+    // três anos, é um retrato do ano que não é o ano.
+    let closed = r.through == format!("{}-12-31", r.year);
+    if !closed {
+        s.push_str(&format!(
+            "> Ano em andamento: os números vão de 1º de janeiro até {}.\n\n",
+            br_day(&r.through)
+        ));
+    }
+    s.push_str(if closed {
+        "## Números do ano\n\n"
+    } else {
+        "## Números do ano até aqui\n\n"
+    });
     s.push_str(&format!("- Estudo: {}\n", hours(r.study_minutes)));
     s.push_str(&format!("- Foco: {}\n", hours(r.focus_minutes)));
     s.push_str(&format!("- Aportes: {}\n", money(r.contribution_cents)));
     s.push_str(&format!("- Tarefas concluídas: {}\n", r.tasks_completed));
+    s.push_str(&format!("- Hábitos cumpridos: {}\n", r.habits_done));
     if let Some(avg) = r.score_avg {
         s.push_str(&format!(
             "- Nexus Score médio: {} (melhor: {})\n",
