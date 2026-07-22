@@ -65,6 +65,14 @@ pub struct GamificationOverview {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PointRow {
+    /// A chave ESTÁVEL do feito, para quem precisa de um valor específico.
+    ///
+    /// Sem ela, uma tela que queira dizer "+10 XP" ao concluir um bloco de foco
+    /// só tem duas saídas: procurar pela frase em português (que muda) ou
+    /// escrever o 10 à mão (que era o que o `FocusHost` fazia — um número do
+    /// domínio copiado para dentro de um toast, livre para virar mentira no dia
+    /// em que `XP_FOCUS_SESSION` mudasse). A chave é a terceira saída.
+    pub key: &'static str,
     pub label: &'static str,
     pub points: i64,
 }
@@ -114,46 +122,57 @@ impl GamificationService {
         XpReference {
             points: vec![
                 PointRow {
+                    key: "habit_done",
                     label: "Hábito cumprido no dia",
                     points: p.habit_done,
                 },
                 PointRow {
+                    key: "study_session",
                     label: "Sessão de estudo registrada",
                     points: p.study_session,
                 },
                 PointRow {
+                    key: "focus_session",
                     label: "Bloco de foco concluído",
                     points: p.focus_session,
                 },
                 PointRow {
+                    key: "task_done",
                     label: "Tarefa planejada concluída",
                     points: p.task_done,
                 },
                 PointRow {
+                    key: "goal_checkpoint",
                     label: "Checkpoint de meta",
                     points: p.goal_checkpoint,
                 },
                 PointRow {
+                    key: "milestone_done",
                     label: "Sub-desafio de meta concluído",
                     points: p.milestone_done,
                 },
                 PointRow {
+                    key: "skill_level_up",
                     label: "Subir de nível numa competência",
                     points: p.skill_level_up,
                 },
                 PointRow {
+                    key: "book_finished",
                     label: "Livro terminado",
                     points: p.book_finished,
                 },
                 PointRow {
+                    key: "fin_goal_done",
                     label: "Objetivo financeiro fechado",
                     points: p.fin_goal_done,
                 },
                 PointRow {
+                    key: "challenge_done",
                     label: "Temporada vencida",
                     points: p.challenge_done,
                 },
                 PointRow {
+                    key: "annual_goal_done",
                     label: "Meta anual concluída",
                     points: p.annual_goal_done,
                 },

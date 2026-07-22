@@ -8,7 +8,9 @@
 //!
 //! As **estatísticas** seguem o padrão dos insights (constituição §2): números
 //! determinísticos, cada um com a fórmula à mostra e o tamanho da amostra. Sem
-//! dado, o campo volta `None` e a UI omite — nunca um zero inventado.
+//! dado, o campo volta vazio e a UI omite — nunca um zero inventado. E onde a
+//! resposta pode EMPATAR, o campo é uma lista: eleger um vencedor pela ordem da
+//! varredura seria inventar um desempate que o dado não tem (ADR-0105).
 
 use std::sync::Arc;
 
@@ -24,6 +26,30 @@ use crate::domain::schedule::{format_day, parse_day};
 
 /// Quantos blocos recentes o painel de foco mostra.
 const RECENT_LIMIT: i64 = 8;
+
+/// As horas do dia no TOPO, e quantos minutos elas somam.
+///
+/// Pura, e separada do serviço, para o empate ter teste próprio. A versão
+/// anterior era um `max_by_key`, que devolve o ÚLTIMO máximo quando há empate —
+/// e a tela apresentava esse desempate por ordem de varredura como se fosse a
+/// resposta: *"melhor hora de foco: 17h"* com 9h tendo exatamente os mesmos
+/// minutos. Os blocos são de 15/25/50 min, então empate não é hipótese remota:
+/// duas horas com um bloco de 50 cada já empatam.
+///
+/// Devolve `(vazio, 0)` sem dado — nunca uma hora inventada. Ver ADR-0105.
+fn top_hours(by_hour: &[(i64, i64)]) -> (Vec<i64>, i64) {
+    let max = by_hour.iter().map(|(_, m)| *m).max().unwrap_or(0);
+    if max <= 0 {
+        return (Vec::new(), 0);
+    }
+    let mut hours: Vec<i64> = by_hour
+        .iter()
+        .filter(|(_, m)| *m == max)
+        .map(|(h, _)| *h)
+        .collect();
+    hours.sort_unstable();
+    (hours, max)
+}
 
 pub struct FocusService {
     pub sessions: Arc<dyn FocusSessionRepository>,
@@ -50,8 +76,13 @@ pub struct FocusStats {
     pub minutes_prev_7: i64,
     /// Dias DISTINTOS com bloco nos últimos 30 — a constância.
     pub active_days_30: i64,
-    /// A hora do dia com mais minutos de foco acumulados, ou `None` sem dado.
-    pub best_hour: Option<i64>,
+    /// As horas do dia com mais minutos de foco acumulados.
+    ///
+    /// Uma lista, e não um `Option<i64>`, porque um EMPATE não é uma resposta:
+    /// vazia = sem dado; um elemento = a melhor hora; vários = as horas que
+    /// empatam no topo, e a UI diz que empatam em vez de eleger uma delas por
+    /// ordem de varredura. Ver ADR-0105.
+    pub best_hours: Vec<i64>,
     pub best_hour_minutes: i64,
     /// A distribuição por hora (só as horas com minutos) — para o gráfico.
     pub by_hour: Vec<FocusHourBucket>,
@@ -71,6 +102,29 @@ impl FocusService {
         label: Option<String>,
         minutes: i64,
         day: Option<String>,
+    ) -> Result<FocusSession> {
+        self.log_session_at(task_id, label, minutes, day, None)
+    }
+
+    /// O mesmo, com o INSTANTE explícito — a hora do dia em que o bloco aconteceu.
+    ///
+    /// Existe para o **seed**, e só para ele: `focus_stats` responde "quando você
+    /// foca" somando `ts` por hora, e um seed que registrasse tudo pelo relógio
+    /// da máquina empilharia meses de foco na hora em que o seed rodou. O
+    /// gráfico de 24 barras viraria uma barra só — uma tela cuja tese inteira é
+    /// a distribuição, provada com uma distribuição falsa.
+    ///
+    /// **Não é exposto como command, de propósito.** A UI nunca deve poder
+    /// escolher o instante de um bloco: o pomodoro vale XP e só conta quando o
+    /// tempo passa de verdade (ADR-0052), e um instante à escolha do cliente é
+    /// exatamente o caminho do farm que o "só o bloco completo conta" fecha.
+    pub fn log_session_at(
+        &self,
+        task_id: Option<String>,
+        label: Option<String>,
+        minutes: i64,
+        day: Option<String>,
+        at: Option<i64>,
     ) -> Result<FocusSession> {
         if minutes <= 0 {
             return Err(NexusError::Validation(
@@ -107,7 +161,7 @@ impl FocusService {
         let title_snapshot = format!("Focou {minutes} min · {what}");
 
         let id = self.ids.new_id();
-        let now = self.clock.now_ms();
+        let now = at.unwrap_or_else(|| self.clock.now_ms());
         let event = NewLedgerEvent {
             ts: now,
             day: day.clone(),
@@ -157,11 +211,7 @@ impl FocusService {
             .active_days_since(a, &format_day(today - chrono::Duration::days(29)))?;
 
         let by_hour_raw = self.sessions.minutes_by_hour(a)?;
-        let (best_hour, best_hour_minutes) = by_hour_raw
-            .iter()
-            .max_by_key(|(_, m)| *m)
-            .map(|(h, m)| (Some(*h), *m))
-            .unwrap_or((None, 0));
+        let (best_hours, best_hour_minutes) = top_hours(&by_hour_raw);
         let by_hour = by_hour_raw
             .into_iter()
             .map(|(hour, minutes)| FocusHourBucket { hour, minutes })
@@ -173,15 +223,55 @@ impl FocusService {
             minutes_last_7,
             minutes_prev_7,
             active_days_30,
-            best_hour,
+            best_hours,
             best_hour_minutes,
             by_hour,
             total_minutes,
             total_sessions,
             formula: "Minutos na semana = soma dos minutos dos blocos dos últimos 7 dias. \
                       Constância = dias distintos com ao menos um bloco nos últimos 30. \
-                      Melhores horas de foco = a hora do dia (local) com mais minutos somados."
+                      Melhor hora de foco = a hora do dia (local) com mais minutos somados; \
+                      se mais de uma hora empata no topo, todas são mostradas — um empate \
+                      não é uma resposta."
                 .to_string(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::top_hours;
+
+    #[test]
+    fn a_clear_winner_is_a_single_hour() {
+        let (hours, minutes) = top_hours(&[(9, 120), (14, 50), (20, 25)]);
+        assert_eq!(hours, vec![9]);
+        assert_eq!(minutes, 120);
+    }
+
+    #[test]
+    fn a_tie_returns_every_hour_at_the_top() {
+        // Dois blocos de 50 min em horas diferentes empatam — e o `max_by_key`
+        // anterior elegeria só o ÚLTIMO, calado.
+        let (hours, minutes) = top_hours(&[(9, 50), (14, 25), (17, 50)]);
+        assert_eq!(hours, vec![9, 17], "as duas, não a de maior índice");
+        assert_eq!(minutes, 50);
+    }
+
+    #[test]
+    fn the_hours_come_ordered_by_the_clock() {
+        let (hours, _) = top_hours(&[(20, 30), (7, 30), (13, 30)]);
+        assert_eq!(
+            hours,
+            vec![7, 13, 20],
+            "a leitura é do dia, não da varredura"
+        );
+    }
+
+    #[test]
+    fn without_data_no_hour_is_invented() {
+        assert_eq!(top_hours(&[]), (Vec::new(), 0));
+        // Uma hora com zero minuto não chega a ser um pico.
+        assert_eq!(top_hours(&[(9, 0), (10, 0)]), (Vec::new(), 0));
     }
 }

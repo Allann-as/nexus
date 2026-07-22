@@ -4276,3 +4276,77 @@ Semana Perfeita; a Timeline seria a terceira cópia. Foram para `design-system/t
 razão do `ArmedDelete` (v1.2) e do `domain::ordering` (M3): três cópias divergem no dia em que só uma
 for corrigida. São hex crus por serem METAIS, não tokens de tema: bronze é bronze no claro e no
 escuro, e derivá-lo de `--warning` faria o dourado mudar junto com o âmbar de alerta.
+
+---
+
+## ADR-0105 — Modo Foco: uma tela que o seed nunca mostrou, e um empate apresentado como resposta
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), fase 5 — grupo C, Modo Foco**
+
+**Contexto.** O plano pedia "o timer vira ambiente — anel grande com marcações, fundo afunda e a
+geometria N envolve, stats ao vivo, fullscreen". Isso já existia: o **v1.1 C8** fez exatamente esse
+trabalho (commit `e864021`), e os comentários do `FocusHost` ainda citam "(C8)". O que faltava era
+outra coisa — e a primeira pergunta do método a encontrou antes de qualquer pixel.
+
+**Defeito 1 — o seed nunca registrou um bloco de foco.** `focus_sessions` tinha **zero linhas** no
+banco de dirigida. A tela de Foco existe desde o M5 e só foi vista no estado VAZIO: as três
+estatísticas (semana com tendência, constância de 30 dias, melhor hora), o gráfico de 24 horas e a
+lista de blocos recentes nunca tiveram dado na frente de ninguém. É a *regra do seed* do plano em
+estado puro — um estado não-semeado é invisível e se disfarça de "o usuário não chegou lá". O seed
+passou a escrever 44 blocos em 60 dias.
+
+**A HORA importa mais que a data, e por isso o seed precisou de uma porta nova.** `focus_stats`
+responde "quando você foca" somando o `ts` por hora do dia. Um seed que registrasse tudo pelo relógio
+da máquina empilharia 44 blocos na hora em que o seed rodou: o gráfico de 24 barras viraria **uma**
+barra, e a tela cuja tese inteira é a distribuição a provaria com uma distribuição falsa. Entrou
+`FocusService::log_session_at`, com o instante explícito — e **de propósito fora dos commands**: a UI
+nunca deve escolher o instante de um bloco, porque o pomodoro vale XP e a garantia de que "o tempo
+passou de verdade" é justamente o que fecha o caminho do farm (ADR-0052). Uma porta que só o seed
+atravessa é uma porta do seed, não da aplicação.
+
+O seed também semeia os blocos de **hoje** (só nas horas já passadas — um bloco às 17h quando são 13h
+seria um fato que não aconteceu), porque a telemetria ao vivo do timer conta "blocos hoje" e o XP que
+eles renderam: sem nenhum bloco hoje, metade daquele painel nasce zerada e nunca é vista.
+
+**Defeito 2 — a "melhor hora de foco" era um desempate por ordem de varredura.** O serviço usava
+`max_by_key`, que devolve o **último** máximo quando há empate. A tela então anunciava *"melhor hora:
+17h · 50 min acumulados nesta hora"* com 9h tendo exatamente os mesmos 50 minutos — uma das duas
+eleita pela posição no vetor, e a outra apagada. Não é hipótese remota: os blocos são de 15/25/50
+min, então dois blocos de 50 min em horas diferentes já empatam. `best_hour: Option<i64>` virou
+`best_hours: Vec<i64>` — vazio é "sem dado", um elemento é uma resposta, vários são um empate, e o
+card diz qual dos três tem em mãos ("Melhores horas · 9h · 17h · empatadas em 50 min cada"). O
+gráfico acende **todas** as horas do topo, pela mesma razão. A escolha virou `top_hours`, função pura
+com quatro testes — o empate agora tem um teste com o nome dele.
+
+**Defeito 3 — o toast dizia "+10 XP" com o 10 escrito à mão.** O valor é `domain::xp::XP_FOCUS_SESSION`,
+e o `FocusHost` tinha uma cópia dele dentro de uma string. A tabela de pontos já era exposta inteira
+por `xp_reference` (Configurações a mostra); faltava poder pedir **um** valor sem procurar pela frase
+em português. `PointRow` ganhou uma `key` estável, e `pointsFor(ref, 'focus_session')` responde. Sem
+resposta, a frase **omite** o XP em vez de chutar.
+
+**O mesmo defeito na tela de Conquistas, e pior.** O `Formula` do card de nível escrevia a tabela em
+prosa — "hábito cumprido 10 · tarefa concluída 15 · …" — e além de ser uma cópia livre para
+desatualizar, já estava **incompleta**: faltavam sessão de estudo, bloco de foco e subir de nível
+numa competência, três dos onze feitos que dão XP. Uma tela de "como calculamos" que omite um terço
+do cálculo não é transparência. A frase passou a ser montada da tabela do backend.
+
+**O resto foi o idioma COCKPIT e uma cópia a menos.** O painel do timer era o único `GlassPanel` da
+tela — um `backdrop-filter` num momento em que o fundo já afundou de propósito e não há o que
+desfocar; virou `Terminal`. Os `StatCard` viraram `Terminal`, e a constância ganhou medidor porque
+**tem** denominador (30 dias), enquanto os minutos da semana e a melhor hora não ganharam, porque não
+têm (ADR-0088). O gráfico de horas ganhou trilho por hora — sem ele, uma hora de 5 min vira um risco
+indistinguível de uma hora sem foco — e a escala compartilhada passou a vir escrita ("coluna cheia =
+14 h 10 min"). A lista de recentes mostra a **hora** de cada bloco, que sempre veio no `ts` e a tela
+descartava: numa tela cuja tese é "quando você foca", ela é o que liga a lista ao gráfico. E o gesto
+armado de exclusão, que a v1.2 extraiu para `ArmedDelete` justamente para não haver cópias, tinha
+aqui a sexta cópia — sem desarme por tempo, por Esc nem por clique fora.
+
+**Duas dívidas ficam registradas para a Fase 8, com endereço.**
+
+  1. **`study_sessions` também tem zero linhas no seed.** É o mesmo defeito 1, na Esfera Estudos: o
+     `StudyStatsPanel` e o "ritmo" do Painel de Estudos provavelmente nunca foram vistos com dado.
+     Não foi corrigido aqui porque semear sessões de estudo muda telas da Fase 4 que esta sessão não
+     ia redirigir — e semear sem dirigir é criar defeito não visto, que é metade do problema original.
+  2. **`StudyStats::best_hour` tem o empate do defeito 2, intacto** (`src/features/studies/StudyStatsPanel.tsx`
+     e o `max_by_key` correspondente no serviço de estudos). O código do Foco foi copiado de lá; a
+     correção precisa voltar. As duas coisas se resolvem juntas, e depois da (1) dá para provar.

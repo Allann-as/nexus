@@ -16,6 +16,7 @@ import {
   listChallenges,
   syncAchievements,
   syncChallenges,
+  xpReference,
   type Area,
   type GalleryEntry,
   type Level,
@@ -103,6 +104,23 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 function OverallCard({ level }: { level: Level }) {
+  /* A tabela de pontos vem do BACKEND, que a monta dos mesmos `const` de
+     `domain::xp` que somam o XP. A frase abaixo era escrita à mão — "hábito
+     cumprido 10 · tarefa concluída 15 · ..." — e tinha os dois defeitos que uma
+     cópia sempre acaba tendo: ficaria desatualizada em silêncio se um valor
+     mudasse, e já estava INCOMPLETA (faltavam sessão de estudo, bloco de foco e
+     subir de nível numa competência — três dos onze feitos que dão XP). Uma
+     tela de "como calculamos" que omite um terço do cálculo não é transparência.
+     Ver ADR-0105. */
+  const ref = useQuery({
+    queryKey: ["xp-reference"],
+    queryFn: xpReference,
+    staleTime: Infinity,
+  });
+  const table = ref.data?.points
+    .map((p) => `${p.label.toLowerCase()} ${p.points}`)
+    .join(" · ");
+
   return (
     <Card className="p-6">
       <div className="flex items-end justify-between gap-6">
@@ -134,10 +152,9 @@ function OverallCard({ level }: { level: Level }) {
         className="mt-4"
       />
       <Formula>
-        XP soma o que você fez: hábito cumprido 10 · tarefa concluída 15 · checkpoint de meta 20 ·
-        sub-desafio 25 · livro terminado 60 · caixinha fechada 80 · temporada vencida 120 · meta
-        anual concluída 200. Cada nível n custa 100·n^1,5 XP (a curva sobe: os primeiros vêm rápido,
-        os altos viram conquista de longo prazo). Tudo derivado do estado — recomputável, nunca gravado.
+        {table ? `XP soma o que você fez: ${table}. ` : "XP soma o que você fez. "}
+        Cada nível n custa 100·n^1,5 XP (a curva sobe: os primeiros vêm rápido, os altos viram
+        conquista de longo prazo). Tudo derivado do estado — recomputável, nunca gravado.
       </Formula>
     </Card>
   );

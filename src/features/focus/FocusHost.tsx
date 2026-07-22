@@ -11,15 +11,15 @@
  * re-render). Abandonar não grava nada — a semântica do pomodoro (ADR-0052).
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Maximize2, Minimize2, Minus, Pause, Play, Target, Timer, X } from "lucide-react";
 
-import { GlassPanel } from "../../design-system/cards";
+import { MonoLabel, Terminal } from "../../design-system/instruments";
 import { Button, cx } from "../../design-system/primitives";
 import { useToasts } from "../../stores/toasts";
 import { useFocus, FOCUS_PRESETS } from "../../stores/focus";
-import { logFocusSession, recentFocusSessions } from "../../lib/ipc";
+import { logFocusSession, pointsFor, recentFocusSessions, xpReference } from "../../lib/ipc";
 import { toDay } from "../calendar/grid";
 
 function mmss(totalSec: number): string {
@@ -63,6 +63,19 @@ export function FocusHost() {
   const blocksToday = todaySessions.length;
   const minutesToday = todaySessions.reduce((a, s) => a + s.minutes, 0);
 
+  /* Quanto vale um bloco, segundo o DOMÍNIO. O toast dizia "+10 XP" com o 10
+     escrito à mão — o mesmo número que `domain::xp::XP_FOCUS_SESSION` define, e
+     livre para virar mentira no dia em que ele mudar. A tabela de pontos já era
+     exposta por `xp_reference` (Configurações a mostra inteira); faltava a
+     chave estável para pedir UM valor. Sem resposta, a frase omite o XP em vez
+     de chutar. */
+  const xpRef = useQuery({
+    queryKey: ["xp-reference"],
+    queryFn: xpReference,
+    staleTime: Infinity,
+  });
+  const xpPerBlock = pointsFor(xpRef.data, "focus_session");
+
   const toggleFullscreen = () => {
     if (document.fullscreenElement) void document.exitFullscreen();
     else void document.documentElement.requestFullscreen().catch(() => {});
@@ -95,7 +108,12 @@ export function FocusHost() {
           label: ctx.taskId ? null : ctx.label,
           minutes: durationMin,
         });
-        push("success", `Bloco de ${durationMin} min concluído · +10 XP`);
+        push(
+          "success",
+          xpPerBlock != null
+            ? `Bloco de ${durationMin} min concluído · +${xpPerBlock} XP`
+            : `Bloco de ${durationMin} min concluído`,
+        );
         void client.invalidateQueries({ queryKey: ["focus"] });
         void client.invalidateQueries({ queryKey: ["focus-stats"] });
         void client.invalidateQueries({ queryKey: ["recent-focus"] });
@@ -105,7 +123,7 @@ export function FocusHost() {
         pushError(e);
       }
     })();
-  }, [status, ctx, durationMin, push, pushError, client]);
+  }, [status, ctx, durationMin, push, pushError, client, xpPerBlock]);
 
   if (!open) return null;
 
@@ -151,42 +169,40 @@ export function FocusHost() {
           : "bg-[color-mix(in_srgb,black_62%,transparent)]",
       )}
     >
-      <GlassPanel className="w-full max-w-md">
-        <div className="p-6">
-          <header className="mb-5 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-[var(--text-tertiary)]">
-              <Timer size={15} className="text-[var(--accent)]" />
-              <span className="text-[11px] font-semibold tracking-[0.14em] uppercase">
-                Modo Foco
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
+      {/* O painel é o `Terminal` do Cockpit — a mesma superfície de operação do
+          resto do app, com o fio de luz e o cabeçalho em mono. Antes era um
+          `GlassPanel` do Midnight: o único `backdrop-filter` da tela, num
+          momento em que o fundo já afundou de propósito e não há o que
+          desfocar. */}
+      <Terminal
+        tone="phos"
+        title="Modo Foco"
+        icon={Timer}
+        className="w-full max-w-md"
+        bodyClassName="p-6"
+        right={
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={fullscreen ? Minimize2 : Maximize2}
+              onClick={toggleFullscreen}
+              aria-label={fullscreen ? "Sair da tela cheia" : "Tela cheia"}
+            />
+            {(status === "running" || status === "paused") && (
               <Button
                 variant="ghost"
                 size="sm"
-                icon={fullscreen ? Minimize2 : Maximize2}
-                onClick={toggleFullscreen}
-                aria-label={fullscreen ? "Sair da tela cheia" : "Tela cheia"}
+                icon={Minus}
+                onClick={minimize}
+                aria-label="Minimizar"
               />
-              {(status === "running" || status === "paused") && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={Minus}
-                  onClick={minimize}
-                  aria-label="Minimizar"
-                />
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={X}
-                onClick={cancel}
-                aria-label="Fechar"
-              />
-            </div>
-          </header>
-
+            )}
+            <Button variant="ghost" size="sm" icon={X} onClick={cancel} aria-label="Fechar" />
+          </div>
+        }
+      >
+        <>
           {/* O que está sendo focado. */}
           <div className="mb-5 flex items-center justify-center gap-2 text-center">
             <Target size={14} className="shrink-0 text-[var(--sphere)]" />
@@ -236,36 +252,23 @@ export function FocusHost() {
             </div>
           </div>
 
-          {/* estatística da sessão ao vivo (C8): o bloco atual e os blocos de hoje. */}
+          {/* A estatística da sessão ao vivo: bloco atual, blocos de hoje, e o
+              XP que eles já renderam — o número vem da tabela de pontos do
+              domínio, e some se ela não tiver chegado. */}
           <div className="mb-5 flex items-center justify-center gap-6 text-center">
-            <div>
-              <div className="tabular text-[15px] font-semibold text-[var(--text-primary)]">
-                {durationMin} min
-              </div>
-              <div className="text-[9px] tracking-[0.12em] text-[var(--text-tertiary)] uppercase">
-                bloco atual
-              </div>
-            </div>
-            <div className="h-8 w-px bg-[var(--border-subtle)]" />
-            <div>
-              <div className="tabular text-[15px] font-semibold text-[var(--text-primary)]">
-                {blocksToday}
-              </div>
-              <div className="text-[9px] tracking-[0.12em] text-[var(--text-tertiary)] uppercase">
-                blocos hoje
-              </div>
-            </div>
+            <LiveStat value={`${durationMin} min`} label="bloco atual" />
+            <Divider />
+            <LiveStat value={blocksToday} label="blocos hoje" />
             {minutesToday > 0 && (
               <>
-                <div className="h-8 w-px bg-[var(--border-subtle)]" />
-                <div>
-                  <div className="tabular text-[15px] font-semibold text-[var(--text-primary)]">
-                    {minutesToday}
-                  </div>
-                  <div className="text-[9px] tracking-[0.12em] text-[var(--text-tertiary)] uppercase">
-                    min hoje
-                  </div>
-                </div>
+                <Divider />
+                <LiveStat value={minutesToday} label="min hoje" />
+              </>
+            )}
+            {xpPerBlock != null && blocksToday > 0 && (
+              <>
+                <Divider />
+                <LiveStat value={`+${blocksToday * xpPerBlock}`} label="XP hoje" />
               </>
             )}
           </div>
@@ -334,10 +337,24 @@ export function FocusHost() {
               Abandonar não registra o bloco — só o pomodoro concluído conta.
             </p>
           )}
-        </div>
-      </GlassPanel>
+        </>
+      </Terminal>
     </div>
   );
+}
+
+/** Um número da telemetria ao vivo, com o rótulo em caps mono do Cockpit. */
+function LiveStat({ value, label }: { value: ReactNode; label: string }) {
+  return (
+    <div>
+      <div className="tabular text-[15px] font-semibold text-[var(--text-primary)]">{value}</div>
+      <MonoLabel className="!text-[9px] !tracking-[0.12em]">{label}</MonoLabel>
+    </div>
+  );
+}
+
+function Divider() {
+  return <div aria-hidden className="h-8 w-px bg-[var(--border-subtle)]" />;
 }
 
 /**

@@ -989,6 +989,103 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     println!("  3 metas anuais ({year} e {})", year + 1);
 
+    // ===== Modo Foco — os blocos concluídos (M5) =====
+    //
+    // O seed NUNCA registrou um bloco de foco. A tela de Foco existe desde o M5 e
+    // só foi vista no estado vazio: as estatísticas (semana, tendência,
+    // constância de 30 dias) e o gráfico "quando você foca" nunca tiveram dado.
+    // Um estado não-semeado é invisível e se disfarça de "o usuário não chegou lá".
+    //
+    // A HORA de cada bloco importa mais que a data: `focus_stats` responde
+    // "quando você foca" somando `ts` por hora do dia, e registrar tudo pelo
+    // relógio da máquina empilharia 40 blocos numa hora só — o gráfico de 24
+    // barras viraria uma barra, provando a tese da tela com uma distribuição
+    // falsa. Por isso `log_session_at`.
+    //
+    // O perfil é de manhã cedo e no fim da tarde, com um pico às 9h: dá um
+    // "melhor horário" com folga sobre o segundo colocado (senão o insight seria
+    // um empate apresentado como resposta) e deixa buracos reais no meio do dia.
+    let focus = nexus_lib::application::use_cases::focus::FocusService {
+        sessions: Arc::new(
+            nexus_lib::infrastructure::repositories::focus_session_repo::SqliteFocusSessionRepository::new(
+                db.clone(),
+            ),
+        ),
+        nodes: node_repo.clone(),
+        ids: ids.clone(),
+        clock: clock.clone(),
+    };
+    // (hora, minutos do bloco, quantos dias atrás) — 60 dias de história, com os
+    // últimos 7 mais cheios que os 7 anteriores para a tendência subir.
+    let focus_plan: &[(u32, i64, &[i64])] = &[
+        (
+            9,
+            50,
+            &[1, 2, 3, 5, 6, 8, 9, 12, 15, 16, 22, 29, 36, 43, 50, 57],
+        ),
+        (10, 25, &[1, 3, 6, 9, 14, 21, 28, 42]),
+        (14, 25, &[2, 7, 16, 30, 44]),
+        (17, 50, &[1, 4, 5, 11, 18, 25, 33, 40]),
+        (20, 25, &[3, 10, 24, 38]),
+    ];
+    let focus_tasks = tasks.list_for_project(&project, true)?;
+    let mut n_focus = 0;
+    for (hour_of_day, minutes, days_ago) in focus_plan {
+        for (i, n) in days_ago.iter().enumerate() {
+            let day = today - chrono::Duration::days(*n);
+            // Parte dos blocos é sobre uma tarefa real (a lista de recentes
+            // mostra o título dela); o resto é foco livre com rótulo.
+            //
+            // A tarefa varia com o DIA e a HORA, não com o índice dentro da
+            // lista de dias daquele horário: com o índice, os blocos mais
+            // recentes de todos os horários caíam na mesma tarefa e a lista de
+            // recentes saía com oito linhas idênticas — um seed que produz um
+            // estado que parece defeito atrapalha tanto quanto um que não
+            // produz estado nenhum.
+            let slot = (*n as usize + *hour_of_day as usize) % 4;
+            let task = (slot < 2 && !focus_tasks.is_empty()).then(|| {
+                focus_tasks[(*n as usize + i) % focus_tasks.len()]
+                    .id
+                    .clone()
+            });
+            let label = task
+                .is_none()
+                .then(|| ["Trabalho profundo", "Leitura técnica", "Escrita"][slot % 3].to_string());
+            focus.log_session_at(
+                task,
+                label,
+                *minutes,
+                Some(format_day(day)),
+                Some(at(day, *hour_of_day, 0)),
+            )?;
+            n_focus += 1;
+        }
+    }
+    // E os de HOJE. O painel ao vivo do timer conta "blocos hoje" e o XP que
+    // eles renderam; sem nenhum bloco hoje, essa metade do painel nasce zerada e
+    // nunca é vista. Só as horas JÁ PASSADAS entram: um bloco de foco registrado
+    // às 17h quando são 13h seria um fato que não aconteceu — e o `log_session`
+    // recusa o dia futuro justamente por isso.
+    let now_hour = {
+        use chrono::Timelike;
+        chrono::Local::now().hour()
+    };
+    let mut n_today = 0;
+    for (hour_of_day, minutes) in [(9u32, 50i64), (11, 25), (15, 50)] {
+        if hour_of_day >= now_hour {
+            continue;
+        }
+        focus.log_session_at(
+            None,
+            Some("Trabalho profundo".into()),
+            minutes,
+            Some(format_day(today)),
+            Some(at(today, hour_of_day, 0)),
+        )?;
+        n_today += 1;
+    }
+    println!("  {n_focus} blocos de foco em 60 dias (+{n_today} hoje)");
+
     println!(
         "pronto — {} nodes no total",
         nodes.count(&Default::default())?

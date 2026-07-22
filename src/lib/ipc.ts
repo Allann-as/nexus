@@ -161,9 +161,23 @@ export const vacuumDb = () => call<number>("vacuum_db");
 
 /** Uma linha da tabela de pontos da gamificação. */
 export interface PointRow {
+  /** Chave estável do feito ('focus_session', 'task_done', …). */
+  key: string;
   label: string;
   points: number;
 }
+
+/**
+ * Os pontos de um feito, pela chave — `null` quando a tabela ainda não chegou
+ * ou a chave não existe.
+ *
+ * `null` é para OMITIR a frase, nunca para cair num número de reserva: um "+10
+ * XP" chutado é exatamente o que esta função existe para eliminar.
+ */
+export const pointsFor = (
+  ref: XpReference | undefined,
+  key: string,
+): number | null => ref?.points.find((p) => p.key === key)?.points ?? null;
 
 /** Um degrau da curva de nível. */
 export interface LevelStep {
@@ -1715,7 +1729,8 @@ export interface FocusStats {
   minutesLast7: number;
   minutesPrev7: number;
   activeDays30: number;
-  bestHour: number | null;
+  /** Vazia = sem dado; 1 = a melhor hora; >1 = as que EMPATAM no topo (ADR-0105). */
+  bestHours: number[];
   bestHourMinutes: number;
   byHour: FocusHourBucket[];
   totalMinutes: number;

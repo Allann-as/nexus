@@ -6,13 +6,18 @@
  * blocos recentes podem ser apagados — corrige o ESTADO, o ledger fica (ADR-0052).
  *
  * O timer em si é global (`FocusHost` no Shell): daqui só o disparamos.
+ *
+ * A lista de recentes mostra a HORA de cada bloco, não só o dia. O `ts` sempre
+ * veio no `FocusSession` e a tela o descartava — numa tela cuja tese é "quando
+ * você foca", a hora de cada bloco é o dado que liga a lista ao gráfico.
  */
 
-import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play, Timer, Trash2 } from "lucide-react";
+import { Play, Timer } from "lucide-react";
 
+import { ArmedDelete } from "../../design-system/ArmedDelete";
 import { Button, EmptyState, PageHeader, PAGE_CONTAINER } from "../../design-system/primitives";
+import { Terminal } from "../../design-system/instruments";
 import { useToasts } from "../../stores/toasts";
 import { useFocus } from "../../stores/focus";
 import {
@@ -24,11 +29,19 @@ import {
 import { formatMinutes, shortDay } from "../studies/studyFormat";
 import { FocusStatsPanel } from "./FocusStatsPanel";
 
+/** "14:30" — a hora local de um instante. O bloco tem hora, e ela importa aqui. */
+function timeOf(ts: number): string {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 export function FocusScreen() {
   const start = useFocus((s) => s.start);
 
   const stats = useQuery({ queryKey: ["focus-stats", null], queryFn: () => focusStats(null) });
-  const recent = useQuery({ queryKey: ["recent-focus", null], queryFn: () => recentFocusSessions(null) });
+  // A MESMA queryKey do `FocusHost` — as duas telas leem a mesma lista, e duas
+  // chaves diferentes seriam duas cópias do mesmo dado esperando divergir.
+  const recent = useQuery({ queryKey: ["recent-focus"], queryFn: () => recentFocusSessions(null) });
 
   const st = stats.data;
   const hasBlocks = (st?.totalSessions ?? 0) > 0;
@@ -75,7 +88,6 @@ function RecentBlocks({ blocks }: { blocks: FocusSession[] }) {
   const client = useQueryClient();
   const push = useToasts((s) => s.push);
   const pushError = useToasts((s) => s.pushError);
-  const [armed, setArmed] = useState<string | null>(null);
 
   const remove = async (id: string) => {
     try {
@@ -87,24 +99,29 @@ function RecentBlocks({ blocks }: { blocks: FocusSession[] }) {
       void client.invalidateQueries({ queryKey: ["spheres"] });
     } catch (e) {
       pushError(e);
-    } finally {
-      setArmed(null);
     }
   };
 
   return (
-    <section>
-      <h3 className="mb-3 text-[10px] font-semibold tracking-[0.14em] text-[var(--text-tertiary)] uppercase">
-        Blocos recentes
-      </h3>
-      <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+    <Terminal
+      title="Blocos recentes"
+      icon={Timer}
+      tone="phos"
+      right={
+        <span className="text-[11px] text-[var(--text-tertiary)]">
+          os <span className="tabular">{blocks.length}</span> últimos
+        </span>
+      }
+      bodyClassName="p-0"
+    >
+      <ul>
         {blocks.map((b, i) => (
-          <div
+          <li
             key={b.id}
             className="group flex items-center gap-3 px-4 py-2.5"
             style={{ borderTop: i === 0 ? undefined : "1px solid var(--border-subtle)" }}
           >
-            <Timer size={14} className="shrink-0 text-[var(--text-tertiary)]" />
+            <Timer size={14} className="shrink-0 text-[var(--accent)]" aria-hidden />
             <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--text-primary)]">
               {b.taskTitle ?? b.label ?? "Foco livre"}
             </span>
@@ -112,28 +129,21 @@ function RecentBlocks({ blocks }: { blocks: FocusSession[] }) {
               {formatMinutes(b.minutes)}
             </span>
             <span className="tabular shrink-0 text-[11px] text-[var(--text-tertiary)]">
-              {shortDay(b.day)}
+              {shortDay(b.day)} · {timeOf(b.ts)}
             </span>
-            {armed === b.id ? (
-              <button
-                onClick={() => remove(b.id)}
-                className="shrink-0 rounded-[var(--radius-sm)] px-2 py-1 text-[11px] font-medium text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_12%,transparent)]"
-              >
-                Confirmar
-              </button>
-            ) : (
-              <button
-                onClick={() => setArmed(b.id)}
-                className="shrink-0 text-[var(--text-tertiary)] opacity-0 transition-opacity duration-[var(--dur-fast)] group-hover:opacity-100 hover:text-[var(--danger)]"
-                aria-label="Remover bloco"
-                title="Remover (corrige o estado; a história fica)"
-              >
-                <Trash2 size={13} />
-              </button>
-            )}
-          </div>
+            {/* O gesto armado é o do design system (v1.2, fase B) — esta tela
+                tinha a sua própria cópia, sem desarme por tempo, por Esc nem por
+                clique fora. Cinco cópias divergem; esta era a sexta. */}
+            <ArmedDelete
+              onConfirm={() => void remove(b.id)}
+              question="Remover este bloco?"
+              confirmLabel="Remover"
+              ariaLabel="Remover bloco"
+              className="shrink-0 opacity-0 transition-opacity duration-[var(--dur-fast)] group-hover:opacity-100 focus-within:opacity-100"
+            />
+          </li>
         ))}
-      </div>
-    </section>
+      </ul>
+    </Terminal>
   );
 }
