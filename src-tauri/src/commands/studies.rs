@@ -3,7 +3,7 @@
 use serde::Deserialize;
 use tauri::State;
 
-use crate::application::ports::{StudySession, Subject};
+use crate::application::ports::{StudySession, Subject, SubjectItem};
 use crate::application::use_cases::studies::{StudyStats, SubjectProgress};
 use crate::domain::entities::{CourseStage, SubjectTrack};
 use crate::domain::errors::Result;
@@ -91,9 +91,49 @@ pub fn set_subject_target(
     state.studies.set_subject_target(&id, target_minutes)
 }
 
+/// Grava o texto curto do que o curso ensina. `null` (ou em branco) limpa.
+#[tauri::command]
+pub fn set_subject_summary(
+    state: State<'_, AppState>,
+    id: String,
+    summary: Option<String>,
+) -> Result<Subject> {
+    state.studies.set_subject_summary(&id, summary)
+}
+
 #[tauri::command]
 pub fn archive_subject(state: State<'_, AppState>, id: String) -> Result<()> {
     state.studies.archive_subject(&id)
+}
+
+/* ===== Os itens de uma matéria (0020): temas e checklist ===== */
+
+#[tauri::command]
+pub fn add_subject_item(
+    state: State<'_, AppState>,
+    subject_id: String,
+    title: String,
+) -> Result<SubjectItem> {
+    state.studies.add_subject_item(&subject_id, &title)
+}
+
+#[tauri::command]
+pub fn subject_items(state: State<'_, AppState>, subject_id: String) -> Result<Vec<SubjectItem>> {
+    state.studies.subject_items(&subject_id)
+}
+
+#[tauri::command]
+pub fn set_subject_item_done(
+    state: State<'_, AppState>,
+    id: String,
+    done: bool,
+) -> Result<SubjectItem> {
+    state.studies.set_subject_item_done(&id, done)
+}
+
+#[tauri::command]
+pub fn delete_subject_item(state: State<'_, AppState>, id: String) -> Result<()> {
+    state.studies.delete_subject_item(&id)
 }
 
 #[tauri::command]

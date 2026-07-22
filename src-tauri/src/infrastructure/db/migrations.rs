@@ -41,6 +41,7 @@ fn migration_set() -> Vec<M<'static>> {
         M::up(include_str!(
             "../../../migrations/0019_delete_is_a_right.sql"
         )),
+        M::up(include_str!("../../../migrations/0020_subject_items.sql")),
     ]
 }
 
@@ -1797,6 +1798,129 @@ mod tests {
                     .unwrap();
                 assert_eq!(n, expected, "{table} se multiplicou ou sumiu");
             }
+        }
+    }
+
+    /// A 0020 dá à matéria a lista que faltava: os TEMAS de dificuldade
+    /// (Matemática -> Bháskara) e a checklist de conteúdos de um curso, que são a
+    /// mesma forma e por isso a mesma tabela. Ver o cabeçalho da migration.
+    ///
+    /// `nodes` NÃO é tocada aqui — um item não é node —, então as três armadilhas
+    /// do 12-step não se aplicam. O que precisa de prova é o CASCADE: os itens têm
+    /// que ir junto quando a matéria vai.
+    mod subject_items {
+        use super::*;
+
+        /// Um banco no estado da 0019 com uma matéria pronta para receber temas.
+        fn seeded_at_v19() -> Connection {
+            let mut conn = Connection::open_in_memory().unwrap();
+            migrations().to_version(&mut conn, 19).unwrap();
+            conn.execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 INSERT INTO areas (id, name) VALUES ('a1', 'Estudos');
+                 INSERT INTO nodes (id, kind, title, area_id, created_at, updated_at)
+                      VALUES ('s1', 'subject', 'Matematica', 'a1', 100, 100);
+                 INSERT INTO subject_details (node_id, track) VALUES ('s1', 'livre');",
+            )
+            .unwrap();
+            conn
+        }
+
+        #[test]
+        fn before_the_migration_a_subject_had_nowhere_to_put_a_theme() {
+            // O motivo da migration, provado em vez de descrito.
+            let conn = seeded_at_v19();
+            assert!(
+                conn.execute(
+                    "INSERT INTO subject_items (id, subject_id, title, sort_order, created_at)
+                     VALUES ('i1', 's1', 'Bhaskara', 0, 100)",
+                    [],
+                )
+                .is_err(),
+                "na 0019 a tabela nao existia — se isto passou, a 0020 perdeu o motivo"
+            );
+        }
+
+        #[test]
+        fn the_themes_of_a_subject_are_live_and_ordered() {
+            let mut conn = seeded_at_v19();
+            run(&mut conn).unwrap();
+            conn.execute_batch(
+                "INSERT INTO subject_items (id, subject_id, title, done, sort_order, created_at)
+                      VALUES ('i2', 's1', 'Regra de 3', 0, 1, 100),
+                             ('i1', 's1', 'Bhaskara',   1, 0, 100);",
+            )
+            .unwrap();
+
+            let mut stmt = conn
+                .prepare(
+                    "SELECT title FROM subject_items WHERE subject_id = 's1' ORDER BY sort_order",
+                )
+                .unwrap();
+            let titles: Vec<String> = stmt
+                .query_map([], |r| r.get(0))
+                .unwrap()
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .unwrap();
+            // A ordem é a do USUÁRIO (`sort_order`), não a alfabética nem a de
+            // inserção: 'Bhaskara' foi inserido por último e vem primeiro.
+            assert_eq!(titles, vec!["Bhaskara", "Regra de 3"]);
+        }
+
+        #[test]
+        fn a_half_done_item_is_refused_by_the_check() {
+            let mut conn = seeded_at_v19();
+            run(&mut conn).unwrap();
+            assert!(
+                conn.execute(
+                    "INSERT INTO subject_items (id, subject_id, title, done, sort_order, created_at)
+                     VALUES ('i1', 's1', 'Bhaskara', 2, 0, 100)",
+                    [],
+                )
+                .is_err(),
+                "'done' e binario: um terceiro estado tornaria 'N de M' indefinido"
+            );
+        }
+
+        #[test]
+        fn deleting_the_subject_takes_its_items_with_it() {
+            // O CASCADE do cabeçalho: um item não é node e nunca teve evento
+            // próprio no ledger, então ele PODE ir junto (ao contrário do que o
+            // ADR-0081 proíbe entre nodes).
+            let mut conn = seeded_at_v19();
+            run(&mut conn).unwrap();
+            conn.execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 INSERT INTO subject_items (id, subject_id, title, sort_order, created_at)
+                      VALUES ('i1', 's1', 'Bhaskara', 0, 100);",
+            )
+            .unwrap();
+
+            conn.execute("DELETE FROM nodes WHERE id = 's1'", [])
+                .unwrap();
+
+            let left: i64 = conn
+                .query_row("SELECT COUNT(*) FROM subject_items", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(left, 0, "o tema sobreviveu a materia que o continha");
+        }
+
+        #[test]
+        fn running_it_twice_is_a_no_op() {
+            let mut conn = seeded_at_v19();
+            run(&mut conn).unwrap();
+            conn.execute(
+                "INSERT INTO subject_items (id, subject_id, title, sort_order, created_at)
+                 VALUES ('i1', 's1', 'Bhaskara', 0, 100)",
+                [],
+            )
+            .unwrap();
+            run(&mut conn).unwrap();
+
+            let n: i64 = conn
+                .query_row("SELECT COUNT(*) FROM subject_items", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(n, 1, "o tema se multiplicou ou sumiu na segunda subida");
         }
     }
 }

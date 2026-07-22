@@ -744,6 +744,48 @@ palavra por palavra. (2) `subject_details` ganhou colunas por ALTER na 0016 e na
 `the_rebuilt_tables_keep_every_column` compara `pragma_table_info` antes e depois:
 numa reconstrução, só a cláusula `ON DELETE` pode ter mudado.
 
+## 5.18 A matéria ganha a LISTA que faltava (0020, v1.3)
+
+O ADR-0091 deixou três lacunas de Estudos para pagar em batch. O levantamento
+antes do SQL derrubou duas (ADR-0092), e é isso que a migration mais barata deste
+projeto tem a ensinar:
+
+- **`subject_details.summary` já existia** (ALTER na 0017, preservada na 0019). A
+  coluna estava viva e MUDA: nenhum `SELECT` a lia, nenhum setter a escrevia. Era
+  lacuna de código, não de schema.
+- **Faculdade não precisa de tabela**: `event_details.category` é TEXT livre desde
+  a 0007 e `upcoming_by_category`/`past_by_category` já servem os Exames da Saúde.
+  Entrega e prova são categorias novas de um mecanismo pronto.
+
+Sobrou **uma** lacuna, aparecendo duas vezes com a mesma forma (os *temas* de uma
+matéria e a *checklist* de um curso), então é uma tabela só:
+
+```sql
+CREATE TABLE subject_items (
+    id         TEXT PRIMARY KEY,                                  -- UUIDv7
+    subject_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    title      TEXT NOT NULL,
+    done       INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0,1)),
+    sort_order REAL NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_subject_item_subject ON subject_items(subject_id, sort_order);
+```
+
+**Não é node, e por isso `nodes` NÃO é recriada** — a sexta recriação não
+aconteceu, e as três armadilhas do 12-step não se aplicam. Um tema não tem tela,
+nem busca, nem Esfera: ele existe dentro da matéria, como `goal_checkpoints`
+dentro da meta. *Node é o que o usuário abre; isto é o que ele risca.*
+
+**O CASCADE não contradiz o ADR-0081**, que proíbe CASCADE entre *nodes* (perderia
+o evento de ledger dos filhos): um item nunca teve evento próprio: o que fica na
+história é o `deleted` da matéria. Pelo mesmo motivo, **marcar um item não escreve
+no ledger** — o fato de Estudos é a sessão; a lista é decomposição (ADR-0092).
+
+`done` é binário de propósito (a leitura é "N de M"; um 'fazendo' tornaria a
+fração indefinida) e `sort_order` é REAL como em `task_details`/`milestone_details`
+— a ordem é a do usuário, com desempate por `id` UUIDv7.
+
 ## 6. Integridade e migrations
 
 - `user_version` gerenciado pelo `rusqlite_migration`.

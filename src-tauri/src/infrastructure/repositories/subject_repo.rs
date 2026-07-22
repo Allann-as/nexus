@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use rusqlite::{params, OptionalExtension, Row};
 
-use crate::application::ports::{NewNode, NewSubject, Subject, SubjectRepository};
+use crate::application::ports::{NewNode, NewSubject, Subject, SubjectItem, SubjectRepository};
 use crate::domain::entities::{CourseStage, SubjectTrack};
 use crate::domain::errors::{NexusError, Result};
 use crate::domain::ledger::NewLedgerEvent;
@@ -30,9 +30,25 @@ impl SqliteSubjectRepository {
 const SELECT: &str = "
     SELECT n.id, n.title, n.area_id, n.status,
            s.category, s.target_minutes, n.created_at,
-           s.track, s.course_stage, s.expected_end, s.level_goal_id
+           s.track, s.course_stage, s.expected_end, s.level_goal_id, s.summary
       FROM subject_details s
       JOIN nodes n ON n.id = s.node_id";
+
+/// Os itens de uma matéria (0020) — temas de dificuldade e checklist de curso.
+const SELECT_ITEM: &str = "
+    SELECT id, subject_id, title, done, sort_order, created_at
+      FROM subject_items";
+
+fn map_item(row: &Row) -> rusqlite::Result<SubjectItem> {
+    Ok(SubjectItem {
+        id: row.get(0)?,
+        subject_id: row.get(1)?,
+        title: row.get(2)?,
+        done: row.get::<_, i64>(3)? != 0,
+        sort_order: row.get(4)?,
+        created_at: row.get(5)?,
+    })
+}
 
 fn map_subject(row: &Row) -> rusqlite::Result<Subject> {
     // `track` e `course_stage` são fechados no CHECK da 0016; se ainda assim uma
@@ -52,6 +68,7 @@ fn map_subject(row: &Row) -> rusqlite::Result<Subject> {
         course_stage: stage.as_deref().and_then(|s| CourseStage::parse(s).ok()),
         expected_end: row.get(9)?,
         level_goal_id: row.get(10)?,
+        summary: row.get(11)?,
     })
 }
 
@@ -196,6 +213,94 @@ impl SubjectRepository for SqliteSubjectRepository {
             &goal_id.map(|g| g.to_string()),
             updated_at,
         )
+    }
+
+    fn set_summary(&self, id: &str, summary: Option<&str>, updated_at: i64) -> Result<Subject> {
+        self.update_column(id, "summary", &summary.map(|s| s.to_string()), updated_at)
+    }
+
+    /* ----- Os itens de uma matéria (0020) ----- */
+
+    fn add_item(
+        &self,
+        id: &str,
+        subject_id: &str,
+        title: &str,
+        created_at: i64,
+    ) -> Result<SubjectItem> {
+        self.db.with_write(|conn| {
+            let tx = conn.transaction()?;
+            // A matéria tem que existir: sem esta guarda a FK só reclamaria com
+            // um erro de storage, e o usuário leria "FOREIGN KEY constraint
+            // failed" em vez de "matéria não encontrada".
+            let exists: i64 = tx.query_row(
+                "SELECT COUNT(*) FROM nodes WHERE id = ?1 AND kind = 'subject'",
+                params![subject_id],
+                |r| r.get(0),
+            )?;
+            if exists == 0 {
+                return Err(NexusError::NotFound(format!("matéria {subject_id}")));
+            }
+            // Item novo vai para o FIM da lista, como o sub-desafio de uma meta.
+            let next: f64 = tx.query_row(
+                "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM subject_items WHERE subject_id = ?1",
+                params![subject_id],
+                |r| r.get(0),
+            )?;
+            tx.execute(
+                "INSERT INTO subject_items (id, subject_id, title, done, sort_order, created_at)
+                 VALUES (?1, ?2, ?3, 0, ?4, ?5)",
+                params![id, subject_id, title, next, created_at],
+            )?;
+            let created = tx.query_row(
+                &format!("{SELECT_ITEM} WHERE id = ?1"),
+                params![id],
+                map_item,
+            )?;
+            tx.commit()?;
+            Ok(created)
+        })
+    }
+
+    fn list_items(&self, subject_id: &str) -> Result<Vec<SubjectItem>> {
+        self.db.with_read(|c| {
+            // O desempate por `id` é UUIDv7: dois itens com o mesmo `sort_order`
+            // saem na ordem em que foram criados, nunca numa ordem que muda a
+            // cada leitura.
+            let mut stmt = c.prepare_cached(&format!(
+                "{SELECT_ITEM} WHERE subject_id = ?1 ORDER BY sort_order, id"
+            ))?;
+            let rows = stmt.query_map(params![subject_id], map_item)?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        })
+    }
+
+    fn set_item_done(&self, id: &str, done: bool) -> Result<SubjectItem> {
+        self.db.with_write(|conn| {
+            let changed = conn.execute(
+                "UPDATE subject_items SET done = ?2 WHERE id = ?1",
+                params![id, i64::from(done)],
+            )?;
+            if changed == 0 {
+                return Err(NexusError::NotFound(format!("item {id}")));
+            }
+            conn.query_row(
+                &format!("{SELECT_ITEM} WHERE id = ?1"),
+                params![id],
+                map_item,
+            )
+            .map_err(Into::into)
+        })
+    }
+
+    fn delete_item(&self, id: &str) -> Result<()> {
+        self.db.with_write(|conn| {
+            let changed = conn.execute("DELETE FROM subject_items WHERE id = ?1", params![id])?;
+            if changed == 0 {
+                return Err(NexusError::NotFound(format!("item {id}")));
+            }
+            Ok(())
+        })
     }
 }
 
@@ -516,5 +621,108 @@ mod tests {
         })
         .unwrap();
         assert_eq!(repo.linked_count("su1").unwrap(), 1);
+    }
+
+    /* ----- Os itens de uma matéria (0020) ----- */
+
+    #[test]
+    fn the_summary_round_trips_and_is_cleared() {
+        // A coluna existe desde a 0017 e não tinha leitor nem escritor: este
+        // teste é o que garante que ela não volte a ficar muda.
+        let (_d, repo, _db) = fixture();
+        make(&repo, "su1", None);
+        assert_eq!(repo.get("su1").unwrap().summary, None);
+
+        let s = repo
+            .set_summary("su1", Some("Planilhas do zero"), 2_000)
+            .unwrap();
+        assert_eq!(s.summary.as_deref(), Some("Planilhas do zero"));
+        assert_eq!(
+            repo.get("su1").unwrap().summary.as_deref(),
+            Some("Planilhas do zero")
+        );
+
+        assert_eq!(repo.set_summary("su1", None, 3_000).unwrap().summary, None);
+    }
+
+    #[test]
+    fn the_items_come_out_in_the_order_they_were_added() {
+        let (_d, repo, _db) = fixture();
+        make(&repo, "su1", None);
+        for (id, title) in [("i1", "Regra de 3"), ("i2", "Bháskara"), ("i3", "Divisão")] {
+            repo.add_item(id, "su1", title, 1_000).unwrap();
+        }
+        let titles: Vec<String> = repo
+            .list_items("su1")
+            .unwrap()
+            .into_iter()
+            .map(|i| i.title)
+            .collect();
+        // Cada item entra no FIM: a lista é a ordem de ataque do usuário, não a
+        // alfabética (que poria 'Bháskara' primeiro).
+        assert_eq!(titles, vec!["Regra de 3", "Bháskara", "Divisão"]);
+    }
+
+    #[test]
+    fn an_item_starts_undone_and_is_ticked_and_unticked() {
+        let (_d, repo, _db) = fixture();
+        make(&repo, "su1", None);
+        let item = repo.add_item("i1", "su1", "Bháskara", 1_000).unwrap();
+        assert!(!item.done, "um tema nasce por fazer");
+
+        assert!(repo.set_item_done("i1", true).unwrap().done);
+        // Desmarcar é tão possível quanto marcar: riscar por engano acontece.
+        assert!(!repo.set_item_done("i1", false).unwrap().done);
+    }
+
+    #[test]
+    fn ticking_an_item_does_not_touch_the_ledger() {
+        // Um tema riscado é decomposição, não fato — o fato é a SESSÃO de estudo.
+        let (_d, repo, db) = fixture();
+        make(&repo, "su1", None);
+        repo.add_item("i1", "su1", "Bháskara", 1_000).unwrap();
+        let count = || -> i64 {
+            db.with_read(|c| Ok(c.query_row("SELECT COUNT(*) FROM ledger", [], |r| r.get(0))?))
+                .unwrap()
+        };
+        let before = count();
+        repo.set_item_done("i1", true).unwrap();
+        repo.delete_item("i1").unwrap();
+        assert_eq!(count(), before, "o item escreveu no ledger");
+    }
+
+    #[test]
+    fn the_items_of_another_subject_do_not_leak() {
+        let (_d, repo, _db) = fixture();
+        make(&repo, "su1", None);
+        make_on(&repo, "su2", "Física", SubjectTrack::Livre, None);
+        repo.add_item("i1", "su1", "Bháskara", 1_000).unwrap();
+        repo.add_item("i2", "su2", "Cinemática", 1_000).unwrap();
+
+        assert_eq!(repo.list_items("su1").unwrap().len(), 1);
+        assert_eq!(repo.list_items("su2").unwrap()[0].title, "Cinemática");
+    }
+
+    #[test]
+    fn an_item_on_a_missing_subject_is_not_found_not_a_storage_error() {
+        // Sem a guarda, o usuário leria "FOREIGN KEY constraint failed".
+        let (_d, repo, _db) = fixture();
+        let err = repo
+            .add_item("i1", "fantasma", "Bháskara", 1_000)
+            .unwrap_err();
+        assert!(matches!(err, NexusError::NotFound(_)), "{err:?}");
+    }
+
+    #[test]
+    fn deleting_a_missing_item_is_not_found_not_silence() {
+        let (_d, repo, _db) = fixture();
+        make(&repo, "su1", None);
+        repo.add_item("i1", "su1", "Bháskara", 1_000).unwrap();
+        repo.delete_item("i1").unwrap();
+        assert!(repo.list_items("su1").unwrap().is_empty());
+        assert!(matches!(
+            repo.delete_item("i1").unwrap_err(),
+            NexusError::NotFound(_)
+        ));
     }
 }

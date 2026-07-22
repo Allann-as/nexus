@@ -1521,6 +1521,25 @@ pub struct Subject {
     /// A meta `staged` que descreve o nível atual de um idioma. `None` = a
     /// escada ainda não foi montada.
     pub level_goal_id: Option<String>,
+    /// O texto curto do que um curso ensina. A coluna existe desde a 0017 e
+    /// ficou sem leitor nem escritor até a 0020 — ver o cabeçalho dela.
+    pub summary: Option<String>,
+    pub created_at: i64,
+}
+
+/* ===== Estudos: os itens de uma matéria (0020) ===== */
+
+/// Um item da lista de uma matéria: um TEMA de dificuldade ("Bháskara") ou uma
+/// linha da checklist de conteúdos de um curso. A mesma forma serve os dois —
+/// ver o cabeçalho da 0020.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubjectItem {
+    pub id: String,
+    pub subject_id: String,
+    pub title: String,
+    pub done: bool,
+    pub sort_order: f64,
     pub created_at: i64,
 }
 
@@ -1575,6 +1594,34 @@ pub trait SubjectRepository: Send + Sync {
     /// desfaz o vínculo. O caso de uso é que valida que o alvo é uma meta e que
     /// ela é `staged`.
     fn set_level_goal(&self, id: &str, goal_id: Option<&str>, updated_at: i64) -> Result<Subject>;
+
+    /// Grava o texto curto do que o curso ensina. CONFIGURAÇÃO, não fato
+    /// (ADR-0023). `None` limpa.
+    fn set_summary(&self, id: &str, summary: Option<&str>, updated_at: i64) -> Result<Subject>;
+
+    /* ----- Os itens de uma matéria (0020) ----- */
+
+    /// Acrescenta um item ao FIM da lista da matéria e devolve o item gravado.
+    /// O `sort_order` é o repositório que calcula — quem chama não sabe (nem
+    /// deveria saber) o que já está na lista.
+    fn add_item(
+        &self,
+        id: &str,
+        subject_id: &str,
+        title: &str,
+        created_at: i64,
+    ) -> Result<SubjectItem>;
+
+    /// Os itens da matéria, na ordem do usuário.
+    fn list_items(&self, subject_id: &str) -> Result<Vec<SubjectItem>>;
+
+    /// Risca (ou desrisca) um item. Não grava no ledger: um tema riscado é
+    /// progresso de decomposição, e o FATO da matéria é a sessão de estudo, que
+    /// já é evento. Mesmo critério do progresso de um livro (`book_repo`).
+    fn set_item_done(&self, id: &str, done: bool) -> Result<SubjectItem>;
+
+    /// Apaga um item — excluir é um direito (ADR-0056), inclusive aqui.
+    fn delete_item(&self, id: &str) -> Result<()>;
 }
 
 /* ===== Carreira: o check-in mensal da competência (BÚSSOLA, fase E) ===== */

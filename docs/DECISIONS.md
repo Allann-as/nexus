@@ -3529,3 +3529,71 @@ que uma migration em batch resolve por um preço só (ADR-0077):
 Fora do batch: **Faculdade** (entregas e provas com D-dias) provavelmente NÃO precisa de schema — a
 Saúde já resolve a mesma forma reusando `event` genérico filtrado por categoria (`category='exame'`), e
 o mesmo padrão serve para entrega/prova.
+
+---
+
+## ADR-0092 — O batch de três lacunas virou UMA tabela: duas já estavam pagas
+
+**Data:** 2026-07-21 · **Status:** aceito · **v1.3 (COCKPIT), fase 4 — Estudos, migration 0020**
+
+**Contexto.** O ADR-0091 fechou a sessão anterior com três lacunas de Estudos para pagar em batch, na
+regra do ADR-0077: quando várias faltas pedem a mesma operação cara, paga-se uma vez só. O levantamento
+antes de escrever o SQL — que é o passo que a regra realmente exige — derrubou **duas das três**.
+
+**Decisão 1 — a "descrição do curso" não era lacuna de schema, era coluna MUDA.**
+`subject_details.summary` existe desde a **0017** (`ALTER TABLE ADD COLUMN`), e a 0019 até a preservou
+explicitamente na reconstrução — o teste `the_rebuilt_tables_keep_every_column` nasceu justamente porque
+a primeira tentativa a esqueceu. A coluna estava **viva e morta ao mesmo tempo**: nenhum `SELECT` a
+lia, nenhum setter a escrevia, e o `Subject` que sobe para a UI nem tinha o campo. Escrever uma
+migration teria sido criar de novo o que já existia — e, pior, o `ADD COLUMN` teria falhado, revelando
+tarde o que uma leitura revelou cedo.
+
+Fica a lição: **uma lacuna de PRODUTO não implica uma lacuna de SCHEMA.** A pergunta certa antes de
+escrever SQL não é "a tela mostra isso?" mas "a coluna existe e ninguém a lê?".
+
+**Decisão 2 — Faculdade continua sem schema, como o ADR-0091 suspeitava.** `event_details.category` é
+TEXT livre desde a 0007, e `upcoming_by_category`/`past_by_category` já servem os Exames da Saúde com
+D-dias. Entrega e prova são categorias novas de um mecanismo pronto; uma tabela própria duplicaria o
+Calendário e criaria uma segunda fonte de "o que vem aí".
+
+**Decisão 3 — sobra uma lacuna, e ela é UMA tabela porque é UMA forma.** Os "temas de dificuldade" de
+uma matéria (Matemática → regra de 3, Bháskara) e a "checklist de conteúdos" de um curso são a mesma
+coisa descrita duas vezes: uma lista ordenada de itens nomeados sob uma matéria, cada um feito ou não.
+Modelar duas tabelas deixaria duas telas divergirem sobre o que é um item de uma matéria.
+
+**Por que não os genéricos que já existem.** Os dois candidatos estão fechados na camada de use-case, e
+não por convenção: `TaskService::create` recusa um `project_id` que não seja `Kind::Project`, e
+`GoalService::add_milestone` exige `Kind::Goal`. Abrir qualquer um para aceitar `subject` como pai
+afrouxaria uma guarda que protege OUTRAS telas (o Kanban de projetos, a régua de uma meta) para servir
+esta. Uma tabela própria não mexe em nada que já funciona.
+
+**Por que `subject_items` NÃO é node — e por que isso torna a migration barata.** Um tema não tem tela
+própria, não entra na busca e não tem Esfera: ele só existe DENTRO da matéria, como `goal_checkpoints`
+só existe dentro da meta. **Node é o que o usuário abre; isto é o que ele risca.** Consequência
+prática: `nodes` não é recriada, e nenhuma das três armadilhas do 12-step (CASCADE, rowid, rename) se
+aplica — a sexta recriação não aconteceu.
+
+**O CASCADE aqui não contradiz o ADR-0081.** Aquele proíbe CASCADE *entre nodes*, porque apagaria
+filhos sem evento no ledger, e quem leva os filhos é `delete_with_event`. Um item nunca teve evento
+próprio para perder: o que fica na história é o `deleted` da matéria, que é o fato real.
+
+**Decisão 4 — riscar um item NÃO vai para o ledger.** Um tema riscado é progresso de *decomposição*; o
+FATO de Estudos é a sessão (`study_session_logged`, que vale XP). Se cada item marcado virasse evento,
+a Timeline encheria de "riscou Bháskara" sem nenhuma hora estudada atrás — ruído com aparência de
+história. O precedente já existia e foi seguido: `updating_progress_does_not_touch_the_ledger`, no
+`book_repo`. Um teste guarda a decisão nos dois lados (marcar e apagar não movem o `COUNT(*)` do
+ledger).
+
+**Decisão 5 — `done` é binário; um "fazendo" foi recusado.** A leitura da lista é "N de M feitos", e um
+terceiro estado tornaria essa fração indefinida — 'fazendo' conta metade? É a lição 3 aplicada ao
+schema: um estado que a barra não sabe somar vira uma afirmação que o dado não sustenta. O CHECK
+`done IN (0,1)` recusa no banco, com teste.
+
+**Decisão 6 — a ordem é do usuário, não alfabética.** `sort_order REAL`, como `task_details` (0004) e
+`milestone_details` (0007): item novo entra no fim, e inserir no meio um dia não renumera a lista. O
+desempate é por `id` (UUIDv7), então dois itens com a mesma ordem saem sempre na ordem de criação —
+nunca numa ordem que muda a cada leitura (lição 3: um `sort` que desempata sozinho mente).
+
+**Uma guarda que o schema sozinho não daria.** `add_item` verifica que a matéria existe antes de
+inserir. Sem ela a FK reclamaria — mas o usuário leria *"FOREIGN KEY constraint failed"* em vez de
+*"matéria não encontrada"*. A FK é o piso; a mensagem é o comportamento.

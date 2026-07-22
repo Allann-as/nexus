@@ -416,3 +416,75 @@ fn the_level_goal_of_a_language_must_be_a_staged_goal() {
         None
     );
 }
+
+/* ===== Os itens de uma matéria (0020) ===== */
+
+#[test]
+fn a_subject_is_decomposed_into_ordered_themes_that_can_be_ticked_and_deleted() {
+    // A lacuna que a 0020 fecha: "Matemática -> regra de 3, Bháskara". A MESMA
+    // chamada serve a checklist de conteúdos de um curso — é a mesma forma.
+    let s = setup();
+    let mat = subject_on(&s, "Matemática", SubjectTrack::Livre);
+
+    let regra = s.studies.add_subject_item(&mat, "Regra de 3").unwrap();
+    let bhaskara = s.studies.add_subject_item(&mat, "Bháskara").unwrap();
+    let divisao = s.studies.add_subject_item(&mat, "Divisão").unwrap();
+
+    // Nascem por fazer e na ordem em que entraram.
+    let items = s.studies.subject_items(&mat).unwrap();
+    assert_eq!(
+        items.iter().map(|i| i.title.as_str()).collect::<Vec<_>>(),
+        vec!["Regra de 3", "Bháskara", "Divisão"]
+    );
+    assert!(items.iter().all(|i| !i.done));
+
+    // Riscar dois deixa a lista em "2 de 3" — a fração que a tela desenha.
+    s.studies.set_subject_item_done(&regra.id, true).unwrap();
+    s.studies.set_subject_item_done(&bhaskara.id, true).unwrap();
+    let done = s
+        .studies
+        .subject_items(&mat)
+        .unwrap()
+        .iter()
+        .filter(|i| i.done)
+        .count();
+    assert_eq!(done, 2);
+
+    // Excluir é um direito, inclusive de um item (ADR-0056).
+    s.studies.delete_subject_item(&divisao.id).unwrap();
+    assert_eq!(s.studies.subject_items(&mat).unwrap().len(), 2);
+}
+
+#[test]
+fn an_item_without_a_title_never_reaches_the_database() {
+    let s = setup();
+    let mat = subject_on(&s, "Matemática", SubjectTrack::Livre);
+    assert!(s.studies.add_subject_item(&mat, "   ").is_err());
+    assert!(s.studies.subject_items(&mat).unwrap().is_empty());
+}
+
+#[test]
+fn the_course_summary_round_trips_and_blank_means_absent() {
+    // A coluna estava no schema desde a 0017 sem ninguém para escrevê-la.
+    let s = setup();
+    let curso = subject_on(&s, "Excel do zero", SubjectTrack::Curso);
+    assert_eq!(s.studies.subjects(None, None).unwrap()[0].summary, None);
+
+    let with = s
+        .studies
+        .set_subject_summary(&curso, Some("  Planilhas, do zero ao dinâmico  ".into()))
+        .unwrap();
+    // O texto chega aparado — e um texto em BRANCO é ausência, não um parágrafo
+    // vazio, para o card não desenhar uma linha de descrição com nada dentro.
+    assert_eq!(
+        with.summary.as_deref(),
+        Some("Planilhas, do zero ao dinâmico")
+    );
+    assert_eq!(
+        s.studies
+            .set_subject_summary(&curso, Some("   ".into()))
+            .unwrap()
+            .summary,
+        None
+    );
+}

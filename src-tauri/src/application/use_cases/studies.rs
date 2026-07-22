@@ -16,7 +16,7 @@ use serde_json::json;
 
 use crate::application::ports::{
     AreaRepository, Clock, GoalRepository, IdGen, NewNode, NewStudySession, NewSubject,
-    StudySession, StudySessionRepository, Subject, SubjectRepository,
+    StudySession, StudySessionRepository, Subject, SubjectItem, SubjectRepository,
 };
 use crate::domain::entities::{validate_title, CourseStage, GoalKind, Kind, SubjectTrack};
 use crate::domain::errors::{NexusError, Result};
@@ -246,8 +246,50 @@ impl StudyService {
             .set_target(id, target_minutes, self.clock.now_ms())
     }
 
+    /// Grava o texto curto do que um CURSO ensina (a coluna `summary`, viva no
+    /// schema desde a 0017 e sem leitor até a 0020).
+    ///
+    /// Ao contrário do estágio, isto NÃO é recusado fora da trilha `curso`: uma
+    /// matéria livre ou uma disciplina da faculdade também podem descrever em
+    /// duas linhas do que se tratam, e nada na tela mente se elas o fizerem. O
+    /// que a trilha decide é quem OFERECE o campo, não quem pode tê-lo.
+    pub fn set_subject_summary(&self, id: &str, summary: Option<String>) -> Result<Subject> {
+        // Texto em branco é ausência, não um parágrafo vazio: assim o card não
+        // desenha uma linha de descrição com nada dentro.
+        let summary = summary
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        self.subjects
+            .set_summary(id, summary.as_deref(), self.clock.now_ms())
+    }
+
     pub fn archive_subject(&self, id: &str) -> Result<()> {
         self.subjects.archive(id, self.clock.now_ms())
+    }
+
+    /* ===== Os itens de uma matéria (0020) ===== */
+
+    /// Acrescenta um TEMA (ou uma linha da checklist de um curso) à matéria.
+    ///
+    /// É decomposição, não fato: não grava no ledger. O que vira evento é a
+    /// SESSÃO de estudo — riscar "Bháskara" na lista não é uma hora estudada, e
+    /// tratá-lo como fato encheria a Timeline de ruído sem nenhuma hora atrás.
+    pub fn add_subject_item(&self, subject_id: &str, title: &str) -> Result<SubjectItem> {
+        let title = validate_title(title)?;
+        self.subjects
+            .add_item(&self.ids.new_id(), subject_id, &title, self.clock.now_ms())
+    }
+
+    pub fn subject_items(&self, subject_id: &str) -> Result<Vec<SubjectItem>> {
+        self.subjects.list_items(subject_id)
+    }
+
+    pub fn set_subject_item_done(&self, id: &str, done: bool) -> Result<SubjectItem> {
+        self.subjects.set_item_done(id, done)
+    }
+
+    pub fn delete_subject_item(&self, id: &str) -> Result<()> {
+        self.subjects.delete_item(id)
     }
 
     /// O progresso agregado de uma matéria: minutos, sessões, meta e as últimas.

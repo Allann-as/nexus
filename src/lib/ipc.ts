@@ -1509,6 +1509,23 @@ export interface Subject {
   expectedEnd: string | null;
   /** A meta 'staged' que descreve o nível de um idioma. `null` = sem escada. */
   levelGoalId: string | null;
+  /** O texto curto do que um curso ensina. `null` = não descrito. */
+  summary: string | null;
+  createdAt: number;
+}
+
+/**
+ * Um item da lista de uma matéria (0020): um TEMA de dificuldade ("Bháskara")
+ * ou uma linha da checklist de conteúdos de um curso.
+ *
+ * A mesma forma serve os dois — a lista é ordenada e cada item é feito ou não.
+ */
+export interface SubjectItem {
+  id: string;
+  subjectId: string;
+  title: string;
+  done: boolean;
+  sortOrder: number;
   createdAt: number;
 }
 
@@ -1609,7 +1626,24 @@ export const setSubjectLevelGoal = (subjectId: string, goalId: string | null) =>
 export const setSubjectTarget = (id: string, targetMinutes: number | null) =>
   call<Subject>("set_subject_target", { id, targetMinutes });
 
+/** O texto curto do que o curso ensina. `null` (ou em branco) limpa. */
+export const setSubjectSummary = (id: string, summary: string | null) =>
+  call<Subject>("set_subject_summary", { id, summary });
+
 export const archiveSubject = (id: string) => call<void>("archive_subject", { id });
+
+/* ----- Os itens de uma matéria (0020): temas e checklist ----- */
+
+export const addSubjectItem = (subjectId: string, title: string) =>
+  call<SubjectItem>("add_subject_item", { subjectId, title });
+
+export const subjectItems = (subjectId: string) =>
+  call<SubjectItem[]>("subject_items", { subjectId });
+
+export const setSubjectItemDone = (id: string, done: boolean) =>
+  call<SubjectItem>("set_subject_item_done", { id, done });
+
+export const deleteSubjectItem = (id: string) => call<void>("delete_subject_item", { id });
 
 export const subjectProgress = (id: string) =>
   call<SubjectProgress>("subject_progress", { id });
