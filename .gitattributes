@@ -1,0 +1,53 @@
+# NEXUS — normalizacao de fim de linha.
+#
+# Sem este arquivo o repositorio dependia de `core.autocrlf`, uma configuracao
+# LOCAL de cada maquina: o mesmo `git add` avisava "LF will be replaced by CRLF"
+# a cada commit, e um clone com outra configuracao produziria um diff inteiro de
+# ruido. A regra passa a viver NO repositorio, versionada como o resto.
+#
+# Regra: o repositorio guarda LF, e a copia de trabalho tambem — exceto os
+# scripts que o Windows executa, que ficam CRLF.
+
+# Padrao: git decide o que e texto e normaliza para LF nos dois lados.
+* text=auto eol=lf
+
+# Fontes e dados textuais — explicitos, para nao depender da heuristica.
+*.rs      text eol=lf
+*.ts      text eol=lf
+*.tsx     text eol=lf
+*.js      text eol=lf
+*.mjs     text eol=lf
+*.css     text eol=lf
+*.html    text eol=lf
+*.json    text eol=lf
+*.sql     text eol=lf
+*.toml    text eol=lf
+*.md      text eol=lf
+*.svg     text eol=lf
+*.lock    text eol=lf
+
+# Scripts do Windows: o host de PowerShell 5.1 e o interpretador de .bat/.cmd
+# esperam CRLF. Ficam CRLF na copia de trabalho, LF no repositorio.
+*.ps1     text eol=crlf
+*.psm1    text eol=crlf
+*.cmd     text eol=crlf
+*.bat     text eol=crlf
+
+# Binarios: nunca converter, nunca tentar diff textual.
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.ico     binary
+*.icns    binary
+*.woff    binary
+*.woff2   binary
+*.ttf     binary
+*.otf     binary
+*.pdf     binary
+*.db      binary
+*.sqlite  binary
+*.sqlite3 binary
+*.exe     binary
+*.dll     binary
+*.msi     binary

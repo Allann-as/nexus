@@ -3892,3 +3892,41 @@ dela à direita). Os três números soltos viraram `StatTile` — e só **"dias 
 porque só ele tem denominador. O denominador, aliás, é o número de dias **já decorridos** do ano, não
 365: dividir por 365 em fevereiro diria que o ano está 12% preenchido quando ele mal começou — uma
 fração aritmeticamente certa e completamente enganosa.
+
+---
+
+## ADR-0099 — O fim de linha é regra do repositório, não configuração de máquina
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), tarefa 0**
+
+**Contexto.** Todo commit desta fase saía com uma parede de avisos `LF will be replaced by CRLF`. O
+projeto nunca teve `.gitattributes`: a normalização dependia do `core.autocrlf=true`, que é
+configuração **local do desenvolvedor**, guardada em `.git/config` e portanto fora do versionamento.
+O aviso era barulho, mas o defeito por trás dele não é cosmético — a regra que decide o conteúdo dos
+arquivos versionados não estava versionada.
+
+**Por que isso importa mesmo sendo "só um aviso".** Duas razões concretas. Primeira: um clone numa
+máquina com `core.autocrlf=false` (o padrão fora do Windows, e o padrão de qualquer runner de CI Linux)
+gravaria CRLF no repositório na primeira vez que tocasse um arquivo, produzindo um diff de milhares de
+linhas sem nenhuma mudança real. Segunda: aviso recorrente que se aprende a ignorar é exatamente onde
+um aviso legítimo passa despercebido — o gate desta casa vale pela ausência de ruído.
+
+**Decisão — o repositório guarda LF, a cópia de trabalho também, com uma exceção declarada.**
+`* text=auto eol=lf` na raiz, mais as extensões do projeto listadas nominalmente para não depender da
+heurística de detecção. A exceção são `*.ps1`, `*.psm1`, `*.cmd` e `*.bat`, que ficam **`eol=crlf`**:
+o `check.ps1` e o `dev.ps1` são executados pelo host do Windows PowerShell 5.1, e esse é o único lugar
+do projeto onde o terminador de linha tem consequência de execução, não de diff. Binários
+(`.png`, `.ico`, `.icns`, fontes, `.db`, `.exe`, `.msi`) ganham `binary`, que desliga conversão **e**
+diff textual — sem isso, o `text=auto` da primeira linha ainda os inspecionaria a cada `add`.
+
+**O que a renormalização revelou.** `git add --renormalize .` sobre as 385 entradas rastreadas mudou
+**zero bytes** no índice. Era o resultado esperado e vale registrar: o `core.autocrlf=true` já vinha
+convertendo corretamente na entrada, então o repositório sempre esteve em LF. **Não havia dano
+acumulado a reparar — havia uma regra implícita a tornar explícita.** O commit é, de propósito, um
+arquivo novo e nada mais; se ele tivesse vindo com milhares de linhas alteradas, o diagnóstico teria
+sido outro.
+
+**Consequência.** O aviso desaparece porque não há mais o que avisar: com `eol=lf` declarado, o
+`checkout` escreve o mesmo que o índice guarda, e a conversão implícita deixa de existir. A regra passa
+a viajar junto com o clone. Fica também um convite útil para a fase 7: quando o `tauri build` gerar
+artefatos, `.exe` e `.msi` já estão declarados como binários.
