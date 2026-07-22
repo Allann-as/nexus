@@ -477,6 +477,8 @@ export interface PeriodStats {
   focusMinutes: number;
   contributionCents: number;
   tasksCompleted: number;
+  /** Marcações de hábito com `done` no período. */
+  habitsDone: number;
   scoreAvg: number | null;
 }
 

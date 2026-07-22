@@ -4001,3 +4001,48 @@ só com o número.
 `weekStrip.ts` porque tem uma borda real: o dia da semana em que cai 1º de janeiro decide a primeira
 segunda, e o caso "1º de janeiro já é segunda" (2024) é o que uma conta ingênua erra por sete dias.
 Seis testes, sem montar React.
+
+---
+
+## ADR-0101 — Comparativo: a barra que diz o tamanho, e a diferença entre zero e não-medido
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), fase 5 — grupo B, Comparativo**
+
+**Contexto.** O comparativo já era honesto no que importava mais — a comparação é **até-a-data**, mês
+até hoje contra o mesmo trecho do mês anterior (ADR-0062), com os intervalos puros e testados. O que
+faltava era o idioma e uma métrica.
+
+**Decisão 1 — a métrica que faltava era a mais óbvia: hábitos.** As cinco métricas eram estudo, foco,
+aportes, tarefas e score. **Num app cujo núcleo é hábito, o comparativo de períodos não olhava nenhum
+hábito.** Entrou "Hábitos cumpridos" — `COUNT(*)` de `habit_ticks` com `status='done'` no intervalo,
+um sexto subselect na mesma query (o custo é o de duas linhas a mais numa consulta que já cruza dois
+períodos, e não justifica rollup nenhum). Na dirigida ela imediatamente disse algo que nenhuma outra
+linha dizia: 99 marcações em julho contra 106 em junho, −7%.
+
+**Decisão 2 — duas SegBars em escala compartilhada, porque a porcentagem esconde o tamanho.**
+"+50%" sobre 2 tarefas e "+50%" sobre 200 são a mesma frase e coisas completamente diferentes. Cada
+linha ganhou duas barras — período atual em fósforo, anterior em cinza — dividindo **a mesma escala**,
+que é o maior dos dois valores. A escala é por LINHA e não entre linhas (minutos, centavos e contagens
+não compartilham régua), e isso está escrito no "ⓘ como calculamos" em vez de deixado para o leitor
+descobrir.
+
+**Decisão 3 — sem escala, o instrumento SOME.** Estudo e foco, que no banco de dirigida não têm
+registro em nenhum dos dois meses, desenhavam **quarenta e quatro segmentos vazios**: dois medidores
+graduados ocupando a altura de uma leitura para não dizer nada. Zero contra zero não tem denominador,
+logo não tem medidor — a linha colapsa para o rótulo e a frase "sem registro nos dois". É a mesma
+régua do ADR-0098 (medidor só onde há escala), agora aplicada à ausência de escala e não à ausência
+de teto.
+
+**Decisão 4 — um trilho vazio afirma ZERO, e nem toda ausência é zero.** No modo Ano, "Score médio"
+mostrava 2025 como um trilho vazio com "—" ao lado. Mas `scoreAvg` é `Option`: não existe score
+congelado em 2025, o que **não é a mesma coisa** que ter tido média zero. A linha de cima, "Aportes
+2025 · R$ 0", é um zero MEDIDO — e as duas apareciam com o mesmo desenho. O ausente passou a ser um
+traço tracejado, que alinha a linha sem se confundir com o trilho segmentado do zero real. Dois fatos
+diferentes, dois desenhos diferentes — o mesmo princípio do ADR-0091, e o mesmo da semana futura que
+não é desenhada no ADR-0100.
+
+**Nota sobre uma imprecisão aceita.** Com a escala por linha, "2 tarefas contra 0" enche a barra tanto
+quanto "520 hábitos contra 0". É a leitura correta *dentro* da linha (um é tudo, o outro é nada) e os
+números estão ao lado, mas o olho compara entre linhas. Normalizar entre linhas é impossível — não há
+régua comum entre minutos, reais e contagens — e a alternativa seria não ter barra nenhuma, que é
+justamente o que escondia o tamanho. Fica declarado no "ⓘ" em vez de disfarçado.

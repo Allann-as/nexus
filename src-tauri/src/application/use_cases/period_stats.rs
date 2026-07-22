@@ -5,10 +5,10 @@
 //! mês cheio contra um mês pela metade mentiria a variação. As setas mostram o
 //! ritmo, não um placar torto. Ver ADR-0062.
 //!
-//! Cinco métricas: estudo (min), foco (min), aportes (centavos), tarefas
-//! concluídas e o score médio. As quatro primeiras vêm de uma query só
-//! (`PeriodStatsRepository`); o score médio é somado do ledger aqui, parseando o
-//! payload — o padrão do resto do código.
+//! Seis métricas: estudo (min), foco (min), aportes (centavos), tarefas
+//! concluídas, hábitos cumpridos e o score médio. As cinco primeiras vêm de uma
+//! query só (`PeriodStatsRepository`); o score médio é somado do ledger aqui,
+//! parseando o payload — o padrão do resto do código.
 
 use std::sync::Arc;
 
@@ -33,6 +33,7 @@ pub struct PeriodStats {
     pub focus_minutes: i64,
     pub contribution_cents: i64,
     pub tasks_completed: i64,
+    pub habits_done: i64,
     /// Média do Nexus Score congelado no período — `None` sem dias com score.
     pub score_avg: Option<f64>,
 }
@@ -68,6 +69,7 @@ impl PeriodStatsService {
             focus_minutes: raw.focus_minutes,
             contribution_cents: raw.contribution_cents,
             tasks_completed: raw.tasks_completed,
+            habits_done: raw.habits_done,
             score_avg: self.avg_score(from, to)?,
         })
     }

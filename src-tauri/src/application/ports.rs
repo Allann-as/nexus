@@ -1944,6 +1944,9 @@ pub struct RawPeriodStats {
     pub focus_minutes: i64,
     pub contribution_cents: i64,
     pub tasks_completed: i64,
+    /// Marcações de hábito com `done` no intervalo. O app é centrado em hábitos
+    /// e o comparativo os ignorava por inteiro.
+    pub habits_done: i64,
 }
 
 pub trait PeriodStatsRepository: Send + Sync {

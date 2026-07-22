@@ -1,7 +1,9 @@
 //! Agregados de período em SQLite (ARSENAL) — as somas do comparativo.
 //!
-//! Uma query, quatro subselects, todos por intervalo de `day`/`happened_on`
-//! (colunas indexadas): estudo, foco, aportes e tarefas concluídas. O comparativo
+//! Uma query, cinco subselects, todos por intervalo de `day`/`happened_on`
+//! (colunas indexadas): estudo, foco, aportes, tarefas concluídas e marcações de
+//! hábito cumpridas — esta última acrescentada na fase 5, porque num app
+//! centrado em hábitos o comparativo de períodos os ignorava. O comparativo
 //! só cruza DOIS períodos adjacentes, então o custo é limitado ao que se pergunta
 //! — não paga rollup por isso (ADR-0062). O score médio, que precisa parsear o
 //! payload do ledger, é somado no serviço (o padrão do resto do código).
@@ -37,7 +39,9 @@ impl PeriodStatsRepository for SqlitePeriodStatsRepository {
                      WHERE happened_on BETWEEN ?1 AND ?2),
                    (SELECT COUNT(*) FROM ledger
                      WHERE event_type = 'completed' AND entity_kind = 'task'
-                       AND day BETWEEN ?1 AND ?2)",
+                       AND day BETWEEN ?1 AND ?2),
+                   (SELECT COUNT(*) FROM habit_ticks
+                     WHERE status = 'done' AND day BETWEEN ?1 AND ?2)",
                 params![from_day, to_day],
                 |r| {
                     Ok(RawPeriodStats {
@@ -45,6 +49,7 @@ impl PeriodStatsRepository for SqlitePeriodStatsRepository {
                         focus_minutes: r.get(1)?,
                         contribution_cents: r.get(2)?,
                         tasks_completed: r.get(3)?,
+                        habits_done: r.get(4)?,
                     })
                 },
             )?;
