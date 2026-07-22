@@ -78,6 +78,16 @@ pub struct BackupStatus {
     /// A UI mostra "protegido por senha" sem NUNCA devolver a senha em si.
     pub has_password: bool,
     pub sync_dir: Option<String>,
+    /// A política de retenção VIGENTE — 7 diários / 4 semanais / 12 mensais.
+    ///
+    /// Vai no status porque a tela precisa dizer o que sobrevive à poda, e a
+    /// frase dela estava com os três números escritos à mão. Numa tela de
+    /// backup, uma promessa desatualizada sobre o que é guardado é a pior
+    /// espécie de número copiado: ninguém descobre que ela é falsa até precisar
+    /// do backup que a poda levou. Ver ADR-0108.
+    pub keep_daily: usize,
+    pub keep_weekly: usize,
+    pub keep_monthly: usize,
 }
 
 /// O marcador de um restauro pendente, lido no boot antes de o banco abrir.
@@ -205,6 +215,10 @@ impl BackupEngine {
             enabled: cfg.enabled,
             has_password: cfg.password.is_some(),
             sync_dir: cfg.sync_dir,
+            // Direto dos `const` do domínio que a poda obedece — uma fonte só.
+            keep_daily: crate::domain::backup::KEEP_DAILY,
+            keep_weekly: crate::domain::backup::KEEP_WEEKLY,
+            keep_monthly: crate::domain::backup::KEEP_MONTHLY,
         })
     }
 

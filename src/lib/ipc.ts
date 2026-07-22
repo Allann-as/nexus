@@ -2375,6 +2375,10 @@ export interface BackupStatus {
   /** A UI mostra "protegido por senha" — a senha em si NUNCA volta do backend. */
   hasPassword: boolean;
   syncDir: string | null;
+  /** A política de retenção vigente, direto dos `const` da poda (ADR-0108). */
+  keepDaily: number;
+  keepWeekly: number;
+  keepMonthly: number;
 }
 
 /** Faz um backup agora, com a config corrente (cifra e copia p/ sync se houver). */

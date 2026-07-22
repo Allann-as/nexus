@@ -4474,3 +4474,53 @@ mais os 9 fatos que não são node. Duas tabelas do mesmo vocabulário divergem 
 ganha a entrada nova — e foi exatamente assim que a Timeline passou três versões escrevendo
 `achievement_unlocked` na tela (ADR-0104). Foram para `lib/kindLabel.ts`, como os metais foram para
 `design-system/tiers.ts` (ADR-0104) e o gesto armado para `ArmedDelete` (v1.2).
+
+---
+
+## ADR-0108 — Configurações: a tela que explicava uma marca de duas versões atrás
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), fase 5 — grupo C, Configurações**
+
+**Contexto.** O plano chamava as Configurações de "a mais trabalhosa", listando oito seções. A
+auditoria achou as oito **já implementadas** — Perfil, Aparência (tema/densidade/reduzir movimento/
+bandeja), Atalhos com busca, Backup & Dados (último backup, retenção, pasta de sync, exportação,
+restauração, "Seus dados", "Começar do zero" com confirmação digitada), Manutenção (quick_check /
+rebuild FTS / VACUUM), Segurança, Gamificação e Sobre. Não havia o que construir. Havia o que
+**conferir** — e a conferência achou três coisas que a tela afirmava e o app desmentia.
+
+**Defeito 1 — a aba "Sobre" descrevia uma marca que não existe há duas versões.** O card dizia *"O
+astrolábio: anéis concêntricos são as Esferas da vida; o núcleo é o nexo"* e citava o **ADR-0043** —
+ao lado de um `NexusMark` que já era outro desenho. O astrolábio saiu na v1.2 por não sobreviver a
+32px (ADR-0070); a bússola que o substituiu saiu na v1.3 por ser a marca do Midnight; o emblema atual
+é o **SINAL-N** (ADR-0074). A única tela do app cujo trabalho é dizer o que o NEXUS É estava
+explicando um desenho que o usuário não estava vendo, e apontando para a decisão revogada. É o tipo
+de defeito que nenhum teste pega e nenhuma refatoração encosta: prosa correta no dia em que foi
+escrita.
+
+**Defeito 2 — a retenção de backup estava escrita à mão.** O card do backup automático prometia
+*"Retenção 7 diários · 4 semanais · 12 mensais"* com os três números digitados na frase; eles são
+`KEEP_DAILY`/`KEEP_WEEKLY`/`KEEP_MONTHLY` de `domain::backup`, que a poda obedece. É a mesma classe
+do "+10 XP" do toast e da tabela de pontos em prosa (ADR-0105) — mas aqui é pior: numa tela de
+**backup**, uma promessa desatualizada sobre o que sobrevive à poda só é descoberta no dia em que se
+precisa do backup que a poda levou. Os três entraram no `BackupStatus`, direto dos `const`. Sem
+status, a frase **omite** a política em vez de chutá-la.
+
+**Defeito 3 — o catálogo de atalhos estava incompleto.** A parte de navegação já vinha da fonte única
+(`JUMP_TARGETS`, o mesmo array que o teclado obedece) — um acerto antigo. Mas a lista fixa ao redor
+esquecia **`Ctrl+L`** (bloquear a tela, existe desde o M5.5 em `App.tsx`) e todo o ritual de triagem
+do Inbox (T/H/P/⌫/1–9/0). Numa tela cuja única função é ser o catálogo completo, um atalho ausente é
+a tela afirmando que ele não existe: quem procurasse "bloquear" ou "descartar" concluiria que não há
+tecla. A régua do rodapé do Inbox mostra as mesmas teclas — mas ela só existe DENTRO do Inbox, e o
+catálogo existe para responder de fora.
+
+**O que NÃO mudou, e por quê.** A Gamificação já lia a tabela de pontos e a curva de nível do backend
+(`xp_reference`), que é exatamente o que o plano pedia ("sem copiar número em prosa") — o defeito
+dessa classe estava na tela de Conquistas, e foi corrigido no ADR-0105. As oito seções também não
+foram reorganizadas: a navegação lateral com o conteúdo à direita já é o "hub centralizado, no nível
+das esferas" que o plano descreve, e mexer no que funciona para exibir movimento é o oposto do
+método.
+
+**Um lembrete para a Fase 7.** A aba Sobre mostra `versão 1.2.0`, lido do `tauri.conf.json`. Está
+correto **hoje** — a v1.3.0 ainda não foi lançada. A Fase 7 precisa subir esse número junto com a
+tag, senão o app instalado se apresentará com a versão anterior no primeiro lugar em que alguém vai
+conferir.

@@ -579,7 +579,15 @@ function BackupSettings() {
   return (
     <SettingCard
       title="Backup automático"
-      hint="Um snapshot por dia na abertura do app. Retenção 7 diários · 4 semanais · 12 mensais."
+      /* A retenção vem do BACKEND, dos mesmos `const` que a poda obedece. Os
+         três números estavam escritos nesta frase à mão — e numa tela de backup
+         uma promessa desatualizada sobre o que sobrevive só é descoberta quando
+         já é tarde. Sem status, a frase omite a política em vez de chutá-la. */
+      hint={
+        s
+          ? `Um snapshot por dia na abertura do app. Retenção ${s.keepDaily} diários · ${s.keepWeekly} semanais · ${s.keepMonthly} mensais.`
+          : "Um snapshot por dia na abertura do app."
+      }
     >
       <div className="flex flex-col gap-4">
         {/* Último backup + o interruptor */}
@@ -1130,12 +1138,22 @@ function AboutSection() {
         </div>
       </Card>
 
-      <SettingCard title="A marca" hint="O astrolábio: anéis concêntricos são as Esferas da vida; o núcleo é o nexo.">
+      {/* Esta descrição estava DUAS marcas atrasada: falava do astrolábio (anéis
+          concêntricos, núcleo-nexo) ao lado de um logo que já era outro. O
+          astrolábio saiu na v1.2 por não sobreviver a 32px (ADR-0070), a bússola
+          que o substituiu saiu na v1.3 por ser a marca do Midnight, e o emblema
+          atual é o SINAL-N (ADR-0074). A tela ficou explicando um desenho que o
+          usuário não estava vendo — e citando o ADR revogado. */}
+      <SettingCard
+        title="A marca"
+        hint="O SINAL-N: o N desenhado como um traço de sinal, com dois nós acesos na diagonal."
+      >
         <div className="flex items-center gap-4">
           <NexusMark size={40} />
           <p className="text-[12.5px] text-[var(--text-secondary)]">
-            O NEXUS é o instrumento com que se navega a própria vida. A marca não se tinge com o
-            tema nem com a Esfera — é um ativo de identidade única (ADR-0043).
+            O NEXUS é o instrumento com que se opera a própria vida — o traço é o sinal, os nós são
+            o que ele conecta. A marca não se tinge com o tema nem com a Esfera: é um ativo de
+            identidade única (ADR-0074), e a mesma geometria vive no ícone do app e no splash.
           </p>
         </div>
       </SettingCard>
