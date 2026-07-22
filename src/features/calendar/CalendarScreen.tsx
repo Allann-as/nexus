@@ -33,12 +33,13 @@ import {
   type Occurrence,
   type Recurrence,
 } from "../../lib/ipc";
-import { MonthGrid, type DayItem } from "./MonthGrid";
+import { MAX_VISIBLE, MonthGrid, type DayItem } from "./MonthGrid";
 import { EventModal, type EventDraft } from "./EventModal";
 import { TimeGrid, type DraftBlock } from "./TimeGrid";
 import {
   addDays,
   addMonths,
+  fromDay,
   hhmm,
   monthGrid,
   monthLabel,
@@ -245,7 +246,10 @@ export function CalendarScreen() {
           // O `N` cria no slot focado: a próxima hora cheia do dia selecionado,
           // que é o que "novo evento" quer dizer quando não há mouse.
           const day = selected ?? anchor;
-          const at = new Date(day);
+          // `fromDay`, nunca `new Date(day)`: uma string 'AAAA-MM-DD' é parseada
+          // como meia-noite UTC, que em UTC-3 é 21h do dia ANTERIOR — o `N`
+          // criava o evento um dia antes do selecionado. Ver ADR-0097.
+          const at = fromDay(day);
           at.setHours(new Date().getHours() + 1, 0, 0, 0);
           setDraft({ startsAt: at.getTime(), endsAt: at.getTime() + 3_600_000 });
           break;
@@ -340,7 +344,8 @@ export function CalendarScreen() {
             size="sm"
             icon={Plus}
             onClick={() => {
-              const at = new Date(selected ?? anchor);
+              // Mesma armadilha do atalho `N`: dia local, não meia-noite UTC.
+              const at = fromDay(selected ?? anchor);
               at.setHours(new Date().getHours() + 1, 0, 0, 0);
               setDraft({ startsAt: at.getTime(), endsAt: at.getTime() + 3_600_000 });
             }}
@@ -361,9 +366,11 @@ export function CalendarScreen() {
             onSelectDay={(day) => {
               setSelected(day);
               // Um dia com mais do que cabe abre o popover; a grade já mostra o
-              // "+N" e o clique é o pedido de ver o resto.
+              // "+N" e o clique é o pedido de ver o resto. O limite vem da
+              // GRADE (`MAX_VISIBLE`), não de um 3 escrito aqui: era essa cópia
+              // que deixava o dia com exatamente 3 esconder um em silêncio.
               const items = itemsByDay.get(day) ?? [];
-              if (items.length > 3) setOverflowDay(day);
+              if (items.length > MAX_VISIBLE) setOverflowDay(day);
             }}
             onOpenItem={(id) => setOpened(byKey.get(id) ?? null)}
           />
@@ -470,7 +477,9 @@ function DayOverflow({
           <header className="mb-3 flex items-center gap-2">
             <CalendarDays size={14} className="text-[var(--text-tertiary)]" />
             <h3 className="text-[13px] font-semibold text-[var(--text-primary)]">
-              {new Date(day).getDate() + " de " + monthLabel(day).split(" de ")[0]}
+              {/* `fromDay` e não `new Date(day)`: era isto que fazia o popover do
+                  dia 30 se anunciar como "29 de julho" (ADR-0097). */}
+              {fromDay(day).getDate() + " de " + monthLabel(day).split(" de ")[0]}
             </h3>
             <span className="tabular ml-auto text-[11px] text-[var(--text-tertiary)]">
               {occurrences.length}

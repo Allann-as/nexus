@@ -3792,3 +3792,53 @@ muda. Ambas atualizadas — e fica a regra: **mexeu nas seções, procure quem a
 
 **Com isto a FASE 4 fecha**: as seis Esferas (Saúde, Finanças, Objetivos, Carreira, Estudos, Casa) estão
 no idioma COCKPIT, dirigidas e fotografadas.
+
+---
+
+## ADR-0097 — O Calendário: quatro defeitos, e três deles eram a mesma classe
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), fase 5 — Calendário**
+
+**Contexto.** O ADR-0094 anotou, sem corrigir, que uma célula do mês com três compromissos desenhava
+dois. A fase 5 começa por aqui. O levantamento mostrou que a tela já tinha quase tudo que o plano pedia
+— trilhas de cor por Esfera, ponto âmbar de conflito, visões mês/semana/dia, criar/abrir/**excluir** —
+e que o trabalho era **consertar**, não construir.
+
+**Defeito 1 — a constante que morava em dois arquivos.** O `MonthGrid` cortava em `MAX_VISIBLE = 3` e o
+`CalendarScreen` só abria o popover do dia quando `items.length > 3`, escrito à mão. Num dia com
+**exatamente três**, os dois concordavam em não fazer nada: sem "+N" (3−3 = 0), sem popover (3 não é
+> 3), e o terceiro item cortado pelo `overflow-hidden`. **Um número que duas telas precisam saber tem
+que ter um dono só** — `MAX_VISIBLE` passou a ser exportado, e o `CalendarScreen` o importa.
+
+**Defeito 2 — o número não era o que cabia.** `MAX_VISIBLE` valia 3, mas a linha da grade tinha ~93px
+(`height: 560` ÷ 6) e comportava dois. A conta achava visível o que o CSS cortava. Duas correções: o
+valor virou **2**, e a altura mágica virou `flex-1` — a grade ocupa o que a janela dá, em vez de um
+número escrito uma vez para uma tela só.
+
+**Defeito 3 — o aviso era a primeira coisa cortada.** Mesmo com o "+N" calculado certo, ele era a última
+linha DENTRO do bloco `overflow-hidden` — então sumia exatamente como sumiam os itens que ele existia
+para denunciar. Saiu para fora do contêiner, como irmão `shrink-0`: **a linha dele é garantida, e quem
+cede espaço são os itens** (que é o que o `MAX_VISIBLE` já controla). Virou botão, não rótulo — clicar
+pede a lista do dia —, e a contagem total que só aparecia no *hover* saiu: informação que exige o mouse
+por cima é informação que não existe para quem lê o mês.
+
+**Defeito 4 — `new Date("2026-07-30")` é meia-noite UTC.** O popover do dia 30 se anunciava como
+**"29 de julho"**. O ECMAScript parseia uma string só-data como UTC; em UTC-3 aquele instante é 21h do
+dia anterior, e `.getDate()` devolve 29. O mesmo `new Date(day)` estava em mais dois lugares, e ali o
+estrago era pior que um rótulo: o `+ Novo` e o atalho `N` faziam `setHours()` sobre esse instante e
+**criavam o evento no dia anterior ao selecionado**. Os três passaram a usar `fromDay`, que já existia
+em `grid.ts` e monta a data com `new Date(y, m-1, d)` — meia-noite LOCAL.
+
+A armadilha virou **teste** (`grid.test.ts`), com o motivo escrito: é um defeito que não aparece no fuso
+de quem escreve o código se ele estiver a leste de Greenwich, e some da leitura atenta porque
+`new Date(day)` parece óbvio.
+
+**Um quinto conserto, de simetria.** O modal do evento mostrava a categoria e não a `notes`. A mesma
+prova exibia "trazer calculadora" na aba da Faculdade e escondia no Calendário — o mesmo dado, duas
+telas, uma delas mentindo por omissão (a regra do ADR-0093).
+
+**Nota de método.** Os defeitos 2 e 3 foram encontrados **um de cada vez, na dirigida**: corrigi o
+número, fotografei, o "+N" apareceu cortado; corrigi a altura, fotografei, ainda cortado; só então vi
+que o problema era estrutural (ele estava dentro do bloco que corta) em vez de continuar raspando
+pixels. **Três fotos, três hipóteses, e a terceira é que era a certa** — nenhuma leitura de código teria
+separado as três.

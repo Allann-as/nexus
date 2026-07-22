@@ -43,8 +43,8 @@ export function MonthGrid({
   const days = monthGrid(anchor);
 
   return (
-    <div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
-      <div className="grid grid-cols-7 border-b border-[var(--border-subtle)]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+      <div className="grid shrink-0 grid-cols-7 border-b border-[var(--border-subtle)]">
         {WEEKDAY_SHORT.map((w) => (
           <div
             key={w}
@@ -55,9 +55,17 @@ export function MonthGrid({
         ))}
       </div>
 
-      {/* `grid-rows-6` fixo + `auto-rows-fr`: as seis linhas dividem a altura em
-          partes iguais, então uma semana cheia não estica só a linha dela. */}
-      <div className="grid grid-cols-7 grid-rows-6" style={{ height: 560 }}>
+      {/* `grid-rows-6` fixo: as seis linhas dividem a altura em partes iguais,
+          então uma semana cheia não estica só a linha dela.
+
+          A altura era `560` no código — um número mágico que dava ~93px por
+          linha, e 93px não comportam o cabeçalho do dia + dois compromissos + o
+          "+N". O aviso de "tem mais coisa aqui" era ele próprio cortado pelo
+          `overflow-hidden`, que é a mesma classe de defeito que ele existia para
+          consertar. Agora a grade OCUPA a altura disponível (`flex-1`), então a
+          célula cresce com a janela em vez de ficar presa a um número escrito
+          uma vez. Ver ADR-0097. */}
+      <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6">
         {days.map((day) => (
           <DayCell
             key={day}
@@ -75,8 +83,20 @@ export function MonthGrid({
   );
 }
 
-/** Quantos itens cabem numa célula antes do "+N". Acima disso vira mingau. */
-const MAX_VISIBLE = 3;
+/**
+ * Quantos itens uma célula desenha antes do "+N".
+ *
+ * **Exportada de propósito**: o `CalendarScreen` decide com ela quando abrir o
+ * popover do dia. Enquanto o número morava nos dois arquivos, os dois discordavam
+ * — a grade cortava em 3 e a tela só abria o popover acima de 3, então um dia com
+ * EXATAMENTE 3 compromissos escondia um sem "+N", sem popover e sem aviso. Um
+ * número que duas telas precisam saber tem que ter um dono só (ADR-0097).
+ *
+ * E o valor é 2, não 3, porque é o que de fato CABE: a linha da grade tem ~93px
+ * (560 ÷ 6), e o cabeçalho do dia mais três itens passam disso — o terceiro era
+ * cortado pelo `overflow-hidden` enquanto a conta achava que ele estava visível.
+ */
+export const MAX_VISIBLE = 2;
 
 function DayCell({
   day,
@@ -102,7 +122,9 @@ function DayCell({
     <div
       onClick={onSelect}
       className={cx(
-        "group relative flex min-w-0 cursor-pointer flex-col gap-0.5 border-r border-b border-[var(--border-subtle)] p-1.5",
+        // `p-1` e não `p-1.5`: os 4px de folga a mais eram exatamente o que
+        // faltava para o "+N" caber na célula (ADR-0097).
+        "group relative flex min-w-0 cursor-pointer flex-col gap-0.5 border-r border-b border-[var(--border-subtle)] p-1",
         "transition-colors duration-[var(--dur-fast)]",
         // As bordas do mês existem para a semana não ter buraco, mas elas não
         // são o assunto: ficam apagadas para o mês ainda ser um bloco visual.
@@ -113,7 +135,7 @@ function DayCell({
       <div className="flex items-center justify-between">
         <span
           className={cx(
-            "tabular grid size-6 place-items-center rounded-full text-[11px]",
+            "tabular grid size-5 place-items-center rounded-full text-[10.5px]",
             isToday
               ? "bg-[var(--accent)] font-semibold text-white"
               : outside
@@ -123,11 +145,10 @@ function DayCell({
         >
           {dayNumber}
         </span>
-        {items.length > 0 && (
-          <span className="tabular text-[9px] text-[var(--text-tertiary)] opacity-0 transition-opacity group-hover:opacity-100">
-            {items.length}
-          </span>
-        )}
+        {/* A contagem total morava aqui e só aparecia no HOVER — informação que
+            só existe quando o mouse passa por cima é informação que não existe
+            para quem está lendo o mês. Quem avisa que há mais é o "+N" abaixo,
+            que é permanente e clicável. */}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
@@ -172,12 +193,27 @@ function DayCell({
           </button>
         ))}
 
-        {hidden > 0 && (
-          <span className="px-1 text-[9px] text-[var(--text-tertiary)]">
-            +{hidden}
-          </span>
-        )}
       </div>
+
+      {/* O "+N" fica FORA do contêiner que corta, como irmão `shrink-0`.
+          Dentro dele, ele era a última linha de um bloco `overflow-hidden` e
+          virava a primeira coisa a ser cortada — o aviso de "tem mais coisa
+          aqui" sumindo pela mesma razão que ele existe para denunciar. Aqui a
+          linha dele é garantida, e quem cede espaço são os itens (que é o que o
+          `MAX_VISIBLE` já controla).
+
+          E é BOTÃO, não rótulo: clicar pede a lista completa do dia. */}
+      {hidden > 0 && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+          className="shrink-0 rounded-[4px] px-1 text-left text-[9.5px] leading-[13px] font-medium text-[var(--text-tertiary)] transition-colors duration-[var(--dur-fast)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+        >
+          +{hidden} {hidden === 1 ? "outro" : "outros"}
+        </button>
+      )}
     </div>
   );
 }

@@ -277,3 +277,32 @@ describe("durationLabel", () => {
     expect(durationLabel(-5_000)).toBe("0min");
   });
 });
+
+describe("fromDay vs new Date(dia)", () => {
+  /**
+   * A armadilha que o ADR-0097 documenta, presa como teste.
+   *
+   * `new Date("2026-07-30")` é parseada pelo ECMAScript como MEIA-NOITE UTC. Em
+   * qualquer fuso a oeste de Greenwich (o Brasil inteiro), o instante resultante
+   * cai no dia ANTERIOR em horário local — então `.getDate()` devolve 29 para a
+   * string "30", e `.setHours()` grava o evento um dia antes do escolhido.
+   *
+   * Os dois defeitos reais que isto causou: o popover do dia 30 se anunciando
+   * como "29 de julho", e o "+ Novo" criando no dia errado.
+   */
+  it("fromDay devolve o dia que está escrito na string", () => {
+    for (const day of ["2026-07-30", "2026-01-01", "2026-12-31", "2026-02-28"]) {
+      const [, , dd] = day.split("-").map(Number);
+      expect(fromDay(day).getDate()).toBe(dd);
+    }
+  });
+
+  it("fromDay nasce à meia-noite LOCAL, que é o que setHours espera", () => {
+    const d = fromDay("2026-07-30");
+    expect(d.getHours()).toBe(0);
+    expect(d.getMinutes()).toBe(0);
+    // O dia sobrevive a marcar a hora — era aqui que o "+ Novo" escorregava.
+    d.setHours(14, 0, 0, 0);
+    expect(d.getDate()).toBe(30);
+  });
+});

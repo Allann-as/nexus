@@ -231,6 +231,16 @@ function ExistingEvent({
           <p className="text-[13px] text-[var(--text-secondary)]">{existing.category}</p>
         </Field>
       )}
+      {/* A observação ("trazer calculadora") aparecia na aba da Faculdade e não
+          aqui — o MESMO evento mostrando um dado numa tela e escondendo na
+          outra. É a regra de simetria do ADR-0093 aplicada ao Calendário. */}
+      {existing.notes && (
+        <Field label="Observação">
+          <p className="text-[13px] leading-snug text-[var(--text-secondary)]">
+            {existing.notes}
+          </p>
+        </Field>
+      )}
       {existing.status === "moved" && (
         <p className="text-[12px] text-[var(--text-tertiary)]">
           Esta ocorrência foi remarcada — ela não segue mais a regra da série.
