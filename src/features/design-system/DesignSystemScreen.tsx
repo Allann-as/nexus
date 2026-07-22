@@ -40,6 +40,21 @@ import {
 } from "../../design-system/instruments";
 import { NexusMark } from "../../design-system/NexusMark";
 
+/**
+ * Os ladrilhos de conta da vitrine: as seis contas semeadas pela 0005 (pelo id
+ * real, que é como o app resolve a logo) e uma sétima sem marca, para o
+ * monograma de fallback ficar à vista ao lado das logos.
+ */
+const BANK_SHOWCASE: Array<[string, string]> = [
+  ["acct-santander", "Santander"],
+  ["acct-bradesco", "Bradesco"],
+  ["acct-nubank", "Nubank"],
+  ["acct-itau", "Itaú"],
+  ["acct-btg", "BTG Banking"],
+  ["acct-btg-invest", "BTG Investimentos"],
+  ["acct-livre-01", "Carteira"],
+];
+
 const SPARK = [0.2, 0.35, 0.3, 0.5, 0.45, 0.62, 0.58, 0.7, 0.66, 0.82, 0.9];
 const BARS = [0.3, 0.6, 0.45, 0.8, 0.7, 0.9, 0.55, 0.4, 0.75, 1, 0.65, 0.85];
 
@@ -67,8 +82,13 @@ export function DesignSystemScreen() {
   const [bank, setBank] = useState("nubank");
   const [chip, setChip] = useState<string | null>("acoes");
 
+  // `h-full overflow-y-auto` como TODA tela: o `<main>` do Shell é
+  // `overflow-hidden` de propósito (cada tela é dona da própria rolagem), e esta
+  // era a única que não declarava a sua — a vitrine nunca rolou, e tudo abaixo da
+  // primeira dobra era inalcançável na dirigida. Descoberto ao conferir os
+  // ladrilhos de banco, que ficam bem lá embaixo.
   return (
-    <div className="nx-page nx-enter min-h-full pb-16">
+    <div className="nx-page nx-enter h-full overflow-y-auto pb-16">
       <PageHeader
         title="Cockpit — Design System"
         subtitle="O banco de provas da linguagem visual v1.3. Toda peça-instrumento, uma vez."
@@ -222,14 +242,19 @@ export function DesignSystemScreen() {
               </div>
               <div>
                 <MonoLabel>Contas</MonoLabel>
+                {/* As seis contas da 0005 com a logo, mais os dois fallbacks: uma
+                    conta sem marca conhecida (monograma) e o "+ conta". A vitrine
+                    tem que mostrar os TRÊS degraus da resolução, senão só se
+                    descobre que o fallback quebrou quando ele aparece em produção. */}
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {["Nubank", "BTG", "Itaú", "Inter"].map((b) => (
+                  {BANK_SHOWCASE.map(([id, nome]) => (
                     <BankTile
-                      key={b}
-                      name={b}
+                      key={id}
+                      name={nome}
+                      bankId={id}
                       balance={"R$ 1.500"}
-                      selected={bank === b.toLowerCase()}
-                      onClick={() => setBank(b.toLowerCase())}
+                      selected={bank === id}
+                      onClick={() => setBank(id)}
                     />
                   ))}
                   <BankTile name="conta" add onClick={() => {}} />

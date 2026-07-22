@@ -216,6 +216,7 @@ export function AporteTerminal({
                 <BankTile
                   key={a.id}
                   name={a.name}
+                  bankId={a.id}
                   selected={accountId === a.id}
                   onClick={() => setAccountId(a.id)}
                   balance={

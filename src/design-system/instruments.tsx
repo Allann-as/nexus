@@ -18,6 +18,8 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
+import { BankGlyphMark } from "./assets/banks";
+import { bankBrand, type BankBrand } from "./bankBrand";
 import { cx, Button } from "./primitives";
 import { useCountUp } from "./useCountUp";
 
@@ -546,35 +548,22 @@ export function SegToggle<T extends string>({
 /* ============================================================
    BankTile — a conta com a marca do banco
    ------------------------------------------------------------
-   O terminal de aporte lista os bancos como ladrilhos. Enquanto o dono não cola
-   as logos oficiais, o monograma na cor da marca já dá identidade. O registro
-   abaixo tem as cores que o plano fixou; "+ conta" é o genérico.
+   O terminal de aporte e o Painel de Finanças listam as contas como ladrilhos.
+   O emblema é a LOGO da instituição (`assets/banks`), branca sobre a cor da
+   marca — reconhecer é mais barato que decifrar um monograma.
+
+   A resolução é por `accounts.id`, NÃO pelo nome exibido. O nome é do usuário:
+   ele pode chamar a conta do Nubank de "conta principal" e a logo tem que
+   continuar lá. O id das seis contas semeadas pela 0005 é estável para sempre
+   (ADR-0014 fixou ids legíveis exatamente para isso).
+
+   Conta criada pelo usuário não tem id semeado: cai no nome, e depois no
+   monograma na cor da conta. Os três degraus existem para que NENHUM caminho
+   quebre — logo, nome, monograma. A resolução em si vive em `bankBrand.ts`.
    ============================================================ */
-export const BANK_BRANDS: Record<string, { color: string; short: string }> = {
-  nubank: { color: "#820AD1", short: "Nu" },
-  btg: { color: "#00234B", short: "BTG" },
-  santander: { color: "#EC0000", short: "St" },
-  itau: { color: "#EC7000", short: "Itaú" },
-  bradesco: { color: "#CC092F", short: "Bra" },
-  inter: { color: "#FF7A00", short: "Int" },
-};
-
-/** Resolve a marca por nome livre (case/acentos-insensível), com fallback fósforo. */
-export function bankBrand(name: string): { color: string; short: string } {
-  const key = name
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z]/g, "");
-  for (const k of Object.keys(BANK_BRANDS)) {
-    if (key.includes(k)) return BANK_BRANDS[k];
-  }
-  const short = name.trim().slice(0, 2).toUpperCase() || "•";
-  return { color: "var(--accent)", short };
-}
-
 export function BankTile({
   name,
+  bankId,
   balance,
   selected = false,
   onClick,
@@ -582,6 +571,8 @@ export function BankTile({
   className,
 }: {
   name: string;
+  /** O `accounts.id` — a chave estável da logo. Sem ele, resolve pelo nome. */
+  bankId?: string;
   /** Legenda opcional sob o nome (ex.: saldo). */
   balance?: ReactNode;
   selected?: boolean;
@@ -590,7 +581,9 @@ export function BankTile({
   add?: boolean;
   className?: string;
 }) {
-  const brand = add ? { color: "var(--text-tertiary)", short: "+" } : bankBrand(name);
+  const brand: BankBrand = add
+    ? { color: "var(--text-tertiary)", short: "+" }
+    : bankBrand(name, bankId);
   return (
     <button
       onClick={onClick}
@@ -608,7 +601,10 @@ export function BankTile({
         className="grid size-8 shrink-0 place-items-center rounded-[var(--radius-sm)] font-mono text-[11px] font-bold text-white"
         style={{ background: brand.color }}
       >
-        {brand.short}
+        {/* 23 num quadrado de 32: a margem óptica já vive no viewBox de cada marca,
+            então aqui só sobra o respiro da borda. Menos que isso e o "btg" (uma
+            letra dentro de um anel) fecha. */}
+        {brand.glyph ? <BankGlyphMark glyph={brand.glyph} size={23} /> : brand.short}
       </span>
       <div className="min-w-0">
         <div className="truncate text-[13px] font-medium text-[var(--text-primary)]">{name}</div>

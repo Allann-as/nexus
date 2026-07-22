@@ -322,8 +322,11 @@ function Allocation({ buckets }: { buckets: Bucket[] }) {
  *
  * Eram barras relativas: dava para ver qual banco tem mais, não quanto cada um
  * tem — e "quanto tem em cada" é a pergunta. O `BankTile` é o MESMO componente
- * que o Terminal de aporte usa para escolher a conta, com o mesmo monograma na
- * cor da marca: o banco se reconhece pela mesma forma nas duas telas.
+ * que o Terminal de aporte usa para escolher a conta, com a mesma logo na cor
+ * da marca: o banco se reconhece pela mesma forma nas duas telas.
+ *
+ * `b.key` é o `accounts.id` (o backend agrupa por conta) — por isso serve de
+ * `bankId` e a logo sobrevive a um `name` renomeado.
  *
  * A ordem é por saldo, do maior para o menor. Sem barra: aqui não há proporção a
  * comunicar (a alocação por classe já faz isso, e é ela que responde "onde meu
@@ -334,7 +337,7 @@ function BankBalances({ buckets }: { buckets: Bucket[] }) {
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
       {ordered.map((b) => (
-        <BankTile key={b.key} name={b.label} balance={formatMoney(b.cents)} />
+        <BankTile key={b.key} name={b.label} bankId={b.key} balance={formatMoney(b.cents)} />
       ))}
     </div>
   );

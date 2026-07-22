@@ -403,6 +403,8 @@ design-system/
   charts.tsx      Sparkline, Gauge, ProgressRing, ProgressBar (SVG — ADR-0018)
   instruments.tsx COCKPIT (v1.3): SegBar, Ring, BarSpark, StatusList, Heatmap,
                   Terminal, Chip, SegToggle, BankTile, SphereHeader (ADR-0074)
+  assets/banks    as marcas dos bancos — GERADO por script, só dado (ADR-0085)
+  bankBrand.ts    a politica: id semeado -> nome -> monograma. Testado.
   useSphereColor  areaId -> cor, num lugar só. Nenhuma tela reimplementa.
   Checkbox.tsx    o gesto mais repetido do app
   useCountUp.ts   rAF, respeita prefers-reduced-motion, zero animação em idle

@@ -3193,3 +3193,76 @@ não sustentam) foi aplicada de saída em dois pontos, sem esperar a tela: o til
 elemento vivo (uma contagem de categorias não tem série nem fração), e o hint "X concentra N%" **não é
 dito quando há empate no topo** — o desempate de um `sort` não vira afirmação sobre o dinheiro de
 ninguém.
+
+---
+
+## ADR-0085 — A logo do banco entra no ladrilho, e a chave é o `accounts.id` (nunca o nome)
+
+**Data:** 2026-07-21 · **Status:** aceito · **v1.3 (COCKPIT), fase 4 — tarefa 0**
+
+**Contexto.** O `BankTile` nasceu no ADR-0084 com um monograma na cor da marca ("Nu" sobre roxo, "St"
+sobre vermelho) e um comentário no código dizendo, com todas as letras, que aquilo valia *"enquanto o
+dono não cola as logos oficiais"*. O dono colou. Este ADR fecha aquele provisório.
+
+**Decisão 1 — a resolução é pelo `accounts.id`, não pelo `accounts.name`.** É a decisão que importa, e
+ela não é sobre desenho. O nome de uma conta **pertence ao usuário**: ele pode chamar a conta do Nubank
+de "conta principal", "salário" ou "a roxa". Se a logo fosse resolvida pelo nome — que é como o
+`bankBrand` original funcionava, com um `includes` sobre o texto — renomear a conta **apagaria a marca
+dela**, e o usuário não teria como ligar uma coisa à outra. O id das seis contas semeadas pela 0005 é
+legível e estável para sempre; o ADR-0014 fixou ids assim exatamente para que houvesse uma chave que
+sobrevivesse ao usuário editar o que ele vê.
+
+A resolução tem **três degraus**, e existem três porque nenhum caminho pode quebrar: id semeado → nome
+livre (para uma conta que o usuário criou e chamou de "Inter") → monograma na cor. Só o primeiro degrau
+é imune a renomear; os outros dois são o melhor que dá para fazer sem um campo de marca no schema, e
+esse campo **não foi criado**: um banco a mais no ladrilho não justifica uma migration, e a 0005 já
+entrega os seis que o app conhece — inclusive as duas contas do BTG (`acct-btg` e `acct-btg-invest`),
+que já existiam e não precisaram ser acrescentadas.
+
+**Decisão 2 — a marca é uma SILHUETA de uma cor, não a logo colorida.** As logos oficiais são coloridas
+e vêm com fundo próprio; empilhá-las como imagem num ladrilho de 32px sobre grafite daria seis retângulos
+brigando entre si. Cada marca virou um **path único sem cor**, desenhado em branco sobre a cor da
+instituição — que é a mesma economia do ícone de app na tela do celular, e o que faz as seis lerem como
+um sistema só em vez de seis colagens. A cor vem da 0005 (`accounts.color`), não de um valor inventado
+no frontend; o BTG aparece duas vezes porque são duas contas que compartilham a marca e se separam pela
+cor, como o banco já as separava.
+
+**Decisão 3 — SVG inline, e viewBox quadrado com cobertura calculada.** Inline (e não `import` de
+arquivo, `url()` ou `mask-image`) porque o app é 100% offline e a identidade não pode depender do
+bundler entregar um asset: é o que o `NexusMark` já fazia (ADR-0043). O viewBox quadrado é menos óbvio
+e resolve um defeito real: as marcas têm proporções muito diferentes — a chama do Santander é quase
+quadrada, o "itaú" é 2,1× mais largo que alto — e enquadradas cruas elas **pesam diferente** lado a
+lado. Cada uma foi centrada na própria bbox e escalada para uma cobertura própria (0,80 a 0,88), medida
+com as seis lado a lado: sem isso o traço fino do Bradesco some e o "nu" berra.
+
+O módulo `assets/banks.tsx` é **gerado**, não digitado: são ~14 KB de coordenadas, e um dígito trocado à
+mão vira um desenho torto que ninguém acha depois. O recorte descartou o *wordmark* corporativo de cada
+arquivo (o "Santander" escrito ao lado da chama, o "Pactual" ao lado do círculo) e ficou só com o
+símbolo — a 32px, texto de marca é borrão.
+
+**Procedência e licença.** As marcas foram traçadas dos SVGs oficiais publicados no Wikimedia Commons
+(Santander, Bradesco, Itaú, BTG) e no simple-icons (Nubank, CC0). São **marcas registradas de seus
+donos**, e o uso aqui é o de sempre num app pessoal offline: identificar a conta do próprio usuário
+dentro do app dele, sem distribuição, sem sugerir vínculo. O fallback de monograma continua vivo e é o
+que atende qualquer instituição fora dessa lista — nada quebra por falta de logo.
+
+**A política mora fora do arquivo gerado.** `assets/banks.tsx` tem só as marcas (dado gerado);
+`bankBrand.ts` tem o registro e a resolução (escrito à mão). Juntos, regerar as marcas apagaria as
+regras. O teste `bankBrand.test.ts` trava as invariantes — em especial a que a dirigida NÃO pega:
+renomear a conta não pode apagar a logo. Na dirigida as contas ainda têm o nome de fábrica, então uma
+resolução por nome passaria pela tela inteira sem acusar nada.
+
+### O que a dirigida cobrou
+
+1. **A marca do BTG fechava a 21px.** Diferente das outras cinco, o desenho do BTG é uma LETRA DENTRO
+   DE UM ANEL — o miolo só tem o que o anel deixa, e com a mesma cobertura das demais (0,82) o "btg"
+   virava borrão. A cobertura foi para 0,94 e o emblema no ladrilho de 21 para 23px. As outras cinco
+   liam bem antes e continuam lendo; foi o caso extremo que definiu o número, não a média.
+
+2. **A vitrine `/design-system` nunca rolou** — e este era um defeito ANTIGO, achado de raspão porque
+   os ladrilhos de banco ficam bem abaixo da dobra. O `<main>` do Shell é `overflow-hidden` de
+   propósito (cada tela é dona da própria rolagem, para o fundo em camadas ficar parado), e a vitrine
+   era a única tela que não declarava a sua: usava `min-h-full` onde todas as outras usam `h-full
+   overflow-y-auto`. Consequência: tudo abaixo da primeira dobra da vitrine era **inalcançável em toda
+   dirigida já feita** — inclusive nas que declararam o design system conferido. Corrigido aqui porque
+   era o que bloqueava verificar esta própria tarefa.

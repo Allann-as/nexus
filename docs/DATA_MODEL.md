@@ -624,8 +624,16 @@ Dois achados do levantamento evitaram migration à toa:
 - **`event_details.category` é TEXT LIVRE** (sem CHECK) desde a 0007 — as provas e
   entregas da Faculdade entram como categoria nova sem tocar no banco. Se fosse um
   CHECK fechado (como `contributions.asset_class`), a fase 4 custaria uma reconstrução.
-- **`accounts.color` já existe** desde a 0005 com as cores dos seis bancos — o
-  BankTile do terminal de aporte lê a cor do BANCO, não de um mapa no frontend.
+- **`accounts.color` já existe** desde a 0005 com as cores dos seis bancos, então
+  nenhuma migration é necessária para o BankTile ter cor de marca.
+
+  Ressalva honesta (ADR-0085): o `BankTile` resolve cor E logo por um mapa no
+  frontend (`bankBrand.ts`) chaveado pelo `accounts.id`, e esse mapa ESPELHA as
+  cores da 0005 em vez de lê-las da linha. O motivo é o `FinanceOverview`: ele
+  devolve `byAccount` como `Bucket { key, label, cents }`, sem cor — o Painel não
+  tem de onde ler. Enquanto os dois lados forem os seis ids semeados, espelhar é
+  exato; no dia em que a cor de uma conta virar editável, a fonte tem que passar a
+  ser a linha, e o mapa vira só o fallback de logo.
 
 ### `goal_details` reconstruída (de novo) — o quarto tipo
 
