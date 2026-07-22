@@ -21,11 +21,11 @@ use nexus_lib::application::use_cases::{
     annual_goals::AnnualGoalService, areas::AreaService, books::BookService, career::CareerService,
     challenges::ChallengeService, events::EventService, fin_goals::FinGoalService,
     finance::FinanceService, goals::GoalService, habits::HabitService, nodes::NodeService,
-    notes::NoteService, tasks::TaskService,
+    notes::NoteService, studies::StudyService, tasks::TaskService,
 };
 use nexus_lib::domain::entities::CareerMilestoneKind;
 use nexus_lib::domain::entities::{
-    AssetClass, Direction, GoalKind, Kind, MilestoneKind, ProgressSource, Template,
+    AssetClass, Direction, GoalKind, Kind, MilestoneKind, ProgressSource, SubjectTrack, Template,
 };
 use nexus_lib::domain::recurrence::Recurrence;
 use nexus_lib::domain::schedule::{format_day, parse_day, week_start, Schedule};
@@ -41,7 +41,8 @@ use nexus_lib::infrastructure::repositories::{
     fin_goal_repo::SqliteFinGoalRepository, goal_repo::SqliteGoalRepository,
     habit_repo::SqliteHabitRepository, ledger_repo::SqliteLedgerRepository,
     node_repo::SqliteNodeRepository, note_repo::SqliteNoteRepository,
-    skill_repo::SqliteSkillRepository, task_repo::SqliteTaskRepository,
+    skill_repo::SqliteSkillRepository, study_session_repo::SqliteStudySessionRepository,
+    subject_repo::SqliteSubjectRepository, task_repo::SqliteTaskRepository,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -847,6 +848,112 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     books.set_reading_goal(12)?;
     println!("  4 livros na estante + meta de leitura");
+
+    // ===== Estudos: matérias e as sessões (M4.6, item 7) =====
+    //
+    // O seed NUNCA registrou uma sessão de estudo — o mesmo buraco de
+    // `focus_sessions`, dos anexos de nota e do envelhecimento do Inbox
+    // (ADR-0105). A Esfera Estudos tinha só a estante: as matérias, o painel de
+    // ritmo (horas na semana, tendência, constância de 30 dias), o gráfico
+    // "quando você estuda" e os "melhores horários" nasciam vazios, e um estado
+    // não-semeado se disfarça de "o usuário não chegou lá". Semear as sessões
+    // exigia primeiro semear as MATÉRIAS onde elas moram.
+    let study = StudyService {
+        subjects: Arc::new(SqliteSubjectRepository::new(db.clone())),
+        sessions: Arc::new(SqliteStudySessionRepository::new(db.clone())),
+        areas: area_repo.clone(),
+        // Só a validação de `set_subject_level_goal` usa isto, que o seed não
+        // chama — um handle novo sobre o mesmo banco basta.
+        goals: Arc::new(SqliteGoalRepository::new(db.clone())),
+        ids: ids.clone(),
+        clock: clock.clone(),
+    };
+    // Duas matérias com trilha, para as telas de Faculdade e de Matérias saírem
+    // do vazio, e uma com meta de horas (o card mostra o progresso da meta).
+    let calculo = study.create_subject(
+        "Cálculo I",
+        Some(estudos.id.clone()),
+        Some("exatas".into()),
+        Some(40 * 60), // meta de 40h no semestre
+        Some(SubjectTrack::Faculdade),
+        None,
+        Some(format_day(today + chrono::Duration::days(50))),
+    )?;
+    let rust = study.create_subject(
+        "Rust",
+        Some(estudos.id.clone()),
+        Some("carreira".into()),
+        None,
+        Some(SubjectTrack::Livre),
+        None,
+        None,
+    )?;
+
+    // A HORA de cada sessão importa mais que a data: `study_stats` responde
+    // "quando você estuda" somando `ts` por hora do dia (local). Registrar tudo
+    // pelo relógio da máquina empilharia tudo numa hora só e o gráfico de 24
+    // barras viraria uma barra — a tese da tela provada com dado falso. Por isso
+    // `log_session_at`.
+    //
+    // O perfil é de quem estuda à NOITE, com pico às 20h com folga sobre o
+    // segundo — um "melhor horário" único, não um empate apresentado como
+    // resposta (o `top_hours` mostra empate quando há, mas o seed não força um).
+    // Os últimos 7 dias vêm mais cheios que os 7 anteriores, para a tendência
+    // subir. Cada tripla é (hora, minutos, dias-atrás).
+    let study_plan: &[(u32, i64, &[i64])] = &[
+        (20, 60, &[1, 2, 4, 5, 6, 9, 12, 16, 23, 30, 38, 51]),
+        (19, 50, &[1, 3, 7, 14, 21, 35, 49]),
+        (8, 30, &[2, 6, 13, 27, 41]),
+        (14, 45, &[4, 10, 25, 44]),
+        (22, 25, &[3, 8, 19, 33]),
+    ];
+    // A sessão gira entre as duas matérias e o livro que está sendo lido, para a
+    // lista de recentes e os cards não saírem com todas as linhas iguais.
+    let targets: [(Option<&str>, Option<&str>); 3] = [
+        (Some(&calculo.id), None),
+        (Some(&rust.id), None),
+        (None, Some(&nome_do_vento.id)),
+    ];
+    let mut n_study = 0;
+    for (hour, minutes, days_ago) in study_plan {
+        for n in days_ago.iter() {
+            let day = today - chrono::Duration::days(*n);
+            let (subj, book) = targets[(*n as usize + *hour as usize) % targets.len()];
+            study.log_session_at(
+                subj.map(str::to_string),
+                book.map(str::to_string),
+                None,
+                None,
+                *minutes,
+                Some(format_day(day)),
+                Some(at(day, *hour, 0)),
+            )?;
+            n_study += 1;
+        }
+    }
+    // E as de HOJE, para o painel do dia não nascer zerado — só as horas já
+    // passadas (o `log_session` recusa o futuro de qualquer forma).
+    let now_hour = {
+        use chrono::Timelike;
+        chrono::Local::now().hour()
+    };
+    let mut n_study_today = 0;
+    for (hour, minutes, subj) in [(8u32, 30i64, &calculo.id), (14, 45, &rust.id)] {
+        if hour >= now_hour {
+            continue;
+        }
+        study.log_session_at(
+            Some(subj.clone()),
+            None,
+            None,
+            None,
+            minutes,
+            Some(format_day(today)),
+            Some(at(today, hour, 0)),
+        )?;
+        n_study_today += 1;
+    }
+    println!("  2 matérias + {n_study} sessões de estudo em 60 dias (+{n_study_today} hoje)");
 
     // ===== Carreira: um marco (M4) =====
     career.record_milestone(

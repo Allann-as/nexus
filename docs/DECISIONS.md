@@ -4648,3 +4648,48 @@ não são intercambiáveis:
 Os três primeiros foram para `1.3.0`; o `Cargo.lock` seguiu o build. A verificação não foi de código:
 foi a dirigida abrir a Sobre no app dev e LER `versão 1.3.0` (e o log de boot ler `NEXUS OS v1.3.0`) —
 que é o lugar exato que o ADR-0108 disse que alguém iria conferir.
+
+## ADR-0111 — Estudos: a Esfera inteira que o seed nunca mostrou, e o empate que voltou para a origem
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), fase 8 — QA, dívidas do ADR-0105**
+
+**Contexto.** O ADR-0105 deixou duas dívidas endereçadas para a fase 8: (1) `study_sessions` tem 0
+linhas no seed — o mesmo buraco de `focus_sessions`, dos anexos de nota e do envelhecimento do Inbox;
+(2) `StudyStats::best_hour` resolve empate por posição, o mesmo defeito do Foco, que **copiou o código
+daqui**. As duas se resolvem juntas: semear (1) e provar (2).
+
+**Dívida 2 — o empate volta para a origem.** `study_stats` fazia
+`by_hour.iter().max_by_key(|(_, m)| *m)` — que devolve o ÚLTIMO máximo quando há empate. A tela dizia
+*"melhor horário: 20h"* mesmo quando 8h somava exatamente os mesmos minutos, apresentando o desempate
+por ordem de varredura como se fosse a resposta. Sessões de estudo são registradas em blocos redondos
+(25/30/50/60 min), então empate no topo não é raro. Este é o defeito ORIGINAL: quando o Foco foi
+construído (M5), o `top_hours` dele foi copiado deste `max_by_key`; o Foco corrigiu no ADR-0105 e a
+correção só agora volta para casa. `StudyStats.best_hour: Option<i64>` virou `best_hours: Vec<i64>`,
+alimentado pela mesma função pura `top_hours` (vazia sem dado, ordenada pelo relógio, todas as horas
+que empatam no topo). Ela é literalmente a de `focus::top_hours`, com os mesmos quatro testes — um
+empate agora aparece como empate no card ("Melhores horários", as horas listadas, "empatadas em X
+cada") e no gráfico (todas as colunas do topo acendem, nenhuma eleita).
+
+**Dívida 1 — semear as sessões exigiu semear a Esfera.** A Esfera Estudos tinha só a estante de
+livros; nenhuma MATÉRIA e nenhuma sessão. Sem sessão, o painel de ritmo (horas na semana, tendência,
+constância de 30 dias), o gráfico "quando você estuda", os "melhores horários" e as trilhas
+(Matérias, Faculdade) nasciam todos no estado vazio — e um estado não-semeado se disfarça de "o
+usuário não chegou lá". O seed agora cria duas matérias (Cálculo I na trilha Faculdade, com meta de
+40h; Rust na trilha Livre) e 34 sessões (32 em 60 dias + 2 hoje), com o mesmo cuidado do Foco: a HORA
+de cada sessão é explícita via um `log_session_at` novo, porque `study_stats` soma `ts` por hora do
+dia e registrar tudo pelo relógio do seed empilharia meses numa hora só — o gráfico de 24 barras
+viraria uma barra, a tese da tela provada com dado falso. O perfil é de quem estuda à noite, pico às
+20h com folga sobre o segundo (um "melhor horário" único, não um empate — o `top_hours` mostra empate
+quando há, mas o seed não fabrica um), últimos 7 dias mais cheios que os 7 anteriores para a tendência
+subir, e as sessões giram entre as duas matérias e o livro em leitura para as listas de recentes não
+saírem com linhas idênticas.
+
+**`log_session_at` não é command.** Como no Foco, o instante explícito existe SÓ para o seed e não é
+exposto à UI: uma sessão de estudo vale XP (ADR-0047), e um instante à escolha do cliente é o caminho
+para uma constância e uns horários fabricados. O `log_session` público delega a ele com `at: None`.
+
+**Como foi conferido.** A dirigida reseminou o `.devdata` (34 sessões, confirmado pelo `println`) e
+abriu as telas: o Painel de Estudos mostra 10,1h na semana (+5,6h de tendência), constância 20/30,
+**melhor horário 20h · 12h acumulados**, e o gráfico "quando você estuda" com a coluna das 20h acesa;
+a aba Matérias lista Rust (9h, 12 sessões) e Cálculo I (8,3h, 11 sessões) com recentes; a Faculdade
+mostra Cálculo I com o anel de 21% da meta de 40h. Nenhuma das telas nascia com esse dado antes.

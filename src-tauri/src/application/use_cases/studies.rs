@@ -75,8 +75,14 @@ pub struct StudyStats {
     pub minutes_prev_7: i64,
     /// Dias DISTINTOS com sessão nos últimos 30 — a constância.
     pub active_days_30: i64,
-    /// A hora do dia com mais minutos acumulados, ou `None` sem dado.
-    pub best_hour: Option<i64>,
+    /// As horas do dia com mais minutos acumulados.
+    ///
+    /// Uma lista, e não um `Option<i64>`, pela mesma razão do Foco (ADR-0105):
+    /// um EMPATE não é uma resposta. Vazia = sem dado; um elemento = a melhor
+    /// hora; vários = as horas que empatam no topo, e a UI diz que empatam em
+    /// vez de eleger uma delas por ordem de varredura. O código do Foco foi
+    /// COPIADO daqui com o `max_by_key`; a correção volta agora para a origem.
+    pub best_hours: Vec<i64>,
     pub best_hour_minutes: i64,
     /// A distribuição por hora (só as horas com minutos) — para o gráfico.
     pub by_hour: Vec<HourBucket>,
@@ -329,6 +335,30 @@ impl StudyService {
         minutes: i64,
         day: Option<String>,
     ) -> Result<StudySession> {
+        self.log_session_at(subject_id, book_id, skill_id, topic, minutes, day, None)
+    }
+
+    /// O mesmo, com o INSTANTE explícito — a hora do dia em que a sessão aconteceu.
+    ///
+    /// Existe para o **seed**, e só para ele, pela mesma razão do `focus`
+    /// (ADR-0105): `study_stats` responde "quando você estuda" somando `ts` por
+    /// hora do dia, e um seed que registrasse tudo pelo relógio da máquina
+    /// empilharia meses de estudo na hora em que o seed rodou — o gráfico de 24
+    /// barras viraria uma barra, provando a tese da tela com uma distribuição
+    /// falsa. **Não é exposto como command**: a UI nunca escolhe o instante de
+    /// uma sessão (ela sai do relógio), e um instante à escolha do cliente é o
+    /// caminho para uma constância e uns horários fabricados.
+    #[allow(clippy::too_many_arguments)]
+    pub fn log_session_at(
+        &self,
+        subject_id: Option<String>,
+        book_id: Option<String>,
+        skill_id: Option<String>,
+        topic: Option<String>,
+        minutes: i64,
+        day: Option<String>,
+        at: Option<i64>,
+    ) -> Result<StudySession> {
         if minutes <= 0 {
             return Err(NexusError::Validation(
                 "a sessão precisa ter ao menos 1 minuto".into(),
@@ -365,7 +395,7 @@ impl StudyService {
         let title_snapshot = format!("Estudou {minutes} min · {label}");
 
         let id = self.ids.new_id();
-        let now = self.clock.now_ms();
+        let now = at.unwrap_or_else(|| self.clock.now_ms());
         let event = NewLedgerEvent {
             ts: now,
             day: day.clone(),
@@ -424,11 +454,7 @@ impl StudyService {
             .active_days_since(a, &format_day(today - chrono::Duration::days(29)))?;
 
         let by_hour_raw = self.sessions.minutes_by_hour(a)?;
-        let (best_hour, best_hour_minutes) = by_hour_raw
-            .iter()
-            .max_by_key(|(_, m)| *m)
-            .map(|(h, m)| (Some(*h), *m))
-            .unwrap_or((None, 0));
+        let (best_hours, best_hour_minutes) = top_hours(&by_hour_raw);
         let by_hour = by_hour_raw
             .into_iter()
             .map(|(hour, minutes)| HourBucket { hour, minutes })
@@ -440,15 +466,82 @@ impl StudyService {
             minutes_last_7,
             minutes_prev_7,
             active_days_30,
-            best_hour,
+            best_hours,
             best_hour_minutes,
             by_hour,
             total_minutes,
             total_sessions,
             formula: "Horas na semana = soma dos minutos das sessões dos últimos 7 dias ÷ 60. \
                       Constância = dias distintos com ao menos uma sessão nos últimos 30. \
-                      Melhor horário = a hora do dia (local) com mais minutos somados."
+                      Melhores horários = as horas do dia (local) com mais minutos somados; \
+                      se mais de uma empata no topo, todas aparecem — um empate não é uma \
+                      hora só."
                 .to_string(),
         })
+    }
+}
+
+/// As horas do dia no TOPO, e quantos minutos elas somam.
+///
+/// Pura, e separada do serviço, para o empate ter teste próprio. A versão
+/// anterior era um `max_by_key`, que devolve o ÚLTIMO máximo quando há empate —
+/// e a tela apresentava esse desempate por ordem de varredura como se fosse a
+/// resposta: *"melhor horário: 20h"* com 8h somando exatamente os mesmos
+/// minutos. Sessões de estudo são registradas em blocos redondos (25/30/50/60
+/// min), então empate no topo não é hipótese remota.
+///
+/// É a MESMA função de `focus::top_hours` — o Foco a copiou daqui já corrigida
+/// (ADR-0105), e agora ela volta para a origem. Devolve `(vazio, 0)` sem dado —
+/// nunca uma hora inventada.
+fn top_hours(by_hour: &[(i64, i64)]) -> (Vec<i64>, i64) {
+    let max = by_hour.iter().map(|(_, m)| *m).max().unwrap_or(0);
+    if max <= 0 {
+        return (Vec::new(), 0);
+    }
+    let mut hours: Vec<i64> = by_hour
+        .iter()
+        .filter(|(_, m)| *m == max)
+        .map(|(h, _)| *h)
+        .collect();
+    hours.sort_unstable();
+    (hours, max)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::top_hours;
+
+    #[test]
+    fn a_clear_winner_is_a_single_hour() {
+        let (hours, minutes) = top_hours(&[(19, 180), (14, 60), (21, 50)]);
+        assert_eq!(hours, vec![19]);
+        assert_eq!(minutes, 180);
+    }
+
+    #[test]
+    fn a_tie_returns_every_hour_at_the_top() {
+        // Duas horas com 60 min cada empatam — o `max_by_key` anterior elegeria
+        // só a ÚLTIMA, calado, e a tela diria "melhor horário: 21h" como se 8h
+        // não valesse o mesmo.
+        let (hours, minutes) = top_hours(&[(8, 60), (14, 30), (21, 60)]);
+        assert_eq!(hours, vec![8, 21], "as duas, não a de maior índice");
+        assert_eq!(minutes, 60);
+    }
+
+    #[test]
+    fn the_hours_come_ordered_by_the_clock() {
+        let (hours, _) = top_hours(&[(22, 45), (6, 45), (13, 45)]);
+        assert_eq!(
+            hours,
+            vec![6, 13, 22],
+            "a leitura é do dia, não da varredura"
+        );
+    }
+
+    #[test]
+    fn without_data_no_hour_is_invented() {
+        assert_eq!(top_hours(&[]), (Vec::new(), 0));
+        // Uma hora com zero minuto não chega a ser um pico.
+        assert_eq!(top_hours(&[(9, 0), (10, 0)]), (Vec::new(), 0));
     }
 }

@@ -1593,7 +1593,8 @@ export interface StudyStats {
   minutesLast7: number;
   minutesPrev7: number;
   activeDays30: number;
-  bestHour: number | null;
+  /** As horas do dia no topo — vazia sem dado, várias quando empatam (ADR-0105). */
+  bestHours: number[];
   bestHourMinutes: number;
   byHour: HourBucket[];
   totalMinutes: number;

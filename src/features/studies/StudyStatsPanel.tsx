@@ -23,6 +23,25 @@ export function StudyStatsPanel({ stats }: { stats: StudyStats }) {
   const weekH = toHours(stats.minutesLast7);
   const prevH = toHours(stats.minutesPrev7);
   const deltaH = Math.round((weekH - prevH) * 10) / 10;
+  const best = stats.bestHours;
+
+  // Um EMPATE não é uma resposta: quando duas horas somam o mesmo, mostramos as
+  // duas em vez de eleger uma pela ordem de varredura — que é o que o `max_by_key`
+  // do backend fazia calado (ADR-0105). Até três cabem no rótulo; acima disso, a
+  // contagem, senão a célula estoura.
+  const bestValue =
+    best.length === 0
+      ? "—"
+      : best.length <= 3
+        ? best.map(hourLabel).join(" · ")
+        : `${best.length} horas`;
+  const bestHint =
+    best.length === 0
+      ? undefined
+      : best.length === 1
+        ? `${formatMinutes(stats.bestHourMinutes)} acumulados`
+        : `empatadas em ${formatMinutes(stats.bestHourMinutes)} cada`;
+  const bestSet = new Set(best);
 
   return (
     <section className="flex flex-col gap-4">
@@ -52,11 +71,9 @@ export function StudyStatsPanel({ stats }: { stats: StudyStats }) {
         />
         <StatTile
           icon={Sunrise}
-          label="Melhor horário"
-          value={stats.bestHour != null ? hourLabel(stats.bestHour) : "—"}
-          hint={
-            stats.bestHour != null ? `${formatMinutes(stats.bestHourMinutes)} acumulados` : undefined
-          }
+          label={best.length > 1 ? "Melhores horários" : "Melhor horário"}
+          value={bestValue}
+          hint={bestHint}
           tone="success"
         />
       </div>
@@ -65,17 +82,17 @@ export function StudyStatsPanel({ stats }: { stats: StudyStats }) {
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
           <div className="mb-3 flex items-baseline justify-between">
             <MonoLabel>Quando você estuda</MonoLabel>
-            {stats.bestHour != null && (
+            {best.length > 0 && (
               <span className="text-[11px] text-[var(--text-tertiary)]">
-                pico às{" "}
+                {best.length > 1 ? "pico empatado às" : "pico às"}{" "}
                 <span className="font-semibold text-[var(--sphere)]">
-                  {hourLabel(stats.bestHour)}
+                  {best.length <= 3 ? best.map(hourLabel).join(" · ") : `${best.length} horas`}
                 </span>{" "}
                 · {formatMinutes(stats.bestHourMinutes)}
               </span>
             )}
           </div>
-          <HourChart stats={stats} />
+          <HourChart stats={stats} bestSet={bestSet} />
           <Formula>{stats.formula}</Formula>
         </div>
       )}
@@ -84,7 +101,7 @@ export function StudyStatsPanel({ stats }: { stats: StudyStats }) {
 }
 
 /** Um gráfico de barras por hora do dia (0–23). SVG puro — é o Hub/Esfera. */
-function HourChart({ stats }: { stats: StudyStats }) {
+function HourChart({ stats, bestSet }: { stats: StudyStats; bestSet: Set<number> }) {
   const byHour = new Map(stats.byHour.map((b) => [b.hour, b.minutes]));
   const max = Math.max(1, ...stats.byHour.map((b) => b.minutes));
   const hours = Array.from({ length: 24 }, (_, h) => h);
@@ -95,7 +112,9 @@ function HourChart({ stats }: { stats: StudyStats }) {
         {hours.map((h) => {
           const mins = byHour.get(h) ?? 0;
           const pct = mins / max;
-          const isBest = h === stats.bestHour && mins > 0;
+          // Todas as horas do topo acendem — destacar uma de um empate seria a
+          // mesma afirmação sem lastro do card, desenhada.
+          const isBest = bestSet.has(h) && mins > 0;
           return (
             <div
               key={h}
