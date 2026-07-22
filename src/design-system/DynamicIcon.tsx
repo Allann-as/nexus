@@ -33,6 +33,17 @@ const ICONS: Record<string, LucideIcon> = {
   sparkles: Sparkles,
 };
 
+/**
+ * O mesmo mapa, resolvido para o COMPONENTE.
+ *
+ * A Timeline precisa do ícone como valor (ela monta o `LedgerMeta` de cada
+ * evento antes de renderizar), não como elemento pronto — e reimplementar o
+ * mapa lá seria a segunda tabela de nomes Lucide do app, livre para divergir.
+ */
+export function lucideByName(name: string | null | undefined): LucideIcon {
+  return (name && ICONS[name]) || Award;
+}
+
 export function DynamicIcon({
   name,
   className,

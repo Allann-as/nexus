@@ -4162,3 +4162,117 @@ tem tela". Duplicá-los aqui criaria dois donos do mesmo número, que é o que o
 a `queryKey` compartilhada. O que **não** existe é a versão agregada — "em que dia da semana eu falho
 mais somando TODOS os hábitos" —, e essa sim cruza entidades e cabe no motor. Fica como o próximo
 passo do Insights, não como omissão.
+
+---
+
+## ADR-0104 — Timeline: metade do vocabulário do ledger nunca chegou à tela
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), fase 5 — grupo C, Timeline**
+
+**Contexto.** O plano pedia o idioma COCKPIT na Máquina do Tempo: ícones SVG por tipo de evento, régua
+de dias marcada, filtros, scrubber, "Neste dia". O método do projeto manda **listar o que o comando
+devolve antes de olhar o que a tela desenha** — e foi essa lista que achou os seis defeitos abaixo.
+Nenhum estava no plano. Cinco deles a dirigida sozinha não pegaria: só aparecem confrontando
+`domain::ledger` com `ledgerMeta.ts`.
+
+**Defeito 1 — oito dos 22 `event_type` escreviam a chave crua, em inglês, na tela.** `EVENT_META`
+conhecia 14 tipos; os outros caíam num `prettify()` que troca `_` por espaço e capitaliza. O resultado
+ia direto para a pílula de cada linha do feed: **"Achievement unlocked"**, "Focus session logged",
+"Study session logged", "Challenge started", "Skill level up", "Nexus score", "Skill checkin",
+"Challenge completed" — vocabulário interno do banco, em inglês, num app inteiramente em português.
+`KIND_LABEL` tinha o mesmo buraco (faltavam `achievement`, `daily_score`, `challenge`, `subject`,
+`skill`, `study_session`, `focus_session`, `weekly_review`, `skill_checkin`, `annual_goal`), o que
+também tirava esses eventos do alcance da busca, já que o `searchHaystack` usa esse mapa. No mês
+corrente do seed eram **27 linhas** assim, de 212. Nada quebrava e nenhum teste falhava: o fallback
+existia justamente para não quebrar, e por isso escondia a falta em vez de denunciá-la.
+
+O vocabulário agora é fechado dos dois lados. `ledgerMeta.test.ts` falha se um tipo cair no
+`prettify` ou se um rótulo contiver `_`; do lado Rust, `EventType::ALL` mais o teste
+`all_lists_every_event_type` quebram quando alguém acrescenta uma variante, com a mensagem apontando
+para o arquivo que precisa traduzi-la. É a única hora em que consertar isso é de graça.
+
+**Defeito 2 — a conquista de verdade era um círculo cinza; o troféu estava na tarefa.** `meta()` dava o
+troféu dourado a `completed` — que é toda tarefa, sub-desafio, meta e livro fechados — e o evento
+`achievement_unlocked`, a conquista real do catálogo, caía no fallback: círculo genérico, cor de
+accent, rótulo "Achievement unlocked". Pior, o payload dessas linhas **já trazia** `icon` (o nome
+Lucide exato: `flame`, `book-open`, `trending-up`, `calendar-heart`) e `tier` (bronze/prata/ouro/
+platina), e a tela descartava os dois: as quatro conquistas de julho saíam idênticas. Agora cada uma
+usa o próprio ícone e o próprio metal — o mesmo par que a galeria mostra. É o padrão recorrente do
+projeto pela sexta vez: **o backend mandava, a tela jogava fora.**
+
+**Defeito 3 — a visão ANO chamava tarefa fechada de "conquista".** `MonthRollup.completed` conta
+`event_type = 'completed'`; a doc do próprio campo em `ports.rs` dizia *"Conquistas (event_type =
+'completed')"*, e a tela acreditou por três versões: troféu dourado, a palavra "conquistas", sobre a
+contagem de tarefas. Um mês de 40 tarefas anunciava "40 conquistas" enquanto a galeria mostrava duas.
+O rollup ganhou a métrica `achievements` (`achievement_unlocked`), "concluídos" perdeu o troféu, e a
+mentira saiu da doc.
+
+**Defeito 4 — o rollup é um cache, e não tinha como saber que havia mudado.** Corrigir o defeito 3 é
+mudar o que `freeze_month` conta — e `timeline_rollups` guarda meses congelados **para sempre**, sem
+versão nenhuma. Todo mês fechado antes desta versão continuaria respondendo "0 conquistas" com toda
+convicção, e `ensure_rollups` nunca o recongelaria, porque para ele "congelado" era "existe uma linha".
+É exatamente o defeito 3 do ADR-0103, no outro cache, e aqui sem nem a versão para percebê-lo.
+`ROLLUP_VERSION` entrou junto com a métrica: cada mês grava a versão em que foi congelado, na MESMA
+transação das contagens, e `rolled_up_months` só reconhece os da versão corrente. Os meses da v1.2 não
+têm a linha `v` — e por isso voltam a ser candidatos na primeira abertura da Timeline. **Suba o número
+sempre que mudar o que se conta**: é a regra que o `insight_cache` aprendeu duas vezes e que agora
+está escrita no código.
+
+**Defeito 5 — a tela anunciava o tamanho da PÁGINA como o tamanho do mês.** `timelineRange` tem
+`limit = 500` por padrão no `ipc.ts`, a `MonthView` nunca paginava, e o cabeçalho escrevia
+`filtered.length` — o array recebido — como "N eventos em julho". Com o seed de demonstração (212/mês)
+o defeito é invisível; com o seed de 5 anos, que distribui **~219 eventos por dia**, um mês tem ~6.600
+e a tela diria "500 eventos em julho" com a busca varrendo 7% do mês, em silêncio. Um corte que não se
+declara é uma afirmação falsa. Agora o número vem de um censo do backend (`timeline_summary`, um
+`COUNT(*)` sobre o intervalo), a leitura pagina de 400 em 400, e o que falta vira um botão que diz
+quanto falta.
+
+**Defeito 6 — o Score do dia era ruído no feed, e a régua de dias não tinha o que marcar.** Um evento
+`nexus_score` por dia é 1 em cada 10 linhas do mês, todas iguais, e nenhuma delas é um ato do usuário:
+é a medida do dia inteiro, empurrando para baixo o que a pessoa fez. Ele saiu da lista e virou o
+medidor do CABEÇALHO do dia — que é o que o plano chamava de "régua de dias marcada". O dado não se
+perde, muda de lugar; e filtrar explicitamente por "Score" devolve as linhas, porque aí o pedido é
+vê-las como eventos. Dia sem score congelado **não** desenha medidor vazio: "não medido" e "zero" são
+coisas diferentes.
+
+**Os filtros passaram a vir do banco.** A régua tinha sete pílulas fixas em código ("Tarefas",
+"Hábitos", "Metas", "Aportes", "Livros", "Marcos") sem contagem nenhuma: num mês sem aporte, "Aportes"
+era um botão cuja única função era esvaziar a tela, e um tipo que existisse no mês mas não na lista
+não tinha filtro. Agora cada pílula é um `entityKind` que EXISTE no mês, com o número dele
+(`RangeSummary.byKind`), na ordem curada; trocar de mês para um em que o tipo filtrado não existe
+limpa o filtro em vez de mostrar vazio.
+
+**Não há filtro por Esfera, e não vai haver.** O plano pedia "filtros por tipo/esfera". O ledger não
+tem `area_id` e não pode ter: ele é auto-suficiente por decisão (ADR-0023) e **metade dos seus fatos
+não é node nenhum** (aporte, conquista, score, sessão de foco, revisão semanal, recorde — ADR-0027).
+Um filtro por Esfera exigiria JOIN com `nodes`, e erraria justamente onde esta tela vive: um node
+renomeado, movido de Esfera ou excluído faria o passado mudar de dono retroativamente — o oposto do
+que um ledger imutável promete. Acrescentar a coluna também não resolve: ela nasceria `NULL` para toda
+a história anterior, e um filtro que esconde o passado inteiro é pior que filtro nenhum (a mesma
+armadilha "null não é zero" do ADR-0101). O recorte por TIPO faz o mesmo trabalho e é honesto.
+
+**O scrubber ganhou bordas.** Ele deixava navegar até 2099, e cada ano vazio respondia "Nada aconteceu
+em 2087" — uma frase que soa como um fato sobre a vida do usuário e é só uma pergunta sem sentido.
+`timeline_years` devolve os anos com evento; a seta morre no primeiro ano com história e no ano
+corrente (o futuro não tem passado para mostrar).
+
+**"Neste dia" estava invisível por construção — e a culpa era do seed.** O card procura o mesmo
+'MM-DD' em anos anteriores; o `seed_demo` só ia 120 dias para trás, então a query nunca achava nada e
+o componente renderizava `null` **sempre**. Ele existe desde o M4 no Hub e provavelmente nunca foi
+visto. É a regra do seed do plano em estado puro: *um estado não-semeado fica invisível e se disfarça
+de "o usuário não chegou lá"*. O seed passou a semear 1, 2 e 5 anos atrás — os três prazos que a
+própria legenda promete —, e o card entrou também na Timeline, que é onde alguém procura o próprio
+passado. O `compact` do Hub existe porque lá a coluna é estreita; na Timeline nada é cortado.
+
+**Dois achados da dirigida.** (a) O cabeçalho do dia usava `capitalize` do Tailwind, que capitaliza
+**cada palavra**: "22 de julho, quarta-feira" saía "22 De Julho, Quarta-Feira". (b) O medidor do Score
+saía **cortado**, e um dia de Score 75 acendia menos segmentos que um de 57 — a largura ia numa classe
+passada à `SegBar`, cuja raiz já é `w-full`, e duas utilitárias de largura na mesma lista se resolvem
+pela ordem do CSS, não pela do atributo. A largura passou para um invólucro. Um instrumento com a
+escala truncada mente pior que instrumento nenhum.
+
+**`TIER_COLOR` virou design system.** Os quatro metais estavam copiados na galeria de Conquistas e na
+Semana Perfeita; a Timeline seria a terceira cópia. Foram para `design-system/tiers.ts` — a mesma
+razão do `ArmedDelete` (v1.2) e do `domain::ordering` (M3): três cópias divergem no dia em que só uma
+for corrigida. São hex crus por serem METAIS, não tokens de tema: bronze é bronze no claro e no
+escuro, e derivá-lo de `--warning` faria o dourado mudar junto com o âmbar de alerta.

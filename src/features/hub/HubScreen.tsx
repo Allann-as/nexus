@@ -364,7 +364,7 @@ export function HubScreen() {
                 <span className="text-[11px] text-[var(--text-tertiary)]">em {year}</span>
               </button>
             )}
-            <OnThisDay />
+            <OnThisDay compact />
           </aside>
         </div>
       </PageContainer>

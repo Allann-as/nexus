@@ -405,6 +405,8 @@ design-system/
                   Terminal, Chip, SegToggle, BankTile, SphereHeader (ADR-0074)
   assets/banks    as marcas dos bancos — GERADO por script, só dado (ADR-0085)
   bankBrand.ts    a politica: id semeado -> nome -> monograma. Testado.
+  tiers.ts        os quatro METAIS das conquistas (ADR-0104). Hex crus de
+                  proposito: bronze nao muda com o tema.
   useSphereColor  areaId -> cor, num lugar só. Nenhuma tela reimplementa.
   Checkbox.tsx    o gesto mais repetido do app
   useCountUp.ts   rAF, respeita prefers-reduced-motion, zero animação em idle

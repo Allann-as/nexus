@@ -8,7 +8,9 @@
 
 use std::sync::Arc;
 
-use crate::application::ports::{Clock, LedgerRepository, MonthRollup, TimelineRepository};
+use crate::application::ports::{
+    Clock, LedgerRepository, MonthRollup, RangeSummary, TimelineRepository,
+};
 use crate::domain::errors::Result;
 use crate::domain::ledger::LedgerEntry;
 
@@ -34,6 +36,16 @@ impl TimelineService {
     pub fn year(&self, year: &str) -> Result<Vec<MonthRollup>> {
         let current_month = &self.clock.today_local()[..7];
         self.timeline.year(year, current_month)
+    }
+
+    /// O censo de um intervalo — o total real e a quebra por tipo.
+    pub fn summary(&self, from_day: &str, to_day: &str) -> Result<RangeSummary> {
+        self.timeline.summary(from_day, to_day)
+    }
+
+    /// Os anos que têm história — as bordas do scrubber.
+    pub fn years(&self) -> Result<Vec<String>> {
+        self.timeline.years()
     }
 
     /// "Neste dia" — o que aconteceu no mesmo dia de anos anteriores.

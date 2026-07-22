@@ -1980,8 +1980,11 @@ export interface MonthRollup {
   /** 'YYYY-MM'. */
   month: string;
   events: number;
+  /** CONCLUÍDOS — tarefa, sub-desafio, meta, livro. Não é conquista. */
   completed: number;
   checked: number;
+  /** Conquistas desbloqueadas — as mesmas da galeria (ADR-0104). */
+  achievements: number;
 }
 
 /** A visão MÊS: os eventos entre dois dias 'YYYY-MM-DD', paginados. */
@@ -1995,6 +1998,25 @@ export const timelineRange = (
 /** A visão ANO: um resumo por mês de um ano 'YYYY'. */
 export const timelineYear = (year: string) =>
   call<MonthRollup[]>("timeline_year", { year });
+
+export interface KindCount {
+  kind: string;
+  count: number;
+}
+
+/** O censo de um intervalo — o que existe LÁ, não o que coube na página. */
+export interface RangeSummary {
+  total: number;
+  /** Só os `entityKind` presentes, do mais frequente ao menos. */
+  byKind: KindCount[];
+}
+
+/** O total real e a quebra por tipo de um intervalo de dias. */
+export const timelineSummary = (fromDay: string, toDay: string) =>
+  call<RangeSummary>("timeline_summary", { fromDay, toDay });
+
+/** Os anos ('YYYY') com história — as bordas do scrubber. */
+export const timelineYears = () => call<string[]>("timeline_years");
 
 /** "Neste dia": o que aconteceu no mesmo dia de anos anteriores. */
 export const onThisDay = () => call<LedgerEntry[]>("on_this_day");

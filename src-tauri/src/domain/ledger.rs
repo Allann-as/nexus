@@ -62,6 +62,38 @@ pub enum EventType {
 }
 
 impl EventType {
+    /// Todas as variantes, para quem precisa varrer o vocabulário inteiro.
+    ///
+    /// A Timeline traduz cada uma para um ícone e um rótulo em português
+    /// (`src/features/timeline/ledgerMeta.ts`). Oito ficaram de fora por três
+    /// versões e vazaram a chave crua para a tela — "Achievement unlocked" no
+    /// meio do feed. O teste que conta esta lista é o aviso de que uma variante
+    /// nova precisa de tradução do outro lado da fronteira. Ver ADR-0104.
+    pub const ALL: &'static [EventType] = &[
+        EventType::Created,
+        EventType::Completed,
+        EventType::Checked,
+        EventType::Skipped,
+        EventType::ValueRecorded,
+        EventType::StatusChanged,
+        EventType::Archived,
+        EventType::GoalCheckpoint,
+        EventType::NoteEdited,
+        EventType::Triaged,
+        EventType::Renamed,
+        EventType::Deleted,
+        EventType::WeeklyReviewCompleted,
+        EventType::NexusScore,
+        EventType::AchievementUnlocked,
+        EventType::ChallengeStarted,
+        EventType::ChallengeCompleted,
+        EventType::SkillLevelUp,
+        EventType::StudySessionLogged,
+        EventType::FocusSessionLogged,
+        EventType::RecordBroken,
+        EventType::SkillCheckin,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             EventType::Created => "created",
@@ -224,5 +256,25 @@ mod tests {
         );
         assert_eq!(EventType::SkillCheckin.as_str(), "skill_checkin");
         assert_eq!(LedgerEntityKind::SkillCheckin.as_str(), "skill_checkin");
+    }
+
+    #[test]
+    fn all_lists_every_event_type() {
+        // `EventType::ALL` é escrita à mão; sem este teste ela poderia esquecer
+        // uma variante em silêncio, e a varredura de quem a usa ficaria curta.
+        let mut seen: Vec<&str> = EventType::ALL.iter().map(|e| e.as_str()).collect();
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(seen.len(), EventType::ALL.len(), "variante repetida em ALL");
+
+        // Se este número mudou, você acabou de criar (ou remover) um tipo de
+        // evento: TRADUZA-O em `src/features/timeline/ledgerMeta.ts`
+        // (`ALL_EVENT_TYPES` + `EVENT_META`), senão a Timeline vai escrever a
+        // chave crua em inglês na tela do usuário. Ver ADR-0104.
+        assert_eq!(
+            EventType::ALL.len(),
+            22,
+            "o vocabulário do ledger mudou — atualize a tradução da Timeline"
+        );
     }
 }

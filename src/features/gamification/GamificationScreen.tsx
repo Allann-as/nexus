@@ -23,15 +23,9 @@ import {
 import { Card, PageHeader, PAGE_CONTAINER, cx } from "../../design-system/primitives";
 import { MonoLabel, SegBar } from "../../design-system/instruments";
 import { DynamicIcon } from "../../design-system/DynamicIcon";
+import { TIER_COLOR, TIER_LABEL, TIER_ORDER, tierColor } from "../../design-system/tiers";
 import { Formula } from "../../design-system/Formula";
 import { ChallengesSection } from "./ChallengesSection";
-
-const TIER_COLOR: Record<string, string> = {
-  bronze: "#C08457",
-  silver: "#A8B0BC",
-  gold: "#E0B34D",
-  platinum: "#C4B5FD",
-};
 
 export function GamificationScreen() {
   const overview = useQuery({
@@ -189,17 +183,6 @@ function SphereXpRow({ area, level }: { area: Area | undefined; level: Level }) 
   );
 }
 
-/** O rótulo de cada tier — o mesmo vocabulário da cor, escrito. */
-const TIER_LABEL: Record<string, string> = {
-  bronze: "Bronze",
-  silver: "Prata",
-  gold: "Ouro",
-  platinum: "Platina",
-};
-
-/** A ordem em que os tiers aparecem — do mais fácil ao mais raro. */
-const TIER_ORDER = ["bronze", "silver", "gold", "platinum"];
-
 function Gallery({ entries }: { entries: GalleryEntry[] }) {
   const unlocked = entries.filter((e) => e.unlocked).length;
 
@@ -271,7 +254,7 @@ function unlockedDay(ms: number): string {
 }
 
 function AchievementTile({ entry }: { entry: GalleryEntry }) {
-  const color = TIER_COLOR[entry.tier] ?? "var(--accent)";
+  const color = tierColor(entry.tier);
   return (
     <div
       className={cx(

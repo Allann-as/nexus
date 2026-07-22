@@ -31,6 +31,7 @@ import { PageHeader, PAGE_CONTAINER, Card, EmptyState, cx } from "../../design-s
 import { StatTile } from "../../design-system/cards";
 import { SegBar, MonoLabel } from "../../design-system/instruments";
 import { DynamicIcon } from "../../design-system/DynamicIcon";
+import { tierColor } from "../../design-system/tiers";
 import { Formula } from "../../design-system/Formula";
 import { fromDay } from "../calendar/grid";
 import { mondaysOf } from "./weekStrip";
@@ -388,15 +389,8 @@ function describe(cell: PerfectWeekCell): string {
 
 /* ---------- os marcos 4/12/26 ---------- */
 
-const TIER_COLOR: Record<string, string> = {
-  bronze: "#C08457",
-  silver: "#A8B0BC",
-  gold: "#E0B34D",
-  platinum: "#C4B5FD",
-};
-
 function MilestoneTile({ entry, total }: { entry: GalleryEntry; total: number }) {
-  const color = TIER_COLOR[entry.tier] ?? "var(--accent)";
+  const color = tierColor(entry.tier);
   const goal = threshold(entry.key);
   const missing = Math.max(0, goal - total);
 

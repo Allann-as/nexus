@@ -181,6 +181,21 @@ pub trait LedgerRepository: Send + Sync {
 
 /* ===== Timeline: a Máquina do Tempo ===== */
 
+/// A VERSÃO do formato de um mês congelado.
+///
+/// `timeline_rollups` é um cache — e um cache serve resultado velho sem
+/// reclamar. Um mês congelado no formato antigo continuaria respondendo para
+/// sempre, com as métricas que existiam no dia em que foi congelado: o mesmo
+/// defeito que o `insight_cache` cometeu duas vezes (ADR-0103), aqui sem nem a
+/// versão para percebê-lo. Cada mês passa a gravar a versão em que foi
+/// congelado; `rolled_up_months` só reconhece os desta, e os de antes são
+/// recongelados na próxima abertura da Timeline.
+///
+/// **Suba este número sempre que mudar o que `freeze_month` conta.**
+///   1 → events/completed/checked (até a v1.2)
+///   2 → + achievements (v1.3: 'completed' não era conquista, ADR-0104)
+pub const ROLLUP_VERSION: i64 = 2;
+
 /// Um mês congelado — as contagens que a visão ANO desenha.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -188,21 +203,58 @@ pub struct MonthRollup {
     /// 'YYYY-MM'.
     pub month: String,
     pub events: i64,
-    /// Conquistas (event_type = 'completed').
+    /// Coisas CONCLUÍDAS (`event_type = 'completed'`): tarefa, sub-desafio, meta,
+    /// livro. **Não é conquista** — a doc desta linha dizia que era, e a visão ANO
+    /// acreditou por três versões, desenhando um troféu dourado sobre a contagem
+    /// de tarefas fechadas. Ver ADR-0104.
     pub completed: i64,
     /// Marcações de hábito ('checked').
     pub checked: i64,
+    /// Conquistas desbloqueadas (`event_type = 'achievement_unlocked'`) — as
+    /// mesmas que a galeria mostra, e as únicas que merecem o troféu.
+    pub achievements: i64,
+}
+
+/// Quantos eventos de um `entity_kind` há num intervalo.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KindCount {
+    pub kind: String,
+    pub count: i64,
+}
+
+/// O censo de um intervalo — o que existe LÁ, não o que coube na página.
+///
+/// A visão MÊS lê o feed paginado, e por três versões anunciou "N eventos em
+/// julho" contando o array que recebeu: num mês maior que a página, a tela
+/// dizia o tamanho da página e chamava aquilo de o mês. O censo vem de um
+/// `COUNT(*)` sobre o intervalo inteiro, então o cabeçalho e as pílulas de
+/// filtro nunca dependem de quanto já foi carregado. Ver ADR-0104.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RangeSummary {
+    pub total: i64,
+    /// Um por `entity_kind` presente, do mais frequente ao menos. Um kind que
+    /// não aparece no intervalo não vem — a lista é o que existe, e é por isso
+    /// que ela não gera filtro morto.
+    pub by_kind: Vec<KindCount>,
 }
 
 pub trait TimelineRepository: Send + Sync {
     /// Meses ('YYYY-MM') com evento no ledger anteriores a `current_month`.
     fn ledger_months_before(&self, current_month: &str) -> Result<Vec<String>>;
-    /// Meses já congelados em `timeline_rollups`.
+    /// Meses já congelados em `timeline_rollups` **na versão corrente**.
     fn rolled_up_months(&self) -> Result<Vec<String>>;
     /// Congela um mês (idempotente).
     fn freeze_month(&self, month: &str, now: i64) -> Result<()>;
     /// Os rollups de um ano; o mês corrente é computado ao vivo.
     fn year(&self, year: &str, current_month: &str) -> Result<Vec<MonthRollup>>;
+    /// Os anos ('YYYY') que têm ao menos um evento no ledger, do mais antigo ao
+    /// mais recente. É o que dá ao scrubber as bordas da história: sem isso ele
+    /// deixa navegar até 2099 e mostrar "nada aconteceu" como se fosse resposta.
+    fn years(&self) -> Result<Vec<String>>;
+    /// O censo de um intervalo de dias: o total e a quebra por `entity_kind`.
+    fn summary(&self, from_day: &str, to_day: &str) -> Result<RangeSummary>;
     /// "Neste dia": eventos do mesmo 'MM-DD' de anos anteriores.
     fn on_this_day(&self, today: &str) -> Result<Vec<LedgerEntry>>;
 }

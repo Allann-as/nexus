@@ -74,8 +74,20 @@ impl LedgerRepository for SqliteLedgerRepository {
             // Filtra por `day` (não por `ts`) para acertar idx_ledger_day: o
             // custo passa a depender do intervalo pedido, não do tamanho total
             // da tabela. Um BETWEEN em `ts` faria full scan.
+            //
+            // Ordena por `day DESC` ANTES de `seq DESC`. A ordem de `seq` é a de
+            // INSERÇÃO, e ela só coincide com a cronológica enquanto ninguém
+            // escreve o passado — mas o backfill do Nexus Score congela até 60
+            // dias de uma vez, num único lote no fim da tabela, e um import
+            // futuro faria o mesmo. Sob `ORDER BY seq DESC` esses 60 dias saem
+            // ANTES de eventos mais recentes, e a paginação corta o feed por
+            // ordem de gravação em vez de por data. É o mesmo defeito que o
+            // ADR-0103 achou no `by_entity_kind` — o recorte por dia tem que ser
+            // SQL. O `seq` continua desempatando DENTRO do dia, que é onde ele é
+            // a ordem verdadeira.
             let mut stmt = c.prepare_cached(&format!(
-                "{SELECT} WHERE day BETWEEN ?1 AND ?2 ORDER BY seq DESC LIMIT ?3 OFFSET ?4"
+                "{SELECT} WHERE day BETWEEN ?1 AND ?2
+                  ORDER BY day DESC, seq DESC LIMIT ?3 OFFSET ?4"
             ))?;
             let rows = stmt.query_map(params![from_day, to_day, limit, offset], map_entry)?;
             Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)

@@ -2,7 +2,7 @@
 
 use tauri::State;
 
-use crate::application::ports::MonthRollup;
+use crate::application::ports::{MonthRollup, RangeSummary};
 use crate::domain::errors::Result;
 use crate::domain::ledger::LedgerEntry;
 use crate::state::AppState;
@@ -23,6 +23,23 @@ pub fn timeline_range(
 #[tauri::command]
 pub fn timeline_year(state: State<'_, AppState>, year: String) -> Result<Vec<MonthRollup>> {
     state.timeline.year(&year)
+}
+
+/// O censo de um intervalo: o total real e a quebra por tipo. A visão MÊS lê
+/// daqui o número que anuncia — nunca do tamanho da página que recebeu.
+#[tauri::command]
+pub fn timeline_summary(
+    state: State<'_, AppState>,
+    from_day: String,
+    to_day: String,
+) -> Result<RangeSummary> {
+    state.timeline.summary(&from_day, &to_day)
+}
+
+/// Os anos ('YYYY') com ao menos um evento — as bordas do scrubber.
+#[tauri::command]
+pub fn timeline_years(state: State<'_, AppState>) -> Result<Vec<String>> {
+    state.timeline.years()
 }
 
 /// "Neste dia": o que aconteceu no mesmo dia de anos anteriores.

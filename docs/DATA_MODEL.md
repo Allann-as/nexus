@@ -358,6 +358,23 @@ SEGUNDA recriação sobre dados existentes também é segura.
 (`entity_kind='career_milestone'`, ADR-0032). Nenhuma tabela nova: `timeline_rollups`
 e `insight_cache` já existiam desde a 0003.
 
+> **`timeline_rollups` tem VERSÃO desde a v1.3** (ADR-0104). Cada mês congelado
+> grava, na mesma transação das contagens, uma linha `metric='v'` com o
+> `ROLLUP_VERSION` da época; `rolled_up_months` só reconhece os da versão
+> corrente, e os de antes voltam a ser candidatos a congelar. Sem isso, mudar o
+> que `freeze_month` conta deixaria todo mês já fechado respondendo o número
+> velho **para sempre** — foi assim que a v1.3 ganhou a métrica `achievements` e
+> os meses da v1.2 continuariam jurando "zero conquistas". **Suba
+> `ROLLUP_VERSION` sempre que mudar o que se conta.** A tabela é PK
+> `(month, metric)`, então a linha de versão e as métricas novas não pediram
+> migration nenhuma.
+>
+> **A leitura do feed desce por `day`, não por `seq`.** `seq` é ordem de
+> INSERÇÃO, e ela diverge da cronológica sempre que alguém escreve o passado —
+> o backfill do Nexus Score congela até 60 dias num lote só. `ORDER BY day DESC,
+> seq DESC`: o `seq` desempata dentro do dia, que é onde ele é a ordem
+> verdadeira (ADR-0104, mesma lição do ADR-0103).
+
 ## 5.9 Vida: Metas Anuais e Temporadas (0012)
 
 **Dois kinds novos numa recriação só de `nodes`** (a TERCEIRA do projeto, ADR-0036):

@@ -245,6 +245,8 @@ pub fn run() {
             commands::links::node_links,
             commands::timeline::timeline_range,
             commands::timeline::timeline_year,
+            commands::timeline::timeline_years,
+            commands::timeline::timeline_summary,
             commands::timeline::on_this_day,
             commands::timeline::ensure_timeline_rollups,
             commands::notes::data_root,

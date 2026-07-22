@@ -337,6 +337,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("  {ticks} marcações de hábito em 120 dias");
 
+    // ===== "Neste dia": a história de anos anteriores =====
+    //
+    // O card "Neste dia" (Hub e Timeline) procura o mesmo 'MM-DD' em anos
+    // passados. O seed só ia 120 dias para trás — logo a busca NUNCA achava
+    // nada, o componente renderizava `null` por construção, e uma feature de
+    // duas telas ficava invisível: nem quebrada, nem vista. Um estado que o seed
+    // não produz se disfarça de "o usuário ainda não chegou lá".
+    //
+    // Três anos (1, 2 e 5) porque é exatamente o que a legenda promete — "há 1
+    // ano", "há 2 anos", "há 5 anos" — e porque três grupos provam o
+    // agrupamento, que um só não provaria.
+    let mut memories = 0;
+    for years_ago in [1i32, 2, 5] {
+        // 29/02 não existe em todo ano: `with_year` devolve `None` e o dia é
+        // pulado em vez de virar 01/03 (uma data que o usuário não viveu).
+        let Some(day) = today.with_year(today.year() - years_ago) else {
+            continue;
+        };
+        let d = format_day(day);
+        for habit in [&ler, &agua, &academia] {
+            habits.tick(&habit.id, Some(&d), TickStatus::Done, None)?;
+            memories += 1;
+        }
+    }
+    println!("  {memories} lembranças em 1, 2 e 5 anos atrás");
+
     // ===== Projeto com tarefas =====
     let project = tasks.create_project("Lançar o site pessoal", Some(&carreira.id))?;
     for (title, priority, dur) in [
