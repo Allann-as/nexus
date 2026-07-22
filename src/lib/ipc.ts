@@ -2083,6 +2083,10 @@ export interface CorrelationCard {
   habitA: HabitRef;
   habitB: HabitRef;
   direction: "helps" | "hurts";
+  /** P(B|A) — chance de cumprir B nos dias em que A foi feito. 0..1. */
+  pBGivenA: number;
+  /** P(B|¬A) — a mesma chance nos dias em que A NÃO foi feito. 0..1. */
+  pBGivenNotA: number;
   lift: number;
   phi: number;
   sampleSize: number;

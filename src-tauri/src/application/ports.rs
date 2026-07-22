@@ -160,6 +160,22 @@ pub trait LedgerRepository: Send + Sync {
     /// recente ao mais antigo. O painel da Carreira lê os marcos por aqui.
     fn by_entity_kind(&self, entity_kind: &str, limit: i64) -> Result<Vec<LedgerEntry>>;
 
+    /// Os eventos de um tipo de entidade cujo `day` cai em `[from_day, to_day]`,
+    /// **ordenados por dia**, sem limite.
+    ///
+    /// Existe porque `by_entity_kind` ordena por `ts` e corta por `LIMIT`, e as
+    /// duas coisas erram quando um lote inteiro é gravado de uma vez: o backfill
+    /// do Score congela até 60 dias no mesmo instante, todos com o mesmo `ts`,
+    /// então `ORDER BY ts DESC` não ordena por dia nenhum — e um `LIMIT` aplicado
+    /// antes do filtro de data corta pelo lado errado da janela. O recorte por
+    /// dia tem que ser SQL.
+    fn by_entity_kind_in_range(
+        &self,
+        entity_kind: &str,
+        from_day: &str,
+        to_day: &str,
+    ) -> Result<Vec<LedgerEntry>>;
+
     fn count(&self) -> Result<i64>;
 }
 

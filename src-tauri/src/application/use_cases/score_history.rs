@@ -221,15 +221,27 @@ impl ScoreHistoryService {
 
     /// A série congelada dos últimos `days` dias, do mais antigo ao mais recente —
     /// para o gráfico de evolução do score.
+    /// O recorte é por DIA, no SQL.
+    ///
+    /// Antes isto pedia `by_entity_kind(kind, days + 8)` e filtrava a data em
+    /// memória — duas coisas erradas ao mesmo tempo. O `freeze` grava todo o
+    /// backfill (até 60 dias) num único instante, com o **mesmo `ts`** em todas
+    /// as linhas, então o `ORDER BY ts DESC` não separava recente de antigo; e o
+    /// `LIMIT` vinha antes do filtro de dia, ficando com a ponta errada da
+    /// janela. Na dirigida, "últimos 30 dias" desenhava **oito** pontos — e a
+    /// tendência de 7-contra-7, que precisa de 14, nunca aparecia.
     pub fn history(&self, days: i64) -> Result<Vec<ScorePoint>> {
         let today = parse_day(&self.clock.today_local())?;
         let floor = format_day(today - Duration::days(days.max(1)));
 
         let mut points: Vec<ScorePoint> = self
             .ledger
-            .by_entity_kind(LedgerEntityKind::DailyScore.as_str(), days.max(1) + 8)?
+            .by_entity_kind_in_range(
+                LedgerEntityKind::DailyScore.as_str(),
+                &floor,
+                &format_day(today),
+            )?
             .into_iter()
-            .filter(|e| e.day >= floor)
             .filter_map(|e| {
                 let value = serde_json::from_str::<serde_json::Value>(&e.payload)
                     .ok()?

@@ -102,6 +102,21 @@ impl LedgerRepository for SqliteLedgerRepository {
         })
     }
 
+    fn by_entity_kind_in_range(
+        &self,
+        entity_kind: &str,
+        from_day: &str,
+        to_day: &str,
+    ) -> Result<Vec<LedgerEntry>> {
+        self.db.with_read(|c| {
+            let mut stmt = c.prepare_cached(&format!(
+                "{SELECT} WHERE entity_kind = ?1 AND day >= ?2 AND day <= ?3 ORDER BY day ASC"
+            ))?;
+            let rows = stmt.query_map(params![entity_kind, from_day, to_day], map_entry)?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        })
+    }
+
     fn count(&self) -> Result<i64> {
         self.db
             .with_read(|c| Ok(c.query_row("SELECT COUNT(*) FROM ledger", [], |r| r.get(0))?))

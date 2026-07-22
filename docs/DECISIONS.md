@@ -4090,3 +4090,75 @@ descreveria um ano que ainda não aconteceu.
 (R$ 7 mil, 2 tarefas, 520 hábitos, score 61 com pico 75, 6 semanas perfeitas, 4 conquistas, 2 livros).
 As seis semanas perfeitas batem com a tela de Semana Perfeita — a simetria que o método pede,
 confirmada em vez de assumida.
+
+---
+
+## ADR-0103 — Insights: cinco defeitos, e um cache que mentiu duas vezes
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), fase 5 — grupo B, Insights**
+
+**Contexto.** A tela mostrava a frase de cada correlação, a razão de carga e um sparkline do score. O
+plano pedia densificar: mini-barras de P(B|A) contra P(B|¬A), φ e lift à vista, tendência do score.
+Nenhum dos cinco defeitos abaixo estava no plano — todos apareceram ao fazer a conta bater com a tela.
+
+**Defeito 1 — a direção vinha do crivo do template, não do dado.** `qualifies_for_positive_template()`
+exige **duas** condições (φ ≥ 0,25 **e** lift ≥ 1,3) e o serviço usava esse teste para escolher a
+direção: tudo que não qualificava virava `Direction::Hurts` com a frase "cumprir B **cai** de X% para
+Y%". Mas o crivo tem duas condições e a direção tem uma. Uma correlação **positiva porém moderada** —
+φ 0,29 com lift 1,26, que o teste `a_positive_but_moderate_effect_is_never_called_harmful` demonstra
+ser alcançável, não hipotética — passava no piso de exibição, falhava no piso do template, e saía
+rotulada como prejudicial dizendo "cai de 77% para 97%". **O verbo contradizia os dois números na
+mesma frase.** Agora são três casos, que é o que o comentário do domínio sempre descreveu: positivo e
+forte ganha a frase afirmativa, positivo e fraco ganha uma frase que diz que é fraco, negativo ganha
+"cai". O sinal do efeito (`lift > 1`) decide a direção nos três — e `lift` nunca cai entre 0,9 e 1,1
+porque a faixa morta já foi barrada antes.
+
+**Defeito 2 — as probabilidades existiam e nunca saíam do domínio.** `Correlation` traz `p_b_given_a`
+e `p_b_given_not_a` desde sempre; o DTO só os exportava **formatados dentro da frase**. Uma
+probabilidade escrita em prosa não vira barra. Entraram no `CorrelationCard`, e as duas barras dividem
+a escala **absoluta** de 0 a 100% — probabilidades já têm régua comum, então aqui não cabe a
+normalização por linha que o Comparativo precisou (ADR-0101). O card passou a ter afirmação e
+evidência lado a lado.
+
+**Defeito 3 — o cache não sabia que o motor tinha mudado, e mordeu DUAS vezes.** O `insight_cache`
+guarda o resultado **já serializado** e o `input_signature` observa só as tabelas-fonte. Logo nada que
+mude no código invalida o cache.
+
+  1. **Forma.** P(B|A) entrou no card, a assinatura não mudou, o motor devolveu o JSON velho sem o
+     campo — e as barras novas desenharam **`NaN%`** na dirigida. Não houve erro em lugar nenhum: um
+     campo ausente vira `undefined`, e `undefined × 100` vira `NaN`.
+  2. **Cálculo.** Corrigido o item 1 versionando o *formato*, a correção do defeito 5 (abaixo) não
+     apareceu: a forma continuou idêntica, a assinatura bateu de novo, e a tela seguiu mostrando o
+     número velho **calculado pela regra velha**, sem sinal nenhum de que era velho.
+
+  Por isso a constante é `ENGINE_VERSION` e não `PAYLOAD_VERSION`: **sobe quando muda a forma do
+  resultado OU a conta que o gera.** Ela compõe a assinatura, então o cache é invalidado pelo mesmo
+  caminho que dado novo invalida e a linha é sobrescrita em vez de virar órfã. O episódio é a razão de
+  o comentário no código ser tão longo quanto é.
+
+**Defeito 4 — "últimos 30 dias" desenhava oito pontos.** `history()` pedia
+`by_entity_kind(kind, days + 8)` e filtrava a data **em memória**. Duas coisas erradas ao mesmo tempo:
+`by_entity_kind` ordena por `ts`, e o `freeze` grava todo o backfill (até 60 dias) num único instante,
+com o **mesmo `ts`** em todas as linhas — então `ORDER BY ts DESC` não separava recente de antigo; e o
+`LIMIT` vinha antes do filtro de dia, ficando com a ponta errada da janela. Como consequência a
+tendência de 7-contra-7, que precisa de 14 pontos, **nunca podia aparecer**. O recorte por dia virou
+SQL (`by_entity_kind_in_range`). Vale notar que o defeito só se manifesta depois de um backfill — que
+é exatamente o primeiro boot de quem já tem histórico, além do banco de dirigida.
+
+**Defeito 5 — a guarda anti-burnout comparava três dias com semanas inteiras.** A carga da semana
+corrente era medida contra a média de semanas **completas**: numa quarta-feira, 3 dias contra 7. A
+razão saía dividida por dois por construção (0,35× no banco de dirigida), e a guarda ficava
+estruturalmente muda no começo da semana — que é justamente quando o aviso ainda serve para alguma
+coisa. Uma guarda de segurança que se cala cedo falha na única hora em que importa. Agora cada semana
+da base conta **só até o mesmo dia da semana que hoje**: a mesma regra "até-a-data" do ADR-0062 e a
+mesma lição do ADR-0102. Na dirigida a base caiu de 32 para 15 e a razão foi de 0,35× para 0,72× —
+o mesmo comportamento, medido honestamente.
+
+**O que NÃO entrou, e por quê.** O plano pedia "ofensores por dia da semana" e "melhores horas" nesta
+tela. Os dois já existem como comandos próprios desde o M3.5/M4 (`habit_weekday_stats`,
+`minutes_by_hour` de Estudos e Foco), e o ADR do `bi_engine` decidiu explicitamente que o motor é o lar
+dos insights que **cruzam entidades** ou exigem **janela móvel** — "não uma segunda casa para o que já
+tem tela". Duplicá-los aqui criaria dois donos do mesmo número, que é o que o projeto vem evitando com
+a `queryKey` compartilhada. O que **não** existe é a versão agregada — "em que dia da semana eu falho
+mais somando TODOS os hábitos" —, e essa sim cruza entidades e cabe no motor. Fica como o próximo
+passo do Insights, não como omissão.
