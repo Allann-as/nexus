@@ -3406,3 +3406,32 @@ precisa ser fração de alguma coisa que importe.
 **Decisão 5 — "Registrar marco" mudou de lugar.** Sem o `<h2>`, o botão ficou sozinho numa linha,
 flutuando num vazio sem nada a que pertencer. Foi para o cabeçalho da "Linha da carreira" — a seção a
 que ele acrescenta. Um botão pertence ao que ele modifica.
+
+---
+
+## ADR-0089 — Marcos ganha aba própria: uma história de dez anos não é rodapé de dashboard
+
+**Data:** 2026-07-21 · **Status:** aceito · **v1.3 (COCKPIT), fase 4 — Carreira, Marcos (fim da Esfera)**
+
+**Contexto.** A mecânica de marcos estava completa desde a v1.2 — modal com seletor de tipo por ícones,
+retratação via ledger (ADR-0056), duração de cada fase calculada entre marcos consecutivos. O que
+faltava era LUGAR: ela morava no rodapé do Painel, abaixo dos tiles.
+
+**Decisão — a linha do tempo vira a aba `milestones`.** Uma história profissional cresce para sempre;
+no rodapé de um dashboard ela empurra tudo para baixo e, ainda assim, aparece espremida. O que fica no
+Painel é o RESUMO que já estava lá — "No marco atual" (há quanto tempo dura a fase corrente) e "Marcos
+em {ano}". **Resumo no painel, história na aba**: a mesma lista não se desenha em dois lugares.
+
+A aba não recebe `areaId`, e isso é uma consequência do modelo, não um esquecimento: o marco é um fato
+do LEDGER (`LedgerEntityKind::CareerMilestone`), sem node e sem tabela satélite — não há por onde
+filtrar, porque a carreira é uma só.
+
+**As contas de tempo saíram para `careerTime.ts`.** `daysBetween`, `humanize`, `formatDay`,
+`todayLocal`, `isoDay` e `parseMilestone` eram privadas do `CareerDashboard`. Com duas telas precisando
+das mesmas funções, deixá-las lá significaria copiá-las — e duas cópias de "quantos dias entre" é como
+um lado começa a contar diferente do outro sem ninguém perceber.
+
+**Com isto a Esfera Carreira fecha**: Painel, Metas (o motor genérico da fase 3), Projetos,
+Habilidades e Marcos. Nenhuma migration foi escrita na Esfera inteira — as três tabelas de que ela
+precisava (`skill_details`, `skill_checkins`, e o `tasks`/`project` genérico) já existiam, e o link
+projeto→meta reusou o `contributes_to` do M4.6.

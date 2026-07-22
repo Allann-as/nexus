@@ -16,95 +16,27 @@
  *   inacabado. A lista compacta de competências com o nível calculado é o dado
  *   mais vivo desta Esfera (é o que muda todo mês) e não duplica a aba
  *   Habilidades: lá se faz o check-in, aqui se vê onde tudo está.
+ * - **A linha do tempo saiu para a aba MARCOS** (ADR-0089). O que ficou aqui é o
+ *   RESUMO dela: "No marco atual" (há quanto tempo dura a fase corrente) e
+ *   "Marcos em {ano}". Resumo no painel, história na aba — a mesma lista não se
+ *   desenha em dois lugares.
  *
- * O `seg` de cada tile é uma fração REAL ou não existe: "marcos no ano" sobre o
- * total de marcos, "em evolução" sobre o total de competências. "Tempo no cargo"
- * e "próxima meta" não ganham medidor porque não têm denominador — uma barra ali
- * seria um enfeite fingindo proporção (lição 1).
- *
- * Um marco também pode ser apagado (v1.2). Aqui a exclusão é de um tipo raro:
- * o marco não tem linha de estado nenhuma — ele É um fato do ledger. Então
- * "excluir" não remove nada: acrescenta um evento de RETRATAÇÃO, e é a leitura
- * do ledger que passa a ignorar o marco retratado (ADR-0056). O passado fica
- * inteiro; só a linha da carreira se corrige.
+ * O `seg` de um tile é uma fração REAL de algo que importa, ou não existe. "Em
+ * evolução" sobre o total de competências passa; "marcos no ano" sobre o total de
+ * marcos foi REPROVADO (ADR-0088) — a fração era verdadeira e ninguém faz aquela
+ * pergunta. "Tempo no cargo" e "próxima meta" não têm denominador nenhum.
  */
 
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Award, Briefcase, CalendarClock, Plus, Target, TrendingUp } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Award, Briefcase, Plus, Target, TrendingUp } from "lucide-react";
 
 import { StatTile } from "../../design-system/cards";
 import { MonoLabel, StatusList, type StatusRow } from "../../design-system/instruments";
-import { Button, EmptyState, cx } from "../../design-system/primitives";
-import { ArmedDelete } from "../../design-system/ArmedDelete";
-import { useToasts } from "../../stores/toasts";
-import {
-  careerMilestones,
-  deleteCareerMilestone,
-  listGoals,
-  listSkills,
-  skillsEvolving,
-  type CareerMilestoneKind,
-  type LedgerEntry,
-} from "../../lib/ipc";
-import { CAREER_KIND_META } from "./careerKinds";
+import { Button, EmptyState } from "../../design-system/primitives";
+import { listGoals, listSkills, careerMilestones, skillsEvolving } from "../../lib/ipc";
 import { RecordMilestoneModal } from "./RecordMilestoneModal";
-
-const MONTHS = [
-  "jan", "fev", "mar", "abr", "mai", "jun",
-  "jul", "ago", "set", "out", "nov", "dez",
-];
-
-/** '2026-07-12' → '12 de jul de 2026'. */
-function formatDay(day: string): string {
-  const [y, m, d] = day.split("-");
-  return `${Number(d)} de ${MONTHS[Number(m) - 1] ?? m} de ${y}`;
-}
-
-const pad = (n: number) => String(n).padStart(2, "0");
-/** O dia LOCAL de hoje como 'YYYY-MM-DD' — a mesma convenção do backend. */
-function todayLocal(): string {
-  const n = new Date();
-  return `${n.getFullYear()}-${pad(n.getMonth() + 1)}-${pad(n.getDate())}`;
-}
-
-/** Dias entre dois 'YYYY-MM-DD' (UTC para não tropeçar em horário de verão). */
-function daysBetween(a: string, b: string): number {
-  const [ay, am, ad] = a.split("-").map(Number);
-  const [by, bm, bd] = b.split("-").map(Number);
-  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000);
-}
-
-/** Uma duração em dias, em português curto: "2 anos 3 meses", "5 meses", "12 dias". */
-function humanize(days: number): string {
-  if (days <= 0) return "hoje";
-  if (days < 45) return `${days} ${days === 1 ? "dia" : "dias"}`;
-  const months = Math.floor(days / 30.44);
-  if (months < 12) return `${months} ${months === 1 ? "mês" : "meses"}`;
-  const years = Math.floor(days / 365.25);
-  const rem = Math.floor((days - years * 365.25) / 30.44);
-  const y = `${years} ${years === 1 ? "ano" : "anos"}`;
-  return rem > 0 ? `${y} ${rem} ${rem === 1 ? "mês" : "meses"}` : y;
-}
-
-interface Milestone {
-  entry: LedgerEntry;
-  kind: CareerMilestoneKind;
-  note: string | null;
-}
-
-function parseMilestone(entry: LedgerEntry): Milestone {
-  let kind: CareerMilestoneKind = "other";
-  let note: string | null = null;
-  try {
-    const p = JSON.parse(entry.payload) as { kind?: string; note?: string | null };
-    if (p.kind && p.kind in CAREER_KIND_META) kind = p.kind as CareerMilestoneKind;
-    note = p.note ?? null;
-  } catch {
-    // Um payload ilegível não pode derrubar o painel; cai no marco genérico.
-  }
-  return { entry, kind, note };
-}
+import { daysBetween, humanize, isoDay, parseMilestone, todayLocal } from "./careerTime";
 
 export function CareerDashboard({ areaId }: { areaId: string }) {
   const client = useQueryClient();
@@ -239,77 +171,6 @@ export function CareerDashboard({ areaId }: { areaId: string }) {
         )}
       </div>
 
-      {/* ===== A linha do tempo de cargos, com duração de cada fase ===== */}
-      {milestones.length > 0 && (
-        <section>
-          {/* "Registrar marco" mora AQUI, no cabeçalho da linha do tempo a que
-              ele acrescenta. Numa linha só dele, depois que o `<h2>` saiu, o
-              botão ficava flutuando num vazio sem nada a que pertencer. */}
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <MonoLabel>Linha da carreira</MonoLabel>
-            <Button variant="ghost" size="sm" icon={Plus} onClick={() => setRecording(true)}>
-              Registrar marco
-            </Button>
-          </div>
-          <ol className="relative ml-2 border-l border-[var(--border-subtle)]">
-            {milestones.map((m, i) => {
-              // A fase deste marco durou dele até o PRÓXIMO mais recente (o de
-              // índice i-1); o mais recente de todos corre até hoje ("atual").
-              const isCurrent = i === 0;
-              const spanDays = isCurrent
-                ? daysBetween(m.entry.day, today)
-                : daysBetween(m.entry.day, milestones[i - 1].entry.day);
-              const Icon = CAREER_KIND_META[m.kind].icon;
-              return (
-                <li key={m.entry.seq} className="relative py-3 pl-6">
-                  <span
-                    className={cx(
-                      "absolute -left-[13px] top-3.5 grid size-6 place-items-center rounded-full text-[var(--sphere)]",
-                      isCurrent
-                        ? "bg-[color-mix(in_srgb,var(--sphere)_18%,var(--bg-surface))] ring-2 ring-[color-mix(in_srgb,var(--sphere)_55%,transparent)]"
-                        : "bg-[var(--bg-surface)] ring-1 ring-[color-mix(in_srgb,var(--sphere)_45%,transparent)]",
-                    )}
-                    aria-hidden
-                  >
-                    <Icon size={12} />
-                  </span>
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                    <span className="text-[14px] font-medium text-[var(--text-primary)]">
-                      {m.entry.titleSnapshot}
-                    </span>
-                    <span className="text-[11px] text-[var(--text-tertiary)]">
-                      {formatDay(m.entry.day)}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] text-[var(--sphere)]">
-                      {CAREER_KIND_META[m.kind].label}
-                    </span>
-                    <span
-                      className={cx(
-                        "flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px]",
-                        isCurrent
-                          ? "border-[color-mix(in_srgb,var(--sphere)_35%,transparent)] bg-[color-mix(in_srgb,var(--sphere)_14%,transparent)] text-[var(--sphere)]"
-                          : "border-[var(--border-subtle)] text-[var(--text-tertiary)]",
-                      )}
-                    >
-                      <CalendarClock size={10} />
-                      {isCurrent ? `atual · há ${humanize(spanDays)}` : `durou ${humanize(spanDays)}`}
-                    </span>
-                    <MilestoneDelete entry={m.entry} />
-                  </div>
-                  {m.note && (
-                    <p className="mt-1 text-[12.5px] leading-[18px] text-[var(--text-secondary)]">
-                      {m.note}
-                    </p>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-        </section>
-      )}
-
       {/* ===== As competências, compactas — onde tudo está agora ===== */}
       {skillRows.length > 0 && (
         <section>
@@ -328,43 +189,4 @@ export function CareerDashboard({ areaId }: { areaId: string }) {
       {recording && <RecordMilestoneModal onClose={() => setRecording(false)} onSaved={refresh} />}
     </div>
   );
-}
-
-/**
- * O gesto de retratar um marco, ao lado da duração da fase.
- *
- * As chaves invalidadas são as mesmas que `refresh` usa depois de registrar um
- * marco — ["career"] redesenha a linha e os tiles, ["ledger"] redesenha a
- * Timeline, que é onde o evento de correção também aparece.
- */
-function MilestoneDelete({ entry }: { entry: LedgerEntry }) {
-  const client = useQueryClient();
-  const push = useToasts((s) => s.push);
-  const pushError = useToasts((s) => s.pushError);
-
-  const remove = useMutation({
-    mutationFn: () => deleteCareerMilestone(entry.entityId),
-    onSuccess: () => {
-      push("success", "Marco excluído");
-      void client.invalidateQueries({ queryKey: ["career"] });
-      void client.invalidateQueries({ queryKey: ["ledger"] });
-    },
-    onError: pushError,
-  });
-
-  return (
-    <ArmedDelete
-      className="ml-auto"
-      onConfirm={() => remove.mutate()}
-      pending={remove.isPending}
-      question="Excluir este marco?"
-      ariaLabel={`Excluir o marco ${entry.titleSnapshot}`}
-    />
-  );
-}
-
-/** '2026-07-12' de um epoch-ms LOCAL — para a meta com prazo (o deadline é ms). */
-function isoDay(ms: number): string {
-  const d = new Date(ms);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }

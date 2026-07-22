@@ -29,6 +29,7 @@ import {
   Brain,
   CalendarDays,
   Flame,
+  Milestone,
   type LucideIcon,
 } from "lucide-react";
 
@@ -80,6 +81,10 @@ export const SPHERE_SECTIONS: Record<Template, SphereSection[]> = {
     { key: "goals", label: "Metas", icon: Target, indicator: "active_goals" },
     { key: "projects", label: "Projetos", icon: FolderKanban, indicator: "open_projects" },
     { key: "skills", label: "Habilidades", icon: Award },
+    // Os marcos moravam embutidos no Painel. Uma história profissional de dez
+    // anos não é um rodapé de dashboard: ela é uma das coisas que a Esfera GUARDA,
+    // e ganha a própria aba (ADR-0089).
+    { key: "milestones", label: "Marcos", icon: Milestone },
   ],
   studies: [
     { key: "dashboard", label: "Painel", icon: LayoutDashboard, indicator: "streak" },
