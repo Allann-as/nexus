@@ -31,36 +31,11 @@ import {
   type Occurrence,
 } from "../../lib/ipc";
 import { useToasts } from "../../stores/toasts";
-import { fromDay, toDay } from "../calendar/grid";
-
-/** Dias até um exame, a partir de hoje (dia local, não milissegundos). */
-function daysUntil(day: string): number {
-  const today = fromDay(toDay(new Date()));
-  const target = fromDay(day);
-  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
-}
-
-/** O que falta: "hoje", "amanhã", "em 4 dias". */
-function countdown(days: number): string {
-  if (days === 0) return "hoje";
-  if (days === 1) return "amanhã";
-  return `em ${days} dias`;
-}
-
-/**
- * O que passou: "ontem", "há 12 dias", "há 3 meses".
- *
- * Vira meses depois de 60 dias porque "há 214 dias" é um número que ninguém
- * converte de cabeça — e a pergunta do consultório é "quantos meses faz?".
- */
-function elapsed(days: number): string {
-  if (days <= 0) return "hoje";
-  if (days === 1) return "ontem";
-  if (days < 60) return `há ${days} dias`;
-  const months = Math.round(days / 30);
-  if (months < 24) return `há ${months} meses`;
-  return `há ${Math.round(days / 365)} anos`;
-}
+import { toDay } from "../calendar/grid";
+/* As contas de prazo saíram para `deadline.ts` quando a Faculdade passou a
+   precisar das mesmas — uma cópia por tela é como duas telas começam a contar
+   dias de forma diferente (ADR-0089). */
+import { countdown, daysUntil, elapsed } from "../calendar/deadline";
 
 export function HealthExams({ areaId }: { areaId: string }) {
   const [creating, setCreating] = useState(false);

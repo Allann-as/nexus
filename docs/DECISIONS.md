@@ -3640,3 +3640,60 @@ depois de gravar: quem decompõe uma matéria escreve vários de uma vez, e fech
 cada tema. (2) O excluir de um item **não tem confirmação armada** (ao contrário do arquivar da
 matéria): um tema custa três palavras para reescrever, e o modal custaria mais que o erro. O
 `ArmedDelete` continua onde o estrago é caro.
+
+---
+
+## ADR-0094 — Faculdade: a SEGUNDA coluna muda, e o vínculo que já existia no schema
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), fase 4 — Estudos, Faculdade (fecho)**
+
+**Contexto.** Faltava à Faculdade o que uma matéria de faculdade tem de mais concreto: **o que vence**.
+O ADR-0091 já suspeitava que não precisava de schema, e o levantamento confirmou — mas achou de novo o
+mesmo tipo de coisa que o ADR-0092 tinha achado.
+
+**Decisão 1 — entrega e prova são `event` com `category`, como o exame da Saúde.** `event_details.category`
+é TEXT livre desde a 0007. Uma tabela `deliveries` criaria uma segunda fonte de "o que vem aí" e um
+segundo lugar para esquecer de apagar. **Consequência verificada na dirigida, não assumida:** a entrega
+marcada na aba aparece no Calendário do dia 24, na cor de Estudos. Não são duas verdades — é a mesma,
+em dois recortes.
+
+**Decisão 2 — `event_details.notes` era a SEGUNDA coluna muda.** Como a `summary` do ADR-0092: criada
+na 0017, viva no schema, e sem um único `SELECT` ou setter em Rust. Duas ocorrências deixam de ser
+coincidência e viram regra: **quando uma migration antiga foi escrita "olhando a tela seguinte", é
+provável que a tela seguinte tenha chegado sem ligar o fio.** O levantamento de uma fase nova tem que
+perguntar "esta coluna tem leitor?", não só "esta coluna existe?".
+
+`notes` não é `location`, e a distinção é o motivo de ela existir: sobrecarregar `location` faria o
+Calendário mostrar "vale 40% da nota" como se fosse **onde** a prova acontece.
+
+**Decisão 3 — o vínculo é o `nodes.parent_id` genérico, não uma coluna nova.** É o mesmo campo que liga
+tarefa a projeto e sub-desafio a meta. Duas consequências que a 0019 já tinha pago: ele é
+`ON DELETE SET NULL`, então **apagar a matéria não apaga a prova** (provado por teste), e a ocorrência
+já podia carregá-lo até a tela — o que deixa a aba agrupar por matéria **sem uma segunda consulta por
+card** (dez matérias fariam vinte consultas para desenhar a mesma coisa; são duas, no topo).
+
+**Decisão 4 — os ÓRFÃOS têm lugar.** Uma entrega cuja matéria foi apagada (ou que pertence a outra
+trilha) não é desenhada por card nenhum. Sem uma seção "Sem matéria" ela sumiria da Faculdade **sem
+sumir do Calendário** — a aba mentiria por omissão sobre o que ainda vence. E a conta é feita contra a
+lista que a tela mostra, não contra `parentId == null`: só o primeiro caso é óbvio, e o segundo some do
+mesmo jeito.
+
+**Decisão 5 — a hora não se pergunta.** Uma entrega vence num DIA: "23:59 do dia 12" é o que o aluno
+tem na cabeça, não "às 14h30". O evento nasce às 23h para ocupar o fim do dia no Calendário, e a
+contagem que a tela mostra depende só do dia.
+
+**O que a dirigida reprovou.** A observação vinha na MESMA linha do título, espremida entre o nome e a
+contagem, e saía como *"· vale ..."* — um dado que existe, ocupa espaço e não se lê (lição 2). Ganhou
+linha própria. As duas linhas agora contrastam pelo prazo: "em 2 dias" em âmbar, "em 8 dias" em cinza —
+o limiar de 7 dias é o mesmo dos Exames, porque uma semana é o tempo em que ainda dá para fazer alguma
+coisa a respeito.
+
+**As contas de prazo saíram para `calendar/deadline.ts`.** `daysUntil`, `countdown` e `elapsed` eram
+privadas do `HealthExams`. Com a Faculdade precisando das mesmas, deixá-las lá significaria copiá-las —
+e duas cópias de "quantos dias faltam" é como duas telas começam a contar diferente sem ninguém
+perceber. É a mesma extração do `careerTime.ts` (ADR-0089), pelo mesmo motivo.
+
+**Uma observação registrada, não corrigida.** No Calendário mensal, uma célula com três compromissos
+desenha dois e marca a contagem "3" num canto discreto que só aparece no hover. O dado não se perde, mas
+a leitura de relance esconde o terceiro. **Não mexi aqui**: o Calendário é tela da fase 5, e o conserto
+pertence a ela — fica anotado para não ser redescoberto.

@@ -786,6 +786,27 @@ no ledger** — o fato de Estudos é a sessão; a lista é decomposição (ADR-0
 fração indefinida) e `sort_order` é REAL como em `task_details`/`milestone_details`
 — a ordem é a do usuário, com desempate por `id` UUIDv7.
 
+## 5.19 A Faculdade não custou schema nenhum (v1.3, sem migration)
+
+Entregas e provas são `event` com `category='entrega'|'prova'` — o mesmo mecanismo
+dos Exames da Saúde, porque `event_details.category` é TEXT livre desde a 0007.
+Nenhuma tabela nova, e a consequência é uma só verdade: marcar na aba é marcar no
+Calendário.
+
+O que a fase 4 ligou foram **duas colunas que já existiam**:
+
+- **`event_details.notes`** (criada na 0017) era a SEGUNDA coluna muda do projeto,
+  depois da `subject_details.summary` (§5.18). Nenhum `SELECT`, nenhum setter.
+  Duas ocorrências viram regra: uma migration escrita "olhando a tela seguinte"
+  costuma chegar à tela seguinte sem o fio ligado — o levantamento tem que
+  perguntar *"esta coluna tem leitor?"*, não só *"esta coluna existe?"*.
+- **`nodes.parent_id`** passou a valer para `event` → `subject` (a matéria de uma
+  entrega). É o mesmo campo de tarefa→projeto e sub-desafio→meta, e a 0019 já o
+  deixou `ON DELETE SET NULL`: **apagar a matéria não apaga a prova**, ela só fica
+  órfã (com teste). `Occurrence` passou a carregar `parent_id` e `notes`, o que
+  deixa a aba agrupar por matéria com duas consultas no topo em vez de duas por
+  card.
+
 ## 6. Integridade e migrations
 
 - `user_version` gerenciado pelo `rusqlite_migration`.

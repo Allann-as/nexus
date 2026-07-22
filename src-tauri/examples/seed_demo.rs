@@ -378,6 +378,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     events.create(&NewEvent {
         title: "Terapia".into(),
         area_id: Some(saude.id.clone()),
+        parent_id: None,
         details: NewEventDetails {
             starts_at: at(next_tuesday, 19, 0),
             ends_at: at(next_tuesday, 19, 0) + 50 * min,
@@ -389,6 +390,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             recurrence_end: None,
             location: Some("Consultório".into()),
             category: None,
+            notes: None,
         },
     })?;
     created_events += 1;
@@ -406,6 +408,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     events.create(&NewEvent {
         title: "Reunião de condomínio".into(),
         area_id: None,
+        parent_id: None,
         details: NewEventDetails {
             starts_at: at(day_15, 20, 0),
             ends_at: at(day_15, 21, 30),
@@ -414,6 +417,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             recurrence_end: None,
             location: Some("Salão de festas".into()),
             category: None,
+            notes: None,
         },
     })?;
     created_events += 1;
@@ -423,6 +427,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     events.create(&NewEvent {
         title: "Daily do time".into(),
         area_id: Some(carreira.id.clone()),
+        parent_id: None,
         details: NewEventDetails {
             starts_at: at(tomorrow, 9, 30),
             ends_at: at(tomorrow, 9, 45),
@@ -434,6 +439,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             recurrence_end: None,
             location: None,
             category: None,
+            notes: None,
         },
     })?;
     created_events += 1;
@@ -444,6 +450,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     events.create(&NewEvent {
         title: "Dentista".into(),
         area_id: Some(saude.id.clone()),
+        parent_id: None,
         details: NewEventDetails {
             starts_at: at(tomorrow, 15, 0),
             ends_at: at(tomorrow, 16, 0),
@@ -452,11 +459,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             recurrence_end: None,
             location: Some("Clínica".into()),
             category: Some("consulta".into()),
+            notes: None,
         },
     })?;
     events.create(&NewEvent {
         title: "Call com o cliente".into(),
         area_id: Some(carreira.id.clone()),
+        parent_id: None,
         details: NewEventDetails {
             starts_at: at(tomorrow, 15, 30),
             ends_at: at(tomorrow, 16, 30),
@@ -465,6 +474,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             recurrence_end: None,
             location: None,
             category: None,
+            notes: None,
         },
     })?;
     created_events += 2;
@@ -474,6 +484,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     events.create(&NewEvent {
         title: "Exame de sangue".into(),
         area_id: Some(saude.id.clone()),
+        parent_id: None,
         details: NewEventDetails {
             starts_at: at(today + chrono::Duration::days(5), 7, 30),
             ends_at: at(today + chrono::Duration::days(5), 8, 0),
@@ -482,6 +493,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             recurrence_end: None,
             location: Some("Laboratório".into()),
             category: Some("exame".into()),
+            notes: None,
         },
     })?;
     created_events += 1;
@@ -491,6 +503,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     events.create(&NewEvent {
         title: "Feriado".into(),
         area_id: None,
+        parent_id: None,
         details: NewEventDetails {
             starts_at: at(today + chrono::Duration::days(9), 0, 0),
             ends_at: at(today + chrono::Duration::days(9), 23, 59),
@@ -499,6 +512,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             recurrence_end: None,
             location: None,
             category: None,
+            notes: None,
         },
     })?;
     created_events += 1;
@@ -809,6 +823,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         events.create(&NewEvent {
             title: "Reunião de equipe".into(),
             area_id: Some(carreira.id.clone()),
+            parent_id: None,
             details: NewEventDetails {
                 starts_at: at(first, 10, 0),
                 ends_at: at(first, 11, 0),
@@ -821,6 +836,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 recurrence_end: None,
                 location: Some("Sala 3".into()),
                 category: None,
+                notes: None,
             },
         })?;
         println!("  1 série 'toda 3ª terça'");

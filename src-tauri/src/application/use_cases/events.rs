@@ -78,6 +78,24 @@ impl EventService {
                 return Err(NexusError::NotFound(format!("área {aid} não existe")));
             }
         }
+        // O pai (a MATÉRIA de uma entrega ou prova) tem que existir. Sem esta
+        // guarda a FK recusaria — mas o usuário leria "FOREIGN KEY constraint
+        // failed" em vez de saber qual matéria sumiu. A FK é o piso; a mensagem
+        // é o comportamento (a mesma decisão do ADR-0092).
+        if let Some(pid) = &new.parent_id {
+            // O `match` distingue "não existe" de "o banco falhou": mapear tudo
+            // para NotFound esconderia um erro de storage atrás de uma mensagem
+            // tranquilizadora e errada.
+            match self.nodes.get(pid) {
+                Ok(_) => {}
+                Err(NexusError::NotFound(_)) => {
+                    return Err(NexusError::NotFound(format!(
+                        "a matéria {pid} deste compromisso não existe"
+                    )))
+                }
+                Err(e) => return Err(e),
+            }
+        }
 
         let occurrences = materialise(d)?;
         let id = self.ids.new_id();
@@ -103,7 +121,7 @@ impl EventService {
                 kind: Kind::Event,
                 title,
                 area_id: new.area_id.clone(),
-                parent_id: None,
+                parent_id: new.parent_id.clone(),
             },
             d,
             &occurrences,
@@ -555,6 +573,7 @@ mod tests {
             recurrence_end: None,
             location: None,
             category: None,
+            notes: None,
         }
     }
 

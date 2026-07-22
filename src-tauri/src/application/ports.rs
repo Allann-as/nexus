@@ -475,6 +475,11 @@ pub struct NewEventDetails {
     /// Exame, consulta, reunião… O rótulo que distingue um compromisso do
     /// outro sem exigir uma tabela por tipo. Ver a §2 da 0007.
     pub category: Option<String>,
+    /// A observação do compromisso ("trazer calculadora", "vale 40% da nota").
+    /// NÃO é `location`, que é o lugar — sobrecarregá-la faria o Calendário
+    /// mostrar a observação como se fosse onde a prova acontece. Coluna criada
+    /// na 0017 e sem leitor até aqui.
+    pub notes: Option<String>,
 }
 
 /// Tudo que criar um evento precisa, num pacote só.
@@ -486,6 +491,11 @@ pub struct NewEventDetails {
 pub struct NewEvent {
     pub title: String,
     pub area_id: Option<String>,
+    /// A que este compromisso PERTENCE — a matéria de uma entrega ou de uma
+    /// prova (Faculdade). É o `nodes.parent_id` genérico, o mesmo que liga
+    /// tarefa a projeto e sub-desafio a meta; desde a 0019 ele é
+    /// `ON DELETE SET NULL`, então apagar a matéria não apaga a prova.
+    pub parent_id: Option<String>,
     pub details: NewEventDetails,
 }
 
@@ -552,6 +562,11 @@ pub struct Occurrence {
     /// A ocorrência pertence a uma série. A UI mostra o ícone de repetição, e
     /// arrastar uma delas avisa que só aquela se move.
     pub is_recurring: bool,
+    /// A que o compromisso pertence (a matéria, numa entrega ou prova). É o que
+    /// deixa a aba da Faculdade AGRUPAR sem uma segunda consulta por item.
+    pub parent_id: Option<String>,
+    /// A observação ("trazer calculadora"). Ver `NewEventDetails::notes`.
+    pub notes: Option<String>,
 }
 
 /// Uma ocorrência mudando de lugar (o arrasto do timeblocking).

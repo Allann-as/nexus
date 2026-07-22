@@ -747,6 +747,10 @@ export interface Occurrence {
   location: string | null;
   category: string | null;
   isRecurring: boolean;
+  /** A matéria a que pertence (uma entrega/prova da Faculdade). */
+  parentId: string | null;
+  /** A observação do compromisso. Não é o lugar. */
+  notes: string | null;
 }
 
 /** Dois compromissos no mesmo intervalo. O backend avisa; nunca barra. */
@@ -765,6 +769,10 @@ export const createEvent = (e: {
   recurrenceEnd?: number | null;
   location?: string | null;
   category?: string | null;
+  /** A matéria a que a entrega/prova pertence (Faculdade). */
+  parentId?: string | null;
+  /** A observação ("trazer calculadora"). Não é o `location`. */
+  notes?: string | null;
 }) => call<CalendarEvent>("create_event", { event: e });
 
 export const getEvent = (id: string) => call<CalendarEvent>("get_event", { id });

@@ -33,6 +33,12 @@ pub struct NewEventDto {
     pub location: Option<String>,
     #[serde(default)]
     pub category: Option<String>,
+    /// A matéria a que a entrega/prova pertence (Faculdade). Ausente na maioria
+    /// dos compromissos — um almoço não pertence a coisa nenhuma.
+    #[serde(default)]
+    pub parent_id: Option<String>,
+    #[serde(default)]
+    pub notes: Option<String>,
 }
 
 #[tauri::command]
@@ -40,6 +46,7 @@ pub fn create_event(state: State<'_, AppState>, event: NewEventDto) -> Result<Ev
     state.events.create(&NewEvent {
         title: event.title,
         area_id: event.area_id,
+        parent_id: event.parent_id,
         details: NewEventDetails {
             starts_at: event.starts_at,
             ends_at: event.ends_at,
@@ -48,6 +55,7 @@ pub fn create_event(state: State<'_, AppState>, event: NewEventDto) -> Result<Ev
             recurrence_end: event.recurrence_end,
             location: event.location,
             category: event.category,
+            notes: event.notes,
         },
     })
 }

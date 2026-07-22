@@ -11,7 +11,7 @@
  * propósito nesta fase. Quando voltarem, o lugar delas é esta trilha.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, BookMarked, Clock, GraduationCap, Link2, Plus } from "lucide-react";
 
@@ -22,12 +22,17 @@ import { useToasts } from "../../stores/toasts";
 import {
   archiveSubject,
   createSubject,
+  eventsByCategory,
   listSubjects,
   subjectProgress,
+  type Occurrence,
   type Subject,
 } from "../../lib/ipc";
 import { formatMinutes, toHours, shortDay } from "./studyFormat";
+import { countdown, daysUntil } from "../calendar/deadline";
 import { LogSessionModal } from "./LogSessionModal";
+import { SubjectChecklist } from "./SubjectChecklist";
+import { SubjectDeadlines } from "./SubjectDeadlines";
 import { HabitTracker } from "../habits/HabitTracker";
 
 export function CollegeTrack({ areaId }: { areaId: string }) {
@@ -46,6 +51,27 @@ export function CollegeTrack({ areaId }: { areaId: string }) {
     queryKey: ["subjects", areaId, "faculdade"],
     queryFn: () => listSubjects(areaId, "faculdade"),
   });
+
+  /* Entregas e provas vêm em DUAS buscas para a aba inteira, não em duas por
+     card: dez matérias fariam vinte consultas para desenhar a mesma coisa. O
+     agrupamento por matéria é feito aqui, com o `parentId` que a ocorrência já
+     carrega. */
+  const entregas = useQuery({
+    queryKey: ["events", "category", "entrega"],
+    queryFn: () => eventsByCategory("entrega", 100),
+  });
+  const provas = useQuery({
+    queryKey: ["events", "category", "prova"],
+    queryFn: () => eventsByCategory("prova", 100),
+  });
+
+  const deadlines = useMemo(
+    () =>
+      [...(entregas.data ?? []), ...(provas.data ?? [])].sort(
+        (a, b) => a.startsAt - b.startsAt,
+      ),
+    [entregas.data, provas.data],
+  );
 
   const invalidate = () => {
     void client.invalidateQueries({ queryKey: ["subjects", areaId, "faculdade"] });
@@ -102,6 +128,13 @@ export function CollegeTrack({ areaId }: { areaId: string }) {
 
   const items = subjects.data ?? [];
   const canCreate = title.trim().length > 0 && !create.isPending;
+
+  /* Órfã é toda entrega/prova que nenhum card desta aba vai desenhar — sem pai,
+     ou com um pai que não é matéria de faculdade. A conta é feita contra a LISTA
+     que a tela mostra, não contra `parentId == null`: uma prova pendurada numa
+     matéria de outra trilha também desapareceria em silêncio. */
+  const shown = new Set(items.map((s) => s.id));
+  const orphans = deadlines.filter((d) => !d.parentId || !shown.has(d.parentId));
 
   return (
     <div className="nx-enter">
@@ -179,12 +212,46 @@ export function CollegeTrack({ areaId }: { areaId: string }) {
             <CollegeCard
               key={s.id}
               subject={s}
+              areaId={areaId}
+              deadlines={deadlines.filter((d) => d.parentId === s.id)}
               onLog={() => setLogFor(s.id)}
               onArchive={() => archive.mutate(s.id)}
               archiving={archive.isPending && archive.variables === s.id}
             />
           ))}
         </div>
+      )}
+
+      {/* Os ÓRFÃOS: entregas cuja matéria foi apagada (a FK é ON DELETE SET NULL
+          desde a 0019 — a prova sobrevive à matéria) ou marcadas de outra tela.
+          Sem esta lista elas sumiriam da Faculdade sem sumir do Calendário, e a
+          aba mentiria por omissão sobre o que ainda vence. */}
+      {orphans.length > 0 && (
+        <section className="mt-6">
+          <h3 className="mb-2 text-[10px] font-semibold tracking-[0.14em] text-[var(--text-tertiary)] uppercase">
+            Sem matéria
+          </h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <Card className="p-4">
+              <p className="mb-2 text-[11px] text-[var(--text-tertiary)]">
+                Marcadas fora de uma matéria, ou de uma que foi apagada.
+              </p>
+              <ul className="flex flex-col gap-1">
+                {orphans.map((o) => (
+                  <li
+                    key={`${o.eventId}@${o.startsAt}`}
+                    className="flex items-baseline justify-between gap-2 text-[12px]"
+                  >
+                    <span className="truncate text-[var(--text-secondary)]">{o.title}</span>
+                    <span className="tabular shrink-0 text-[11px] text-[var(--text-tertiary)]">
+                      {countdown(daysUntil(o.day))}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </div>
+        </section>
       )}
 
       {(logging || logFor) && (
@@ -204,11 +271,15 @@ export function CollegeTrack({ areaId }: { areaId: string }) {
 
 function CollegeCard({
   subject,
+  areaId,
+  deadlines,
   onLog,
   onArchive,
   archiving,
 }: {
   subject: Subject;
+  areaId: string;
+  deadlines: Occurrence[];
   onLog: () => void;
   onArchive: () => void;
   archiving: boolean;
@@ -298,6 +369,19 @@ function CollegeCard({
           ))}
         </div>
       )}
+
+      {/* O que VENCE — a pergunta central de uma matéria de faculdade, e a que
+          não tinha resposta em lugar nenhum do app até aqui. */}
+      <SubjectDeadlines
+        subjectId={subject.id}
+        subjectTitle={subject.title}
+        areaId={areaId}
+        items={deadlines}
+      />
+
+      {/* E o que ESTUDAR: a mesma lista de temas das outras trilhas (0020). O
+          vocabulário vem da trilha, então aqui ela se chama "temas". */}
+      <SubjectChecklist subjectId={subject.id} track={subject.track} />
 
       <button
         onClick={onLog}

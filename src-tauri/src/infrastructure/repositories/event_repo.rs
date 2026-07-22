@@ -39,7 +39,8 @@ const SELECT_EVENT: &str = "
 /// sem uma segunda ida ao banco por item.
 const SELECT_OCCURRENCE: &str = "
     SELECT o.event_id, n.title, n.area_id, o.starts_at, o.ends_at, o.day, o.status,
-           e.all_day, e.location, e.category, e.rrule IS NOT NULL
+           e.all_day, e.location, e.category, e.rrule IS NOT NULL,
+           n.parent_id, e.notes
       FROM event_occurrences o
       JOIN event_details e ON e.node_id = o.event_id
       JOIN nodes n         ON n.id      = o.event_id";
@@ -84,6 +85,8 @@ fn map_occurrence(row: &Row) -> rusqlite::Result<Occurrence> {
         location: row.get(8)?,
         category: row.get(9)?,
         is_recurring: row.get::<_, i64>(10)? != 0,
+        parent_id: row.get(11)?,
+        notes: row.get(12)?,
     })
 }
 
@@ -94,8 +97,9 @@ fn insert_details(
 ) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT INTO event_details
-           (node_id, starts_at, ends_at, all_day, rrule, recurrence_end, location, category)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+           (node_id, starts_at, ends_at, all_day, rrule, recurrence_end, location,
+            category, notes)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             node_id,
             d.starts_at,
@@ -105,6 +109,7 @@ fn insert_details(
             d.recurrence_end,
             d.location,
             d.category,
+            d.notes,
         ],
     )?;
     Ok(())
@@ -533,6 +538,7 @@ mod tests {
             recurrence_end: None,
             location: None,
             category: None,
+            notes: None,
         }
     }
 
@@ -557,6 +563,101 @@ mod tests {
             &ledger_event(id),
         )
         .unwrap();
+    }
+
+    #[test]
+    fn a_delivery_carries_its_subject_and_its_note_back_to_the_screen() {
+        // A Faculdade agrupa entregas e provas POR MATÉRIA sem uma segunda
+        // consulta por item: quem carrega o vínculo é a própria ocorrência.
+        // `notes` existe desde a 0017 e não tinha leitor — este teste é o que
+        // impede a coluna de voltar a ficar muda.
+        let (_dir, repo) = fixture();
+        repo.db
+            .with_write(|c| {
+                c.execute(
+                    "INSERT INTO nodes (id, kind, title, status, created_at, updated_at)
+                     VALUES ('su1', 'subject', 'Cálculo II', 'active', 0, 0)",
+                    [],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+
+        repo.create_with_event(
+            "ev1",
+            &NewNode {
+                kind: Kind::Event,
+                title: "Prova 1".into(),
+                area_id: None,
+                parent_id: Some("su1".into()),
+            },
+            &NewEventDetails {
+                category: Some("prova".into()),
+                notes: Some("trazer calculadora".into()),
+                ..details(1_000, 4_600_000, None)
+            },
+            &[occ(1_000, 4_600_000, "2026-09-05")],
+            &ledger_event("ev1"),
+        )
+        .unwrap();
+
+        let vindouras = repo
+            .upcoming_by_category("prova", "2026-07-22", 10)
+            .unwrap();
+        assert_eq!(vindouras.len(), 1);
+        assert_eq!(vindouras[0].parent_id.as_deref(), Some("su1"));
+        assert_eq!(vindouras[0].notes.as_deref(), Some("trazer calculadora"));
+    }
+
+    #[test]
+    fn deleting_the_subject_leaves_the_exam_standing() {
+        // A promessa da 0019 (`parent_id` é ON DELETE SET NULL) aplicada ao caso
+        // novo: apagar a matéria NÃO pode apagar a prova em silêncio. A prova
+        // continua na agenda, órfã — que é o que o usuário veria no calendário.
+        let (_dir, repo) = fixture();
+        repo.db
+            .with_write(|c| {
+                c.execute("PRAGMA foreign_keys = ON", [])?;
+                c.execute(
+                    "INSERT INTO nodes (id, kind, title, status, created_at, updated_at)
+                     VALUES ('su1', 'subject', 'Cálculo II', 'active', 0, 0)",
+                    [],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+        repo.create_with_event(
+            "ev1",
+            &NewNode {
+                kind: Kind::Event,
+                title: "Entrega do TCC".into(),
+                area_id: None,
+                parent_id: Some("su1".into()),
+            },
+            &NewEventDetails {
+                category: Some("entrega".into()),
+                ..details(1_000, 4_600_000, None)
+            },
+            &[occ(1_000, 4_600_000, "2026-09-05")],
+            &ledger_event("ev1"),
+        )
+        .unwrap();
+
+        repo.db
+            .with_write(|c| {
+                c.execute("DELETE FROM nodes WHERE id = 'su1'", [])?;
+                Ok(())
+            })
+            .unwrap();
+
+        let vindouras = repo
+            .upcoming_by_category("entrega", "2026-07-22", 10)
+            .unwrap();
+        assert_eq!(vindouras.len(), 1, "a entrega foi junto com a matéria");
+        assert_eq!(
+            vindouras[0].parent_id, None,
+            "o vínculo devia ter sido desfeito"
+        );
     }
 
     #[test]
