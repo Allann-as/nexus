@@ -97,6 +97,32 @@ pub fn run() {
                 .build(),
         )
         .setup(move |app| {
+            // O escopo do protocolo `asset:` é concedido AQUI, não no
+            // `tauri.conf.json`.
+            //
+            // A config trazia um padrão ancorado em `$APPDATA`, que no Tauri v2
+            // é `data_dir()/<identifier>` — ou seja, `%APPDATA%\com.allan.nexus\`.
+            // O NEXUS grava em `%APPDATA%\Nexus\media` (`Paths::resolve`), então
+            // o padrão apontava para uma pasta que NUNCA existiu: nenhuma imagem
+            // anexada a uma nota jamais carregou, desde o M4, nem em produção.
+            // Ninguém viu porque o seed nunca anexou nada — a tela só foi vista
+            // sem anexo.
+            //
+            // Um caminho estático não teria como acertar de qualquer forma: o
+            // `NEXUS_DATA_DIR` (ADR-0048) move a raiz inteira, e é justamente o
+            // modo em que toda dirigida roda. Concedendo em runtime a partir do
+            // `Paths` que o app REALMENTE abriu, o escopo acerta nos dois
+            // ambientes por construção — e continua sendo só a pasta `media`,
+            // mais estreito do que o padrão errado prometia. Ver ADR-0106.
+            {
+                use tauri::Manager;
+                let media = app.state::<AppState>().paths.media.clone();
+                if let Err(e) = app.asset_protocol_scope().allow_directory(&media, true) {
+                    tracing::warn!(error = %e, path = %media.display(),
+                        "não foi possível liberar a pasta de mídia para o protocolo asset");
+                }
+            }
+
             build_tray(app.handle())?;
             fit_window_to_screen(app.handle());
             // Registra o atalho global só depois que o app está de pé.

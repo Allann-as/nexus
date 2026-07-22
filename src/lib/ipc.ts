@@ -2048,6 +2048,12 @@ export interface NoteSummary {
   areaId: string | null;
   isPinned: boolean;
   updatedAt: number;
+  /** Elos que a nota EMITE (wiki-links resolvidos) — ADR-0106. */
+  outgoingCount: number;
+  /** Quantas notas MENCIONAM esta. */
+  backlinkCount: number;
+  /** Arquivos anexados. */
+  attachmentCount: number;
 }
 
 /** Um elo de/para uma nota. */

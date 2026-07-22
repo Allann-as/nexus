@@ -872,6 +872,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     println!("  2 notas com wiki-links e backlinks");
 
+    // ===== Anexos (M4) =====
+    //
+    // O seed nunca anexou NADA: `nodes` com kind='file' era zero, e com isso a
+    // seção "Anexos" do rodapé da nota, a resolução de `asset:` por
+    // `convertFileSrc` e a cópia para `media/AAAA/MM/<sha>.<ext>` nunca foram
+    // exercitadas por ninguém — nem os dois ramos de desenho (a miniatura de
+    // imagem e o chip de arquivo). É o mesmo buraco de `focus_sessions`.
+    //
+    // A imagem é um PNG REAL do próprio bundle, não bytes inventados: um 1x1
+    // transparente provaria o caminho e desenharia um quadrado vazio,
+    // indistinguível de anexo quebrado — e uma dirigida que não sabe dizer se a
+    // imagem carregou não provou nada.
+    let icon_png = std::fs::read("icons/128x128.png")
+        .or_else(|_| std::fs::read("src-tauri/icons/128x128.png"));
+    match icon_png {
+        Ok(bytes) => {
+            notes_svc.attach(&protocolo.id, "grafico-do-sono.png", &bytes)?;
+            println!("  1 anexo de imagem");
+        }
+        // O seed roda de dois diretórios diferentes conforme quem o chama; se o
+        // ícone não estiver em nenhum, o resto do seed não pode cair por isso.
+        Err(e) => println!("  (sem anexo de imagem: {e})"),
+    }
+    notes_svc.attach(
+        &diario.id,
+        "checklist-da-semana.md",
+        b"# Semana\n\n- [x] dormir cedo\n- [ ] correr sabado\n",
+    )?;
+    println!("  1 anexo de arquivo");
+
     // ===== Um evento recorrente por dia-da-semana (ADR-0024) =====
     //
     // "Reunião de equipe, toda 3ª terça": a variante MonthlyByWeekday do M4,

@@ -6,14 +6,31 @@
  * backlinks. Notas é uma tela GLOBAL (mora na rail), então ela não se tinge de
  * Esfera — fica no azul neutro do accent, como o resto do que é do app inteiro.
  *
- * A lista vem pinned-first, newest-first do backend; a busca filtra por título
- * no cliente, porque a lista de notas de uma pessoa cabe folgada na memória e um
- * ida-e-volta ao SQLite por tecla digitada seria latência sem ganho.
+ * A lista vem pinned-first, newest-first do backend, e cada linha carrega a
+ * TEIA daquela nota: quantos elos ela emite, quantas notas a mencionam e
+ * quantos anexos ela tem. Numa tela cuja tese é a teia, uma linha que só sabe
+ * dizer título e data não diz se a nota está ligada a alguma coisa.
+ *
+ * **A busca é FTS, não filtro de título.** O placeholder sempre disse "Buscar
+ * notas…", mas o filtro olhava só o `title`: procurar "sono" não achava a nota
+ * que fala de sono da primeira à última linha, e nada na tela dizia que a busca
+ * era só do título. O `search` do backend já existia desde o M1 —
+ * acento-insensível, por prefixo, com a entrada do usuário nunca interpretada
+ * como sintaxe — e devolve o TRECHO onde bateu. Ver ADR-0106.
  */
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, Pin, Plus, Search } from "lucide-react";
+import {
+  ArrowUpRight,
+  FileText,
+  Link2,
+  Paperclip,
+  Pin,
+  Plus,
+  Search,
+  type LucideIcon,
+} from "lucide-react";
 
 import { ArmedDelete } from "../../design-system/ArmedDelete";
 import { Button, EmptyState, PageHeader, cx } from "../../design-system/primitives";
@@ -24,20 +41,34 @@ import {
   getNote,
   listNotes,
   pinNote,
+  search,
   type NoteFull,
   type NoteSummary,
+  type SearchHit,
 } from "../../lib/ipc";
 import { NoteEditor } from "./NoteEditor";
 
 const DAY_MS = 86_400_000;
 
-/** Tempo relativo curto para a lista — "hoje", "há 3 dias", "12/03". */
+/**
+ * Tempo relativo curto para a lista — "hoje", "há 3 dias", "12/03", "12/03/24".
+ *
+ * O ano entra quando a nota é de OUTRO ano. Sem ele, "12/03" servia igual para
+ * uma nota de março passado e uma de 2024, e a promessa da tela é justamente um
+ * arquivo eterno: a única data que distingue duas notas velhas some.
+ */
 function relativeTime(ms: number): string {
   const days = Math.floor((Date.now() - ms) / DAY_MS);
   if (days <= 0) return "hoje";
   if (days === 1) return "ontem";
   if (days < 7) return `há ${days} dias`;
-  return new Date(ms).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  const d = new Date(ms);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    ...(sameYear ? {} : { year: "2-digit" }),
+  });
 }
 
 export function NotesScreen() {
@@ -57,6 +88,29 @@ export function NotesScreen() {
 
   const notes = useMemo(() => list.data ?? [], [list.data]);
 
+  /* A BUSCA vai ao FTS do backend, não ao título em memória. Só dispara com 2+
+     caracteres: uma letra casa com quase tudo e o resultado não é uma busca, é
+     a lista embaralhada por relevância. */
+  const trimmed = query.trim();
+  const searching = trimmed.length >= 2;
+  const hits = useQuery({
+    queryKey: ["notes", "search", trimmed],
+    queryFn: () => search(trimmed, 50),
+    enabled: searching,
+  });
+
+  /** Os resultados que são NOTA, na ordem de relevância do bm25. */
+  const results = useMemo(() => {
+    if (!searching) return [];
+    const byId = new Map(notes.map((n) => [n.id, n]));
+    return (hits.data ?? [])
+      .filter((h) => h.kind === "note")
+      .map((h) => ({ hit: h, note: byId.get(h.nodeId) }))
+      // Uma nota arquivada pode voltar do índice sem estar na lista; sem o
+      // resumo não há linha para desenhar, e inventar uma seria pior.
+      .filter((r): r is { hit: SearchHit; note: NoteSummary } => Boolean(r.note));
+  }, [searching, hits.data, notes]);
+
   // Sem seleção, abre a primeira nota — a tela nunca fica com o painel direito
   // vazio quando há o que mostrar.
   useEffect(() => {
@@ -72,14 +126,14 @@ export function NotesScreen() {
     enabled: !!selectedId,
   });
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const rows = q ? notes.filter((n) => n.title.toLowerCase().includes(q)) : notes;
-    return {
-      pinned: rows.filter((n) => n.isPinned),
-      rest: rows.filter((n) => !n.isPinned),
-    };
-  }, [notes, query]);
+  // Sem busca, a lista é a do backend: fixadas primeiro, recentes depois.
+  const filtered = useMemo(
+    () => ({
+      pinned: notes.filter((n) => n.isPinned),
+      rest: notes.filter((n) => !n.isPinned),
+    }),
+    [notes],
+  );
 
   const handleCreate = async () => {
     if (creating) return;
@@ -134,7 +188,6 @@ export function NotesScreen() {
   };
 
   const hasNotes = notes.length > 0;
-  const anyResult = filtered.pinned.length + filtered.rest.length > 0;
 
   return (
     <div className="nx-page nx-enter flex h-full flex-col overflow-hidden">
@@ -189,7 +242,7 @@ export function NotesScreen() {
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Buscar notas…"
+                  placeholder="Buscar no texto…"
                   className="h-8 w-full bg-transparent text-[12.5px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
                 />
               </div>
@@ -205,10 +258,37 @@ export function NotesScreen() {
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-              {!anyResult ? (
-                <p className="px-2 py-6 text-center text-[12px] text-[var(--text-tertiary)]">
-                  Nenhuma nota encontrada.
-                </p>
+              {searching ? (
+                /* MODO BUSCA: a lista vira resultado, e o cabeçalho diz que a
+                   busca varre o texto — senão "3 resultados" para uma palavra
+                   que não está em nenhum título parece defeito. */
+                hits.isLoading ? (
+                  <p className="px-2 py-6 text-center text-[12px] text-[var(--text-tertiary)]">
+                    Buscando…
+                  </p>
+                ) : results.length === 0 ? (
+                  <p className="px-2 py-6 text-center text-[12px] text-[var(--text-tertiary)]">
+                    Nenhuma nota contém “{trimmed}”.
+                  </p>
+                ) : (
+                  <>
+                    <SectionLabel>
+                      {results.length === 1
+                        ? "1 nota no texto"
+                        : `${results.length} notas no texto`}
+                    </SectionLabel>
+                    {results.map(({ hit, note }) => (
+                      <NoteRow
+                        key={note.id}
+                        note={note}
+                        snippet={hit.snippet}
+                        active={note.id === selectedId}
+                        onOpen={() => setSelectedId(note.id)}
+                        onPin={() => togglePin(note)}
+                      />
+                    ))}
+                  </>
+                )
               ) : (
                 <>
                   {filtered.pinned.length > 0 && (
@@ -260,6 +340,28 @@ export function NotesScreen() {
   );
 }
 
+/** Um contador da teia — some quando é zero. */
+function NoteMeta({
+  icon: Icon,
+  n,
+  title,
+}: {
+  icon: LucideIcon;
+  n: number;
+  title: string;
+}) {
+  if (n <= 0) return null;
+  return (
+    <span
+      title={`${n} ${title}`}
+      className="inline-flex items-center gap-0.5 text-[10.5px] text-[var(--text-tertiary)]"
+    >
+      <Icon size={10} strokeWidth={2.2} aria-hidden />
+      <span className="tabular">{n}</span>
+    </span>
+  );
+}
+
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <p className="px-2 pt-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--text-tertiary)]">
@@ -270,11 +372,14 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 function NoteRow({
   note,
+  snippet,
   active,
   onOpen,
   onPin,
 }: {
   note: NoteSummary;
+  /** O trecho onde a busca bateu. Só no modo busca. */
+  snippet?: string;
   active: boolean;
   onOpen: () => void;
   onPin: () => void;
@@ -283,7 +388,7 @@ function NoteRow({
     <div
       onClick={onOpen}
       className={cx(
-        "group flex cursor-pointer items-center gap-2 rounded-[var(--radius-md)] border-l-2 px-2.5 py-2 transition-[background-color,border-color] duration-[var(--dur-fast)] ease-[var(--ease)]",
+        "group flex cursor-pointer items-start gap-2 rounded-[var(--radius-md)] border-l-2 px-2.5 py-2 transition-[background-color,border-color] duration-[var(--dur-fast)] ease-[var(--ease)]",
         active
           ? "border-l-[var(--accent)] bg-[var(--bg-surface)]"
           : "border-l-transparent hover:bg-[var(--bg-surface)]",
@@ -298,9 +403,24 @@ function NoteRow({
         >
           {note.title || "Sem título"}
         </p>
-        <p className="tabular mt-0.5 text-[10.5px] text-[var(--text-tertiary)]">
-          {relativeTime(note.updatedAt)}
-        </p>
+
+        {snippet && (
+          <p className="mt-0.5 line-clamp-2 text-[11px] leading-[15px] text-[var(--text-tertiary)]">
+            {snippet}
+          </p>
+        )}
+
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="tabular text-[10.5px] text-[var(--text-tertiary)]">
+            {relativeTime(note.updatedAt)}
+          </span>
+          {/* A teia da nota. Cada contador só aparece quando é MAIOR QUE ZERO:
+              uma fileira de "0 · 0 · 0" em toda nota nova seria ruído afirmando
+              ausência, e a linha existe para mostrar o que a nota TEM. */}
+          <NoteMeta icon={ArrowUpRight} n={note.outgoingCount} title="elos que saem" />
+          <NoteMeta icon={Link2} n={note.backlinkCount} title="notas que mencionam esta" />
+          <NoteMeta icon={Paperclip} n={note.attachmentCount} title="anexos" />
+        </div>
       </div>
       <button
         onClick={(e) => {

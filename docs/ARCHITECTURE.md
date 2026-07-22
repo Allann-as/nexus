@@ -241,8 +241,12 @@ logs/      rotação diária
 - **Notas** (CodeMirror 6): editor Markdown com preview ao vivo, checkboxes
   interativos, `[[wiki-links]]` com autocomplete + backlinks automáticos (2º consumidor
   de `links`), e anexos copiados para `media/AAAA/MM/<sha>.<ext>` com SHA-256 e dedup
-  (colar imagem do clipboard entra direto). Protocolo `asset:` habilitado com escopo em
-  `media/`.
+  (colar imagem do clipboard entra direto). Protocolo `asset:` habilitado, e o escopo
+  **concedido em runtime** a partir de `Paths::media` (v1.3, ADR-0106): o padrão
+  estático que estava na config apontava para `$APPDATA/Nexus/media/**`, e `$APPDATA`
+  no Tauri v2 é `data_dir()/<identifier>` — uma pasta que nunca existiu. Nenhuma
+  imagem anexada carregou entre o M4 e a v1.3. Um padrão estático também não
+  sobreviveria ao `NEXUS_DATA_DIR` (ADR-0048), que é o modo de toda dirigida.
 - **Timeline** (a Máquina do Tempo): scrubber de ano/mês, visão MÊS como feed do ledger
   agrupado por dia (sem JOIN com `nodes` — `title_snapshot` + `payload`), visão ANO por
   `timeline_rollups` congelados pelo job de fechamento (disparado pela navegação,

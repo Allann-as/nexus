@@ -270,6 +270,19 @@ pub struct NoteSummary {
     pub area_id: Option<String>,
     pub is_pinned: bool,
     pub updated_at: i64,
+    /// Quantos elos esta nota EMITE (os `[[wiki-links]]` resolvidos).
+    ///
+    /// As três contagens abaixo existem porque a lista lateral só sabia dizer
+    /// título e data: numa tela cuja tese é a TEIA, a linha não dizia se a nota
+    /// tinha um fio sequer. O dado existia — mas só dentro do `NoteFull`, uma
+    /// nota por vez, o que forçaria a lista a buscar cada nota para desenhar uma
+    /// linha. São subconsultas correlacionadas sobre a PK de `links`
+    /// (`source_id`) e sobre `idx_links_target`. Ver ADR-0106.
+    pub outgoing_count: i64,
+    /// Quantas notas MENCIONAM esta.
+    pub backlink_count: i64,
+    /// Quantos arquivos estão anexados a ela.
+    pub attachment_count: i64,
 }
 
 /// Um elo de/para uma nota, com o alvo já resolvido para exibir.

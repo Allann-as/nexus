@@ -130,7 +130,17 @@ fn read_note(conn: &Connection, id: &str) -> Result<NoteFull> {
 impl NoteRepository for SqliteNoteRepository {
     fn list(&self, area_id: Option<&str>) -> Result<Vec<NoteSummary>> {
         self.db.with_read(|c| {
-            let sql = "SELECT n.id, n.title, n.area_id, COALESCE(d.is_pinned, 0), n.updated_at
+            /* As três contagens vêm por subconsulta correlacionada, com
+            EXATAMENTE os mesmos critérios que o `read_note` usa para montar
+            `outgoing`/`backlinks`/`attachments` — duas definições do que é um
+            elo divergiriam no dia em que só uma fosse corrigida, e a lista
+            passaria a discordar da nota aberta. */
+            let sql = "SELECT n.id, n.title, n.area_id, COALESCE(d.is_pinned, 0), n.updated_at,
+                              (SELECT COUNT(*) FROM links l
+                                WHERE l.source_id = n.id AND l.link_type <> 'attached_to'),
+                              (SELECT COUNT(*) FROM links l WHERE l.target_id = n.id),
+                              (SELECT COUNT(*) FROM links l
+                                WHERE l.source_id = n.id AND l.link_type = 'attached_to')
                          FROM nodes n
                          LEFT JOIN note_details d ON d.node_id = n.id
                         WHERE n.kind = 'note' AND n.status <> 'archived'";
@@ -141,6 +151,9 @@ impl NoteRepository for SqliteNoteRepository {
                     area_id: r.get(2)?,
                     is_pinned: r.get::<_, i64>(3)? != 0,
                     updated_at: r.get(4)?,
+                    outgoing_count: r.get(5)?,
+                    backlink_count: r.get(6)?,
+                    attachment_count: r.get(7)?,
                 })
             };
             // Fixadas primeiro, depois as mais recentes.
@@ -385,6 +398,71 @@ mod tests {
         let full = notes.get_full("n1").unwrap();
         assert_eq!(full.body_md, "Dormir 7h30 por noite.");
         assert_eq!(full.updated_at, 10);
+    }
+
+    /// A lista lateral e a nota aberta contam a MESMA coisa.
+    ///
+    /// São duas consultas diferentes sobre `links` — a da lista por subconsulta,
+    /// a da nota por JOIN — e a única defesa contra elas divergirem é um teste
+    /// que compara as duas. Sem ele, a linha diria "2 elos" numa nota que abre
+    /// mostrando três, e ninguém saberia qual das duas está certa (ADR-0106).
+    #[test]
+    fn the_list_counts_exactly_what_the_open_note_shows() {
+        let (_d, notes, nodes) = fixture();
+        note(&nodes, "n1", "Diário");
+        note(&nodes, "n2", "Academia");
+        note(&nodes, "n3", "Sono");
+
+        // n1 aponta para n2 e n3; n3 aponta de volta para n1.
+        notes
+            .save_body_with_event(
+                "n1",
+                "Fui à [[Academia]] e dormi bem: [[Sono]].",
+                &["n2".into(), "n3".into()],
+                10,
+                &ev("n1", EventType::NoteEdited),
+            )
+            .unwrap();
+        notes
+            .save_body_with_event(
+                "n3",
+                "Ver o [[Diário]].",
+                &["n1".into()],
+                11,
+                &ev("n3", EventType::NoteEdited),
+            )
+            .unwrap();
+
+        let list = notes.list(None).unwrap();
+        for row in &list {
+            let full = notes.get_full(&row.id).unwrap();
+            assert_eq!(
+                row.outgoing_count,
+                full.outgoing.len() as i64,
+                "elos que saem de '{}'",
+                row.title
+            );
+            assert_eq!(
+                row.backlink_count,
+                full.backlinks.len() as i64,
+                "quem menciona '{}'",
+                row.title
+            );
+            assert_eq!(
+                row.attachment_count,
+                full.attachments.len() as i64,
+                "anexos de '{}'",
+                row.title
+            );
+        }
+
+        // E os números são os esperados, não só iguais entre si.
+        let by_id = |id: &str| list.iter().find(|r| r.id == id).unwrap().clone();
+        assert_eq!(by_id("n1").outgoing_count, 2);
+        assert_eq!(by_id("n1").backlink_count, 1, "n3 menciona n1");
+        assert_eq!(by_id("n2").outgoing_count, 0);
+        assert_eq!(by_id("n2").backlink_count, 1);
+        assert_eq!(by_id("n1").attachment_count, 0);
     }
 
     #[test]

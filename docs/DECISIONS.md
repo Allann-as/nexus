@@ -917,8 +917,13 @@ outro lado. Anexos também são elos (nota → arquivo).
   clipboard é o mesmo caminho, são só bytes.
 - A URL do asset no front usa a **raiz real** (`data_root` → `%APPDATA%/Nexus`), não
   o `appDataDir()` do Tauri (que aponta para a pasta do identificador do bundle, um
-  diretório diferente). O protocolo `asset:` é habilitado com escopo em
-  `$APPDATA/Nexus/media/**` (feature `protocol-asset`), e a CSP já o admitia.
+  diretório diferente). O protocolo `asset:` é habilitado (feature `protocol-asset`),
+  e a CSP já o admitia.
+  > **Correção da v1.3 (ADR-0106).** O escopo estático era `$APPDATA/Nexus/media/**`
+  > — e caiu na armadilha que o parágrafo acima descreve: `$APPDATA` no Tauri v2 **é**
+  > `data_dir()/<identifier>`. O padrão apontava para `%APPDATA%/com.allan.nexus/Nexus/media`,
+  > que nunca existiu, e nenhuma imagem anexada carregou entre o M4 e a v1.3. O escopo
+  > passou a ser concedido em **runtime** a partir de `Paths::media`.
 
 ---
 
@@ -4350,3 +4355,70 @@ aqui a sexta cópia — sem desarme por tempo, por Esc nem por clique fora.
   2. **`StudyStats::best_hour` tem o empate do defeito 2, intacto** (`src/features/studies/StudyStatsPanel.tsx`
      e o `max_by_key` correspondente no serviço de estudos). O código do Foco foi copiado de lá; a
      correção precisa voltar. As duas coisas se resolvem juntas, e depois da (1) dá para provar.
+
+---
+
+## ADR-0106 — Notas: o anexo que nunca carregou, e uma busca que não buscava
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), fase 5 — grupo C, Notas**
+
+**Contexto.** O plano perguntava, entre parênteses, se a contagem de links e anexos da lista lateral
+já existia no backend. A resposta é **não** — e a pergunta puxou o fio que revelou um defeito de
+quatro milestones.
+
+**Defeito 1 — nenhuma imagem anexada a uma nota jamais carregou. Nem em produção.**
+
+O `tauri.conf.json` declarava `assetProtocol.scope = ["$APPDATA/Nexus/media/**"]`. No Tauri v2,
+`$APPDATA` resolve para `BaseDirectory::AppData`, que é `data_dir().join(identifier)` —
+`%APPDATA%\com.allan.nexus`. O NEXUS grava em `%APPDATA%\Nexus` (`Paths::resolve` usa
+`data_dir().join("Nexus")`). O padrão apontava, portanto, para
+`%APPDATA%\com.allan.nexus\Nexus\media\**`: **uma pasta que nunca existiu**. Toda imagem anexada
+desde o M4 era bloqueada pelo escopo e desenhava o ícone de imagem quebrada.
+
+A ironia está registrada no próprio código: o doc de `data_root` (M4) avisa que *"o `appDataDir()` do
+Tauri aponta para a pasta do IDENTIFICADOR do bundle, não para a raiz que o NEXUS escolheu"* — o
+comando TypeScript foi escrito justamente para evitar essa confusão, e a linha de config ao lado caiu
+nela. Uma armadilha documentada não é uma armadilha desarmada.
+
+Ninguém viu porque **o seed nunca anexou nada**: `nodes` com `kind='file'` era zero, então a seção
+"Anexos", a resolução por `convertFileSrc` e a cópia para `media/AAAA/MM/<sha>.<ext>` nunca tinham
+sido exercitadas. É o defeito 1 do ADR-0105 outra vez, em outra tela — e desta vez o estado
+não-semeado não escondia uma tela vazia, escondia uma **quebra**.
+
+**A correção não é consertar o padrão; é parar de adivinhar o caminho.** Um escopo estático não teria
+como acertar de qualquer forma: o `NEXUS_DATA_DIR` (ADR-0048) move a raiz inteira, e é exatamente o
+modo em que toda dirigida roda — ou seja, mesmo com `$DATA/Nexus/media/**` (o padrão certo para
+produção), nenhuma dirigida conseguiria ver um anexo, e a próxima quebra ficaria invisível pela mesma
+razão que esta ficou. O escopo passou a ser concedido em **runtime**, no `setup`, a partir do
+`Paths::media` que o app REALMENTE abriu: acerta nos dois ambientes por construção, e continua sendo
+só a pasta `media` — mais estreito do que o padrão errado prometia. O `scope` da config ficou vazio.
+
+O seed passou a anexar dois arquivos: um **PNG real do próprio bundle** (`icons/128x128.png`) e um
+`.md`. A imagem não é um 1x1 transparente de propósito — ele provaria o caminho desenhando um
+quadrado vazio, indistinguível de anexo quebrado, e uma dirigida que não sabe dizer se a imagem
+carregou não provou nada. Os dois arquivos também cobrem os **dois ramos** de desenho do rodapé (a
+miniatura e o chip com nome + tamanho), nenhum dos quais tinha sido visto.
+
+**Defeito 2 — a busca da barra lateral não buscava nas notas.** O campo dizia "Buscar notas…" e
+filtrava `note.title.includes(q)` em memória. Procurar "sono" não encontrava a nota que fala de sono
+da primeira à última linha, e nada na tela dizia que a busca era só de título — a tela contradizia o
+banco em silêncio. O `search` do backend existe desde o M1: FTS5, acento-insensível, por prefixo, com
+a entrada do usuário nunca interpretada como sintaxe (ADR-0011), e devolve o **trecho** onde bateu.
+A barra passou a usá-lo (a partir de 2 caracteres — uma letra casa com quase tudo e o resultado não
+seria uma busca, seria a lista embaralhada por relevância), o resultado mostra o snippet, e o
+cabeçalho diz "N notas no texto", para um acerto em palavra que não está em nenhum título não parecer
+defeito. Na dirigida, `disposicao` (sem cedilha, sem til) encontrou "disposição" no corpo.
+
+**Defeito 3 — a lista lateral não dizia nada sobre a teia.** Numa tela cuja tese é o grafo, a linha
+sabia dizer título e data. `NoteSummary` ganhou `outgoingCount` / `backlinkCount` / `attachmentCount`
+por subconsulta correlacionada — sobre a PK de `links` (`source_id`) e sobre `idx_links_target`, as
+duas indexadas —, com **exatamente** os mesmos critérios que o `read_note` usa para montar
+`outgoing`/`backlinks`/`attachments`. Duas definições do que é um elo divergiriam no dia em que só
+uma fosse corrigida, e a lista passaria a discordar da nota aberta; o teste
+`the_list_counts_exactly_what_the_open_note_shows` compara as duas consultas item a item. Cada
+contador **some quando é zero**: uma fileira de "0 · 0 · 0" em toda nota nova seria ruído afirmando
+ausência, e a linha existe para mostrar o que a nota tem.
+
+**Defeito 4 — o ano sumia das datas.** `relativeTime` devolvia `12/03` acima de 7 dias, sem ano: uma
+nota de março passado e uma de 2024 ficavam idênticas, numa tela cujo subtítulo promete "um formato
+eterno". O ano entra quando a nota é de outro ano.
