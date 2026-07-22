@@ -4620,3 +4620,31 @@ três tentativas que falharam.
 **O que NÃO mudou.** A lógica do PIN (hash+salt no backend, veredito booleano, atraso progressivo do
 3º erro) está intacta — a fase 6 é de composição, e mexer no que guarda a senha para trocar um
 layout seria trocar risco por estética.
+
+## ADR-0110 — v1.3.0: a versão mora em quatro arquivos, e o app lê a do Cargo
+
+**Data:** 2026-07-22 · **Status:** aceito · **v1.3 (COCKPIT), fase 7 — entrega**
+
+**Contexto.** O ADR-0108 deixou um aviso para a fase 7: a aba "Sobre" mostrava `versão 1.2.0`, e a
+tag `v1.3.0` precisava subir esse número junto, senão o app instalado se apresentaria como a versão
+anterior no primeiro lugar em que alguém fosse conferir.
+
+**Decisão — subir a versão nos QUATRO lugares.** O número da versão vive em quatro arquivos, e eles
+não são intercambiáveis:
+
+- `src-tauri/Cargo.toml` — a versão do CRATE. É esta que o app LÊ: o comando `system_info` devolve
+  `env!("CARGO_PKG_VERSION")` (em `commands/system.rs`), que é injetado do `Cargo.toml` em tempo de
+  compilação. É a fonte da "versão 1.3.0" na aba Sobre, e agora também da primeira linha do log de
+  boot da tela de bloqueio (ADR-0109). **O ADR-0108 supôs que a Sobre lia do `tauri.conf.json`; não
+  lê.** Ela lê do Cargo, via o comando. O aviso estava certo no destino (subir a versão) e impreciso
+  na fonte — fica corrigido aqui.
+- `src-tauri/tauri.conf.json` — a versão do BUNDLE. É a que carimba o instalador NSIS/MSI e os
+  metadados do `.exe`. Não afeta o que o app diz de si mesmo em runtime, mas é o que o Windows mostra
+  nas propriedades do arquivo e o que nomeia o instalador.
+- `package.json` — a versão do pacote npm do front. Não é lida em runtime, mas divergir dela é uma
+  mentira de catálogo esperando para confundir quem for ler.
+- `src-tauri/Cargo.lock` — atualizado pelo cargo junto com o `Cargo.toml`, não à mão.
+
+Os três primeiros foram para `1.3.0`; o `Cargo.lock` seguiu o build. A verificação não foi de código:
+foi a dirigida abrir a Sobre no app dev e LER `versão 1.3.0` (e o log de boot ler `NEXUS OS v1.3.0`) —
+que é o lugar exato que o ADR-0108 disse que alguém iria conferir.
