@@ -3370,3 +3370,39 @@ Vale registrar o padrão: das três correções de honestidade das últimas duas
 a cerca do trilho, o zero com altura), **nenhuma foi pega pelo gate e todas foram pegas por olhar um
 pixel ampliado da tela real**. O gate protege o que o código promete; só a dirigida protege o que a
 tela diz.
+
+---
+
+## ADR-0088 — O painel da Carreira: o título duplicado sai, o vazio vira as competências, e um medidor é reprovado por não responder pergunta nenhuma
+
+**Data:** 2026-07-21 · **Status:** aceito · **v1.3 (COCKPIT), fase 4 — Carreira, Painel**
+
+**Decisão 1 — o `<h2>Carreira</h2>` saiu.** Ele repetia, um centímetro abaixo, o nome que o cabeçalho da
+Esfera já diz em corpo 32. Dois títulos iguais empilhados não são hierarquia, são ruído.
+
+**Decisão 2 — o `PanelTile` local virou `StatTile`.** Não havia razão para a Carreira ter um tile só
+dela. A alavanca da §1 do plano é que mudar uma peça muda o app inteiro; um componente por tela desfaz
+exatamente isso, e este era o último tile privado das Esferas migradas.
+
+**Decisão 3 — o vazio abaixo da linha do tempo virou as COMPETÊNCIAS.** Um painel de carreira que
+termina em três marcos e meia tela preta não é denso, é inacabado. A lista compacta (nome, nível
+calculado, a SegBar do próprio nível) é o dado mais vivo desta Esfera — é o que muda todo mês — e não
+duplica a aba Habilidades: **lá se faz o check-in, aqui se vê onde tudo está**. Quem nunca fez check-in
+aparece como "sem check-in" em vez de exibir o nível gravado, que é de outra régua (ADR-0086).
+
+A ordem é do maior nível para o menor. Ordenar é arrumar, não afirmar: em lugar nenhum sai uma frase do
+tipo "a sua melhor competência é X", que um empate ou uma amostra de duas tornaria falsa (ADR-0079).
+
+**Decisão 4, a que a dirigida cobrou — um medidor reprovado por não responder pergunta nenhuma.** O
+tile "Marcos em {ano}" tinha ganhado uma `SegBar` com a fração `marcos no ano / total de marcos`. A
+fração é aritmeticamente verdadeira, e mesmo assim é enfeite: **ninguém pergunta que porcentagem dos
+seus marcos caiu neste ano**. Pior, com um marco só ela desenhava uma barra CHEIA, que se lê como
+"completo" — um sentido que o dado não tem. Saiu. O tile mostra a contagem, que é a resposta.
+
+É a lição 1 aplicada a um caso mais escorregadio que os anteriores: não era um gráfico com escala
+errada, era um gráfico com escala CERTA para uma pergunta que ninguém fez. Fração real não basta;
+precisa ser fração de alguma coisa que importe.
+
+**Decisão 5 — "Registrar marco" mudou de lugar.** Sem o `<h2>`, o botão ficou sozinho numa linha,
+flutuando num vazio sem nada a que pertencer. Foi para o cabeçalho da "Linha da carreira" — a seção a
+que ele acrescenta. Um botão pertence ao que ele modifica.

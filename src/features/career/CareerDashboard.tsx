@@ -1,8 +1,26 @@
 /**
- * O painel da Carreira (M4.6, item 6b): compõe tudo — tempo no cargo, marcos do
- * ano, competências em evolução, próxima meta — mais a linha do tempo de cargos
- * com a DURAÇÃO de cada período (não só os pontos). Cada número é real e some
- * quando não há dado (o padrão do 3+4).
+ * O painel da Carreira — vocabulário COCKPIT (v1.3).
+ *
+ * O que ele responde continua o mesmo (tempo no cargo, marcos do ano,
+ * competências em evolução, próxima meta, e a linha do tempo de cargos com a
+ * DURAÇÃO de cada fase). O que mudou:
+ *
+ * - **O `<h2>Carreira</h2>` saiu.** Ele repetia, um centímetro abaixo, o nome que
+ *   o cabeçalho da Esfera já diz em corpo 32. Dois títulos iguais empilhados não
+ *   são hierarquia, são ruído.
+ * - **O `PanelTile` local virou `StatTile`.** Não havia razão para a Carreira ter
+ *   um tile só dela: o app inteiro muda junto quando o tile muda (a alavanca da
+ *   §1 do plano), e um componente por tela desfaz exatamente isso.
+ * - **O vazio abaixo da linha do tempo virou as COMPETÊNCIAS.** Um painel de
+ *   carreira que termina em três marcos e meia tela preta não é denso, é
+ *   inacabado. A lista compacta de competências com o nível calculado é o dado
+ *   mais vivo desta Esfera (é o que muda todo mês) e não duplica a aba
+ *   Habilidades: lá se faz o check-in, aqui se vê onde tudo está.
+ *
+ * O `seg` de cada tile é uma fração REAL ou não existe: "marcos no ano" sobre o
+ * total de marcos, "em evolução" sobre o total de competências. "Tempo no cargo"
+ * e "próxima meta" não ganham medidor porque não têm denominador — uma barra ali
+ * seria um enfeite fingindo proporção (lição 1).
  *
  * Um marco também pode ser apagado (v1.2). Aqui a exclusão é de um tipo raro:
  * o marco não tem linha de estado nenhuma — ele É um fato do ledger. Então
@@ -15,6 +33,8 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Award, Briefcase, CalendarClock, Plus, Target, TrendingUp } from "lucide-react";
 
+import { StatTile } from "../../design-system/cards";
+import { MonoLabel, StatusList, type StatusRow } from "../../design-system/instruments";
 import { Button, EmptyState, cx } from "../../design-system/primitives";
 import { ArmedDelete } from "../../design-system/ArmedDelete";
 import { useToasts } from "../../stores/toasts";
@@ -22,6 +42,7 @@ import {
   careerMilestones,
   deleteCareerMilestone,
   listGoals,
+  listSkills,
   skillsEvolving,
   type CareerMilestoneKind,
   type LedgerEntry,
@@ -101,6 +122,12 @@ export function CareerDashboard({ areaId }: { areaId: string }) {
     queryKey: ["goals", areaId],
     queryFn: () => listGoals(areaId),
   });
+  // O total de competências é o DENOMINADOR de "em evolução" e a matéria da
+  // lista de baixo. Sem ele, "3 em evolução" não diz se é muito ou pouco.
+  const skillsQ = useQuery({
+    queryKey: ["skills", areaId],
+    queryFn: () => listSkills(areaId),
+  });
 
   // Os marcos vêm do mais recente ao mais antigo (o ledger por entity_kind).
   const milestones = useMemo(
@@ -121,6 +148,36 @@ export function CareerDashboard({ areaId }: { areaId: string }) {
 
   const marcosNoAno = milestones.filter((m) => m.entry.day.startsWith(year)).length;
   const evolving = evolvingQ.data ?? [];
+  const skills = skillsQ.data ?? [];
+
+  /*
+   * As competências como linhas de status: nível à direita, a SegBar do próprio
+   * nível sob o rótulo. A ordem é do maior para o menor nível — ordenar é
+   * arrumar, não afirmar; em lugar nenhum daqui sai uma frase do tipo "a sua
+   * melhor competência é X", que um empate ou uma amostra de duas tornaria
+   * falsa (lição 3 / ADR-0079).
+   */
+  const skillRows: StatusRow[] = useMemo(
+    () =>
+      [...skills]
+        .sort((a, b) => (b.computedLevel ?? -1) - (a.computedLevel ?? -1))
+        .map((s) => {
+          const nivel = s.computedLevel;
+          return {
+            id: s.id,
+            icon: Award,
+            label: s.title,
+            sub: s.category ?? undefined,
+            // Sem check-in não há nível calculado — e o gravado não é a mesma
+            // coisa. Dizer o que falta é mais útil que exibir um número de outra
+            // régua como se fosse deste.
+            value: nivel != null ? `${nivel}/10` : "sem check-in",
+            tone: nivel != null ? ("sphere" as const) : ("muted" as const),
+            progress: nivel != null ? (nivel - 1) / 9 : undefined,
+          };
+        }),
+    [skills],
+  );
 
   const refresh = () => {
     void client.invalidateQueries({ queryKey: ["career"] });
@@ -130,13 +187,6 @@ export function CareerDashboard({ areaId }: { areaId: string }) {
 
   return (
     <div className="nx-enter flex flex-col gap-5">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-[16px] font-semibold text-[var(--text-primary)]">Carreira</h2>
-        <Button variant="primary" size="sm" icon={Plus} onClick={() => setRecording(true)}>
-          Registrar marco
-        </Button>
-      </div>
-
       {!latest && (
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-8">
           <EmptyState
@@ -155,40 +205,36 @@ export function CareerDashboard({ areaId }: { areaId: string }) {
       {/* ===== O painel: só os tiles com dado real ===== */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {latest && (
-          <PanelTile
+          <StatTile
             icon={Briefcase}
             label="No marco atual"
             value={humanize(daysBetween(latest.entry.day, today))}
-            sub={latest.entry.titleSnapshot}
-            tone
+            hint={latest.entry.titleSnapshot}
           />
         )}
         {milestones.length > 0 && (
-          <PanelTile
+          <StatTile
             icon={Award}
             label={`Marcos em ${year}`}
-            value={String(marcosNoAno)}
-            sub={`${milestones.length} no total`}
+            value={marcosNoAno}
+            hint={`${milestones.length} no total`}
           />
         )}
         {evolving.length > 0 && (
-          <PanelTile
+          <StatTile
             icon={TrendingUp}
             label="Em evolução (90d)"
-            value={String(evolving.length)}
-            sub={evolving
-              .slice(0, 2)
-              .map((s) => s.title)
-              .join(", ")}
+            value={evolving.length}
+            hint={evolving.slice(0, 2).map((s) => s.title).join(", ")}
+            seg={skills.length > 0 ? evolving.length / skills.length : undefined}
           />
         )}
         {nextGoal && (
-          <PanelTile
+          <StatTile
             icon={Target}
             label="Próxima meta"
-            value={nextGoal.title}
-            sub={`prazo em ${humanize(daysBetween(today, isoDay(nextGoal.deadline!)))}`}
-            small
+            value={humanize(daysBetween(today, isoDay(nextGoal.deadline!)))}
+            hint={nextGoal.title}
           />
         )}
       </div>
@@ -196,9 +242,15 @@ export function CareerDashboard({ areaId }: { areaId: string }) {
       {/* ===== A linha do tempo de cargos, com duração de cada fase ===== */}
       {milestones.length > 0 && (
         <section>
-          <h3 className="mb-3 text-[12px] font-semibold tracking-[0.08em] text-[var(--text-tertiary)] uppercase">
-            Linha da carreira
-          </h3>
+          {/* "Registrar marco" mora AQUI, no cabeçalho da linha do tempo a que
+              ele acrescenta. Numa linha só dele, depois que o `<h2>` saiu, o
+              botão ficava flutuando num vazio sem nada a que pertencer. */}
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <MonoLabel>Linha da carreira</MonoLabel>
+            <Button variant="ghost" size="sm" icon={Plus} onClick={() => setRecording(true)}>
+              Registrar marco
+            </Button>
+          </div>
           <ol className="relative ml-2 border-l border-[var(--border-subtle)]">
             {milestones.map((m, i) => {
               // A fase deste marco durou dele até o PRÓXIMO mais recente (o de
@@ -258,6 +310,21 @@ export function CareerDashboard({ areaId }: { areaId: string }) {
         </section>
       )}
 
+      {/* ===== As competências, compactas — onde tudo está agora ===== */}
+      {skillRows.length > 0 && (
+        <section>
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <MonoLabel>Competências</MonoLabel>
+            <span className="tabular text-[11px] text-[var(--text-tertiary)]">
+              {skills.length} {skills.length === 1 ? "trilha" : "trilhas"}
+            </span>
+          </div>
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-1">
+            <StatusList rows={skillRows} />
+          </div>
+        </section>
+      )}
+
       {recording && <RecordMilestoneModal onClose={() => setRecording(false)} onSaved={refresh} />}
     </div>
   );
@@ -300,47 +367,4 @@ function MilestoneDelete({ entry }: { entry: LedgerEntry }) {
 function isoDay(ms: number): string {
   const d = new Date(ms);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-/** Um tile do painel: número/valor grande + rótulo + subtítulo opcional. */
-function PanelTile({
-  icon: Icon,
-  label,
-  value,
-  sub,
-  tone,
-  small,
-}: {
-  icon: typeof Award;
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: boolean;
-  small?: boolean;
-}) {
-  return (
-    <div
-      className={cx(
-        "flex flex-col gap-1.5 rounded-[var(--radius-lg)] border p-4",
-        tone
-          ? "border-[color-mix(in_srgb,var(--sphere)_30%,transparent)] bg-[color-mix(in_srgb,var(--sphere)_8%,transparent)]"
-          : "border-[var(--border-subtle)] bg-[var(--bg-surface)]",
-      )}
-    >
-      <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-tertiary)]">
-        <Icon size={13} style={{ color: tone ? "var(--sphere)" : undefined }} />
-        {label}
-      </div>
-      <span
-        className={cx(
-          "font-semibold tracking-[-0.02em] text-[var(--text-primary)]",
-          small ? "truncate text-[15px]" : "text-[20px] tabular-nums",
-        )}
-        title={value}
-      >
-        {value}
-      </span>
-      {sub && <span className="truncate text-[11px] text-[var(--text-tertiary)]" title={sub}>{sub}</span>}
-    </div>
-  );
 }
