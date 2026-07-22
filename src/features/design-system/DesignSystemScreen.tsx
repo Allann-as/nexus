@@ -57,6 +57,8 @@ const BANK_SHOWCASE: Array<[string, string]> = [
 
 const SPARK = [0.2, 0.35, 0.3, 0.5, 0.45, 0.62, 0.58, 0.7, 0.66, 0.82, 0.9];
 const BARS = [0.3, 0.6, 0.45, 0.8, 0.7, 0.9, 0.55, 0.4, 0.75, 1, 0.65, 0.85];
+/** Uma série com valores quase-zero — o caso que o trilho existe para salvar. */
+const BARS_BAIXOS = [0.04, 0.55, 0.02, 0.9, 0.08, 0.7, 0.03, 1, 0.06, 0.45, 0.02, 0.8];
 
 /** Uma grade de 12 semanas × 7 dias com valores pseudo-variados (determinístico). */
 const HEAT: HeatCell[] = Array.from({ length: 12 * 7 }, (_, i) => {
@@ -170,6 +172,11 @@ export function DesignSystemScreen() {
               <div className="flex flex-col gap-2">
                 <MonoLabel>BarSpark</MonoLabel>
                 <BarSpark data={BARS} width={160} height={44} />
+                {/* A variante com TRILHO, ao lado da sem, porque a diferença só
+                    se entende comparando: repare no valor baixo — sem trilho ele
+                    é um risco que se lê como "sem dado" (ADR-0086). */}
+                <MonoLabel>BarSpark · track</MonoLabel>
+                <BarSpark data={BARS_BAIXOS} width={160} height={44} track />
                 <MonoLabel>Sparkline</MonoLabel>
                 <Sparkline data={SPARK} width={160} height={44} />
               </div>

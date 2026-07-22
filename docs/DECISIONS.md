@@ -3266,3 +3266,54 @@ resolução por nome passaria pela tela inteira sem acusar nada.
    overflow-y-auto`. Consequência: tudo abaixo da primeira dobra da vitrine era **inalcançável em toda
    dirigida já feita** — inclusive nas que declararam o design system conferido. Corrigido aqui porque
    era o que bloqueava verificar esta própria tarefa.
+
+---
+
+## ADR-0086 — Habilidades 2.0 já existia; o que faltava era honestidade de ESCALA (e um trilho no BarSpark)
+
+**Data:** 2026-07-21 · **Status:** aceito · **v1.3 (COCKPIT), fase 4 — Carreira, Habilidades**
+
+**Contexto — o levantamento que economizou uma migration.** O plano da fase 4 descrevia "Habilidades
+2.0" como a mecânica a CONSTRUIR (nível 1–10 calculado, check-in mensal com três perguntas, fórmula
+documentada, decaimento, régua no tempo, fato no ledger) e avisava que ela "provavelmente pede schema
+novo". O levantamento antes de escrever qualquer linha mostrou que **ela já estava inteira, entregue na
+v1.2** (commit `677058d`): `domain::skill_level.rs` tem a fórmula com janela de 12 meses, decaimento
+0,85/mês e 20 testes unitários; `skill_checkins` (migration 0016) tem as três perguntas com PK
+`(skill_id, month)` e semântica de correção, não de acúmulo; `SkillCheckinModal` já perguntava as três;
+o check-in já gravava `EventType::SkillCheckin` no ledger na mesma transação do upsert.
+
+**Nenhuma migration foi escrita.** É o mesmo resultado do ADR-0077, e pela mesma razão: o levantamento
+vem antes. O custo de olhar foi um agente de busca; o custo de não olhar teria sido reconstruir um motor
+testado e uma tabela em produção.
+
+**Decisão 1 — a régua de nível era um gráfico que enganava, e saiu.** A série de níveis passava por um
+`normalize()` que a esticava do MÍNIMO ao MÁXIMO dela mesma. Consequência: uma competência que andou de
+3 para 4 desenhava **exatamente a mesma subida triunfal** de uma que foi de 1 a 10. A forma era real; a
+ESCALA era inventada — e a escala é o que a pessoa lê. Agora o nível entra na régua na escala FIXA de 1
+a 10 (`(nível−1)/9`), e uma subida pequena PARECE pequena. É a lição 1 da fase 4 (nenhum gráfico
+decorativo) aplicada a um gráfico que já estava no app e que o gate nunca teria pego.
+
+O corolário incômodo aceito de propósito: a competência LEGADA sem teto (`maxLevel = null`) **perdeu o
+gráfico**. Sem teto não existe escala fixa contra a qual desenhar, e auto-escalar é justamente o que
+acabou de sair. Ela mostra o número, que é verdade, e mais nada — omitir > afirmar errado.
+
+A fileira de pontos própria (`LevelPips`) virou `SegBar` de 10 segmentos: o medidor do Cockpit, o mesmo
+de toda fração do app. E a última barra da régua passa a bater com o número grande do cartão, que é a
+verificação mais barata de que a escala está certa.
+
+**Decisão 2 — `BarSpark` ganha `track`, e isso é do design system, não da Carreira.** A dirigida
+mostrou o defeito ao vivo: com junho fraco e julho forte, junho virou um risco de 2px que **não se
+distingue de barra nenhuma**. Quem olha lê "não tem dado" onde o dado existe e é pequeno — uma leitura
+errada produzida pelo desenho, que é a lição 2 numa forma que ainda não tínhamos visto (o ilegível aqui
+não é um rótulo, é a AUSÊNCIA aparente de um valor).
+
+O trilho (a coluna vazia atrás de cada barra) resolve, e resolve para todo mundo: a propriedade nasce no
+instrumento, com o padrão DESLIGADO para não mexer em quem já usa, e a vitrine passa a mostrar as duas
+variantes lado a lado com uma série de valores quase-zero — a diferença só se entende comparando. Ligue
+em toda série onde o zero é uma resposta possível e significativa.
+
+**O que NÃO mudou, de propósito.** O "subir de nível" manual continua vivo apenas na competência que
+nunca teve check-in (ADR-0037): dois donos do mesmo número seria a contradição. Os dois gestos armados
+de naturezas opostas no mesmo cartão continuam sem poder aparecer juntos. E a fórmula não foi tocada —
+inclusive o fato de um único mês excelente já levar a nível 9, que é comportamento documentado e
+explicado pelo próprio "ⓘ como calculamos" com o tamanho da amostra à vista.

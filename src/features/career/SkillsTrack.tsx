@@ -1,30 +1,35 @@
 /**
- * A trilha de competências da Carreira (M4.6, item 6).
+ * A trilha de competências da Carreira — HABILIDADES 2.0 no idioma COCKPIT (v1.3).
  *
- * Uma competência tem um NÍVEL de 1 a 10 que, desde a v1.2, o sistema CALCULA a
- * partir de um CHECK-IN MENSAL (ADR-0037): estudou? aplicou quantas vezes? como
- * avalia a evolução? O cartão convida o check-in do mês corrente enquanto ele
- * não vier — um convite no próprio cartão, nunca uma modal na cara de quem abriu
- * a tela para outra coisa. O nível calculado carrega o "ⓘ como calculamos", como
- * todo número derivado deste app.
+ * A MECÂNICA não mudou e não devia mudar: uma competência tem um nível de 1 a 10
+ * que o sistema CALCULA a partir de um check-in mensal (ADR-0037) — estudou?
+ * aplicou quantas vezes? como avalia a evolução? O motor, a fórmula com decaimento
+ * de 12 meses e o ledger vieram prontos da v1.2 e continuam inteiros.
  *
- * O "subir de nível" manual é a herança pré-v1.2 e continua vivo APENAS para a
- * competência que nunca teve check-in — nela o nível gravado ainda é a única
- * verdade, e o gesto segue armado em dois cliques. No instante em que o primeiro
- * check-in chega, a conta passa a mandar e o botão manual sai do cartão: dois
- * donos do mesmo número seria a contradição.
+ * O que mudou aqui é o VOCABULÁRIO (o mesmo passe que Saúde e Finanças levaram) e
+ * uma correção de honestidade que o gate não pegava:
  *
- * A trilha de evolução vem da régua calculada (ou da série legada do ledger, na
- * competência sem check-in); com menos de dois pontos NÃO desenha sparkline — o
- * padrão "número real, omitido sem dado" vale para gráfico.
+ * **A régua era um gráfico que enganava.** A série de níveis era passada por um
+ * `normalize()` que a esticava do MÍNIMO ao MÁXIMO dela mesma. Uma competência que
+ * andou de 3 para 4 desenhava exatamente a mesma subida triunfal de uma que foi de
+ * 1 a 10 — a forma era real, a ESCALA era inventada, e a escala é o que a pessoa lê.
+ * Agora o nível entra na régua na escala FIXA de 1 a 10 (`(nível−1)/9`): nível 3 é
+ * um terço da altura, e uma subida pequena PARECE pequena. É a lição 1 da fase 4
+ * aplicada a um gráfico que já estava no app.
  *
- * A competência também pode ser APAGADA (v1.2): uma trilha criada por engano não
- * é uma trilha, é ruído. Apagar corrige o ESTADO — os níveis que já subiram
- * continuam no ledger e no XP (ADR-0056), porque o passado não se reescreve.
- * Repare que o cartão tem DOIS gestos armados de naturezas opostas: subir de
- * nível é afirmativo e mora no botão largo, embaixo; excluir é destrutivo e mora
- * no rodapé discreto, com a cor de perigo. Eles nunca aparecem armados juntos —
- * ver `SkillCard`.
+ * O corolário incômodo: a competência LEGADA sem teto (`maxLevel = null`) perdeu o
+ * gráfico. Sem teto não existe escala fixa contra a qual desenhar, e um gráfico
+ * auto-escalado é justamente o que acabou de sair. Omitir > afirmar errado — ela
+ * mostra o número, que é verdade, e mais nada.
+ *
+ * O nível deixou de ser uma fileira de pontos própria e virou `SegBar` de 10
+ * segmentos: o medidor do Cockpit, o mesmo de toda fração do app.
+ *
+ * O "subir de nível" manual segue vivo APENAS na competência que nunca teve
+ * check-in — nela o nível gravado ainda é a única verdade. No instante em que o
+ * primeiro check-in chega, a conta manda e o botão sai: dois donos do mesmo número
+ * seria a contradição. E o cartão segue com DOIS gestos armados de naturezas
+ * opostas que nunca aparecem juntos (ver `SkillCard`).
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -34,7 +39,7 @@ import { Award, Plus, ChevronsUp, Check, CalendarCheck } from "lucide-react";
 import { Button, Card, EmptyState, cx } from "../../design-system/primitives";
 import { ArmedDelete } from "../../design-system/ArmedDelete";
 import { Formula } from "../../design-system/Formula";
-import { Sparkline } from "../../design-system/charts";
+import { BarSpark, MonoLabel, SegBar } from "../../design-system/instruments";
 import { useToasts } from "../../stores/toasts";
 import {
   createSkill,
@@ -48,7 +53,23 @@ import {
   type Skill,
 } from "../../lib/ipc";
 import { SkillCheckinModal } from "./SkillCheckinModal";
-import { currentMonth, monthName } from "./skillMonth";
+import { currentMonth, monthLabel, monthName } from "./skillMonth";
+
+/** A escala do nível calculado. O 1 é o piso, não o zero: nível 1 é meio segmento. */
+const LEVEL_MIN = 1;
+const LEVEL_MAX = 10;
+
+/**
+ * Nível → fração 0..1 na escala FIXA da competência.
+ *
+ * É a função que substituiu o `normalize()` por mínimo/máximo da série. O teto é
+ * argumento porque a competência legada com `maxLevel` tem escala própria; a
+ * calculada é sempre 1..10.
+ */
+function levelFraction(level: number, max: number = LEVEL_MAX): number {
+  if (max <= LEVEL_MIN) return 1;
+  return Math.max(0, Math.min(1, (level - LEVEL_MIN) / (max - LEVEL_MIN)));
+}
 
 export function SkillsTrack({ areaId }: { areaId: string }) {
   const client = useQueryClient();
@@ -82,19 +103,31 @@ export function SkillsTrack({ areaId }: { areaId: string }) {
   };
 
   const items = skills.data ?? [];
+  // Duas contagens, e só contagens: quantas competências existem e quantas já
+  // têm nível calculado. Nada de "nível médio" — com três competências uma média
+  // é uma frase sobre a vida de alguém que o dado não sustenta (lição 3).
+  const comCheckin = items.filter((s) => s.computedLevel != null).length;
 
   return (
     <div className="nx-enter">
-      <header className="mb-5 flex items-center justify-between gap-3">
+      <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-[16px] font-semibold text-[var(--text-primary)]">Competências</h2>
-          <p className="mt-0.5 text-[12px] text-[var(--text-tertiary)]">
+          <MonoLabel>Competências</MonoLabel>
+          <p className="mt-1 text-[12px] text-[var(--text-tertiary)]">
             Um check-in por mês — estudou, aplicou, evoluiu. O nível de 1 a 10 sai daí.
           </p>
         </div>
-        <Button variant="primary" size="sm" icon={Plus} onClick={() => setCreating((v) => !v)}>
-          Nova
-        </Button>
+        <div className="flex items-center gap-3">
+          {items.length > 0 && (
+            <span className="tabular text-[11px] text-[var(--text-tertiary)]">
+              {items.length} {items.length === 1 ? "competência" : "competências"}
+              {comCheckin > 0 && ` · ${comCheckin} com nível calculado`}
+            </span>
+          )}
+          <Button variant="primary" size="sm" icon={Plus} onClick={() => setCreating((v) => !v)}>
+            Nova
+          </Button>
+        </div>
       </header>
 
       {creating && (
@@ -229,14 +262,33 @@ function SkillCard({ skill, areaId }: { skill: Skill; areaId: string }) {
   // houver check-in nenhum. `null` é "ainda não perguntamos" — nunca um 1 inventado.
   const showsComputed = skill.computedLevel != null;
   const shownLevel = skill.computedLevel ?? skill.level;
-  const scale = showsComputed ? "/ 10" : skill.maxLevel != null ? `/ ${skill.maxLevel}` : "nível";
+  // O teto da escala: 10 para a calculada; o teto da própria competência para a
+  // legada; e `null` quando a legada não tem teto — aí não há escala nenhuma.
+  const scaleMax = showsComputed ? LEVEL_MAX : skill.maxLevel;
+  const scaleLabel = scaleMax != null ? `/ ${scaleMax}` : "nível";
 
-  // A série vem da régua calculada quando ela existe; da trilha legada quando não.
-  // Menos de dois pontos: sem gráfico (o padrão "número real, omitido sem dado").
+  /*
+   * A régua no tempo, na escala FIXA — a correção descrita no topo do arquivo.
+   *
+   * Cada nível vira a sua fração do teto, não a sua posição entre o mínimo e o
+   * máximo da própria série. Sem teto (legada sem `maxLevel`) não há régua: é o
+   * único jeito honesto, porque qualquer escala que eu escolhesse seria minha e
+   * não do dado.
+   */
   const levels = showsComputed
     ? (history.data ?? []).map((p) => p.level)
     : (track.data ?? []).map((p) => p.level);
-  const series = levels.length >= 2 ? normalize(levels) : null;
+  const series =
+    scaleMax != null && levels.length >= 2
+      ? levels.map((l) => levelFraction(l, scaleMax))
+      : null;
+
+  // A janela da régua, dita por extenso: um eixo de meses a 84px seria o "maabr"
+  // ilegível da lição 2. Duas pontas em texto legível dizem a mesma coisa.
+  const janela =
+    showsComputed && history.data && history.data.length >= 2
+      ? `${monthLabel(history.data[0].month)} → ${monthLabel(history.data[history.data.length - 1].month)}`
+      : null;
 
   const month = currentMonth();
   const monthDone = (checkins.data ?? []).some((c) => c.month === month);
@@ -271,22 +323,27 @@ function SkillCard({ skill, areaId }: { skill: Skill; areaId: string }) {
         </div>
       </div>
 
+      {/* O número em mono é o dado; a SegBar ao lado é a mesma leitura sem ler. */}
       <div className="flex items-end justify-between gap-3">
         <div className="flex items-baseline gap-1.5">
           <span className="font-mono text-[26px] leading-none font-semibold tabular-nums text-[var(--text-primary)]">
             {shownLevel}
           </span>
-          <span className="text-[11px] text-[var(--text-tertiary)]">{scale}</span>
+          <span className="text-[11px] text-[var(--text-tertiary)]">{scaleLabel}</span>
         </div>
+        {/* `track` porque o nível 1 é uma resposta legítima: sem a coluna vazia
+            atrás, um mês fraco vira um risco que se lê como mês inexistente. */}
         {series && (
-          <Sparkline data={series} width={84} height={28} className="shrink-0" />
+          <BarSpark data={series} width={84} height={28} track className="shrink-0" />
         )}
       </div>
 
-      {showsComputed ? (
-        <LevelPips level={shownLevel} max={10} />
-      ) : (
-        skill.maxLevel != null && <LevelPips level={skill.level} max={skill.maxLevel} />
+      {scaleMax != null && (
+        <SegBar value={levelFraction(shownLevel, scaleMax)} segments={scaleMax} height={8} />
+      )}
+
+      {janela && (
+        <p className="tabular text-[10px] text-[var(--text-tertiary)]">{janela}</p>
       )}
 
       {/* O convite do mês: um chamado claro no cartão, nunca uma modal que
@@ -373,7 +430,7 @@ function SkillCard({ skill, areaId }: { skill: Skill; areaId: string }) {
           botão de nível cai fora do ArmedDelete e o desarma sozinho.) */}
       <div
         className={cx(
-          "flex justify-end border-t border-[var(--border-subtle)] pt-2",
+          "mt-auto flex justify-end border-t border-[var(--border-subtle)] pt-2",
           armed && "invisible pointer-events-none",
         )}
       >
@@ -396,32 +453,4 @@ function SkillCard({ skill, areaId }: { skill: Skill; areaId: string }) {
   );
 }
 
-/** Uma fileira de pontos para competências com teto: cheios até o nível atual. */
-function LevelPips({ level, max }: { level: number; max: number }) {
-  // Um teto muito alto viraria uma parede de pontos; acima de 10 o número já basta.
-  if (max > 10) return null;
-  return (
-    <div className="flex gap-1" aria-hidden>
-      {Array.from({ length: max }, (_, i) => (
-        <span
-          key={i}
-          className="h-1.5 flex-1 rounded-full"
-          style={{
-            background:
-              i < level
-                ? "var(--sphere)"
-                : "color-mix(in srgb, var(--sphere) 16%, transparent)",
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-/** Normaliza a série de níveis para 0..1 pelo mínimo e máximo — a forma da subida. */
-function normalize(levels: number[]): number[] {
-  const min = Math.min(...levels);
-  const max = Math.max(...levels);
-  if (max === min) return levels.map(() => 0.5);
-  return levels.map((l) => (l - min) / (max - min));
-}
+export { levelFraction };

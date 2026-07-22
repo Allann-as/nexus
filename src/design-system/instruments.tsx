@@ -133,6 +133,7 @@ export function BarSpark({
   color = "var(--sphere)",
   width = 120,
   height = 36,
+  track = false,
   className,
 }: {
   /** Série 0..1, antigo→recente. */
@@ -140,6 +141,17 @@ export function BarSpark({
   color?: string;
   width?: number;
   height?: number;
+  /**
+   * Desenha o TRILHO de cada barra (a coluna vazia atrás dela).
+   *
+   * Sem trilho, um valor baixo vira um risco de 2px que não se distingue de
+   * valor NENHUM — quem olha lê "não tem dado" onde o dado existe e é pequeno.
+   * Ligue em toda série onde o zero (ou quase) é uma resposta possível e
+   * significativa; deixe desligado onde a série é sempre cheia e o trilho só
+   * somaria ruído. Descoberto na régua de nível da Carreira, onde um mês fraco
+   * ao lado de um mês forte parecia um mês inexistente.
+   */
+  track?: boolean;
   className?: string;
 }) {
   if (data.length === 0) {
@@ -151,6 +163,20 @@ export function BarSpark({
 
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className={className} aria-hidden>
+      {track &&
+        data.map((_, i) => (
+          <rect
+            key={`t-${i}`}
+            x={i * (bw + gap)}
+            y={height - maxH}
+            width={bw}
+            height={maxH}
+            rx={1.5}
+            fill="var(--bg-base)"
+            stroke="var(--border-subtle)"
+            strokeWidth={1}
+          />
+        ))}
       {data.map((v, i) => {
         const clamped = Math.max(0, Math.min(1, v));
         const bh = Math.max(1.5, clamped * maxH);
