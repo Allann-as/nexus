@@ -28,7 +28,7 @@
 
 import { useEffect, useRef } from "react";
 
-import { prefersReducedMotion } from "../lib/motion";
+import { backgroundMotionOn } from "../lib/motion";
 
 /** Uma estrela — posição normalizada [0,1], para sobreviver ao resize. */
 interface Star {
@@ -82,12 +82,20 @@ export function Starfield({
   color,
   className,
   nebula = true,
+  motion,
 }: {
   /** A cor da tinta — "r,g,b" ou "#hex". A troca interpola suave. */
   color: string;
   className?: string;
   /** A névoa + deriva. Ligada por padrão. */
   nebula?: boolean;
+  /**
+   * O fundo anima? (fase 10, BUG B) Vem da preferência "Movimento do fundo", NÃO do
+   * `prefers-reduced-motion` do SO — a galáxia é identidade, não efeito chamativo.
+   * `undefined` cai no default LIGADO (lido de `data-bg-motion`). Reativa: trocar a
+   * preferência re-roda o efeito e liga/para o loop na hora.
+   */
+  motion?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   /** A cor-ALVO (muda quando a seção troca); a atual persegue-a por interpolação. */
@@ -102,6 +110,9 @@ export function Starfield({
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    // O fundo anima pela PREFERÊNCIA (BUG B), não pelo reduced-motion do SO.
+    const animate = motion ?? backgroundMotionOn();
 
     let stars: Star[] = [];
     const cur: [number, number, number] = [...target.current];
@@ -194,8 +205,8 @@ export function Starfield({
     };
 
     // ===== o loop, com a higiene de segundo plano =====
-    if (prefersReducedMotion()) {
-      // Reduced-motion: UM quadro estático, e nada de rAF. A cor entra direta.
+    if (!animate) {
+      // Movimento do fundo REDUZIDO: UM quadro estático, e nada de rAF. Cor direta.
       cur[0] = target.current[0];
       cur[1] = target.current[1];
       cur[2] = target.current[2];
@@ -260,7 +271,7 @@ export function Starfield({
     };
     const start = () => {
       if (running && raf) return;
-      if (prefersReducedMotion()) {
+      if (!animate) {
         draw(t);
         return;
       }
@@ -270,7 +281,7 @@ export function Starfield({
     const onVisibility = () => (idle() ? stop() : start());
     const onResize = () => {
       fit();
-      if (!running || prefersReducedMotion()) draw(t);
+      if (!running || !animate) draw(t);
     };
 
     document.addEventListener("visibilitychange", onVisibility);
@@ -288,7 +299,7 @@ export function Starfield({
       window.removeEventListener("focus", onVisibility);
       window.removeEventListener("resize", onResize);
     };
-  }, [nebula]);
+  }, [nebula, motion]);
 
   return (
     <canvas

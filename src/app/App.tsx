@@ -26,7 +26,13 @@ import { TimelineScreen } from "../features/timeline/TimelineScreen";
 import { FocusScreen } from "../features/focus/FocusScreen";
 import { WeeklyReviewScreen } from "../features/weekly-review/WeeklyReviewScreen";
 import { DesignSystemScreen } from "../features/design-system/DesignSystemScreen";
-import { useUi, applyTheme, applyDensity, applyReducedMotion } from "../stores/ui";
+import {
+  useUi,
+  applyTheme,
+  applyDensity,
+  applyReducedMotion,
+  applyBackgroundMotion,
+} from "../stores/ui";
 import { useLock } from "../stores/lock";
 import { lockStatus } from "../lib/ipc";
 import { LockScreen } from "../features/lock/LockScreen";
@@ -102,9 +108,11 @@ export function App() {
   const theme = useUi((s) => s.theme);
   const density = useUi((s) => s.density);
   const reducedMotion = useUi((s) => s.reducedMotion);
+  const backgroundMotion = useUi((s) => s.backgroundMotion);
   useEffect(() => applyTheme(theme), [theme]);
   useEffect(() => applyDensity(density), [density]);
   useEffect(() => applyReducedMotion(reducedMotion), [reducedMotion]);
+  useEffect(() => applyBackgroundMotion(backgroundMotion), [backgroundMotion]);
 
   // A6 — higiene de segundo plano. O navegador só pausa animações com a janela
   // MINIMIZADA (document.hidden); atrás do trabalho pesado ela segue visível e

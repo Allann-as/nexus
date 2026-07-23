@@ -125,6 +125,30 @@ pub fn run() {
 
             build_tray(app.handle())?;
             fit_window_to_screen(app.handle());
+
+            // ÍCONE DA JANELA em runtime — cinto e suspensório (fase 10, BUG A). O
+            // ícone da barra de tarefas e do canto da janela vem do recurso EMBUTIDO
+            // no .exe (o `winres`/`tauri-build` grava o `icon.ico` no binário); trocar
+            // os arquivos e recompilar re-embute o núcleo. Aqui, além disso, forçamos
+            // o ícone da JANELA a partir do PNG do núcleo embutido no próprio binário
+            // (`include_bytes!`), para que ela use o núcleo mesmo que o recurso do .exe
+            // ou o cache de ícones do Windows teimem com o "N" antigo.
+            {
+                use tauri::Manager;
+                if let Some(window) = app.get_webview_window("main") {
+                    match tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png")) {
+                        Ok(icon) => {
+                            if let Err(e) = window.set_icon(icon) {
+                                tracing::warn!(error = %e, "não foi possível aplicar o ícone do núcleo à janela");
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = %e, "não foi possível decodificar o ícone do núcleo");
+                        }
+                    }
+                }
+            }
+
             // Registra o atalho global só depois que o app está de pé.
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
             if let Err(e) = app.global_shortcut().register(quick_capture_shortcut) {

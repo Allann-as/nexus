@@ -14,6 +14,7 @@ import { AporteHost } from "../features/finance/AporteHost";
 import { FocusHost } from "../features/focus/FocusHost";
 import { Toaster } from "../design-system/Toaster";
 import { Starfield } from "../design-system/Starfield";
+import { useUi } from "../stores/ui";
 
 export function Shell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -24,6 +25,9 @@ export function Shell() {
   // A BORDA INFINITA (fase 9 §4): a cor da seção ativa tinge o ambiente inteiro —
   // a poeira estelar e a barra do topo. `--tint` desce por CSS para quem herda.
   const tint = useSectionTint();
+  // O movimento do fundo é preferência do produto (BUG B), não do SO. Reativo:
+  // trocar em Configurações liga/para a galáxia na hora.
+  const bgMotion = useUi((s) => s.backgroundMotion) === "on";
 
   // Congela o Score e sincroniza conquistas/temporadas na abertura (ADR-0038/0039).
   useBootTasks();
@@ -72,7 +76,7 @@ export function Shell() {
           do `--bg-void` da moldura. A rail/os painéis são translúcidos e o deixam
           aparecer de ponta a ponta — sem faixa de cor destoante. */}
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
-        <Starfield color={tint} />
+        <Starfield color={tint} motion={bgMotion} />
       </div>
 
       {/* A rail do Cockpit (§2.1): a telemetria das Esferas parada à esquerda.

@@ -203,6 +203,16 @@ try {
     await page.close();
   }
 
+  if (want('settings')) {
+    const page = await newPage(ctx, 'app');
+    await page.goto(BASE + '/#/settings', { waitUntil: 'networkidle' });
+    await page.waitForTimeout(1200);
+    await page.getByText('Aparência', { exact: true }).click().catch(() => {});
+    await page.waitForTimeout(500);
+    await snap(page, '12-settings.png', 'Configuracoes > Aparencia: controle Movimento do fundo');
+    await page.close();
+  }
+
   if (want('reduced')) {
     const rmCtx = await browser.newContext({ viewport:{ width:1440, height:900 }, deviceScaleFactor:1, reducedMotion:'reduce' });
     const page = await rmCtx.newPage();

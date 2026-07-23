@@ -12,3 +12,18 @@ export function prefersReducedMotion(): boolean {
   if (document.documentElement.dataset.reducedMotion === "true") return true;
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
+
+/**
+ * O FUNDO deve animar? (fase 10, BUG B)
+ *
+ * DESACOPLADO do `prefers-reduced-motion` do SO de propósito: a galáxia ambiente é
+ * a identidade do produto, e no Windows o "Efeitos de animação" desligado fazia o
+ * WebView2 reportar `reduce` e o fundo congelava sem o usuário pedir. A verdade
+ * agora é a preferência "Movimento do fundo" (`<html data-bg-motion>`, default
+ * LIGADO — ver applyBackgroundMotion/useUi). Sem a marca ainda escrita (primeiro
+ * quadro do boot), o default é LIGADO: o ambiente nasce vivo.
+ */
+export function backgroundMotionOn(): boolean {
+  if (typeof window === "undefined") return false;
+  return document.documentElement.dataset.bgMotion !== "reduced";
+}

@@ -25,7 +25,7 @@
 
 import { useEffect, useId, useRef } from "react";
 
-import { prefersReducedMotion } from "../lib/motion";
+import { backgroundMotionOn } from "../lib/motion";
 
 /** O vocabulário fechado da marca. Fósforo para o núcleo; grafite para o fundo. */
 const INK = {
@@ -190,7 +190,8 @@ function Stardust({ size, plate }: { size: number; plate: boolean }) {
       }
     };
 
-    if (prefersReducedMotion()) {
+    // A poeira segue a preferência "Movimento do fundo" (BUG B), não o SO.
+    if (!backgroundMotionOn()) {
       draw(0.7);
       return;
     }

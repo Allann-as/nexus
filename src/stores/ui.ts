@@ -12,17 +12,29 @@ import { persist } from "zustand/middleware";
 export type Theme = "dark" | "light";
 /** Densidade das linhas de dados: confortável (padrão) ou compacta. */
 export type Density = "comfortable" | "compact";
+/**
+ * O MOVIMENTO DO FUNDO (fase 10, BUG B) — a galáxia ambiente (poeira estelar +
+ * constelação + névoa) é a IDENTIDADE do produto, não um efeito chamativo. Ela tem
+ * a própria preferência, DESACOPLADA do `prefers-reduced-motion` do SO: no Windows,
+ * "Efeitos de animação" desligado fazia o WebView2 reportar `reduce` e o fundo
+ * congelava contra a vontade do usuário. O default é LIGADO — o ambiente vive por
+ * padrão, mesmo com o SO pedindo reduzir. Quem quer quietude escolhe "Reduzido".
+ */
+export type BackgroundMotion = "on" | "reduced";
 
 interface UiState {
   theme: Theme;
   density: Density;
   /** Override manual do "reduzir movimento" (além do `prefers-reduced-motion` do SO). */
   reducedMotion: boolean;
+  /** Movimento do fundo (galáxia). Ligado por padrão, independente do SO. */
+  backgroundMotion: BackgroundMotion;
   sidebarCollapsed: boolean;
   setTheme: (t: Theme) => void;
   toggleTheme: () => void;
   setDensity: (d: Density) => void;
   setReducedMotion: (v: boolean) => void;
+  setBackgroundMotion: (v: BackgroundMotion) => void;
   toggleSidebar: () => void;
 }
 
@@ -32,12 +44,14 @@ export const useUi = create<UiState>()(
       theme: "dark", // dark is the app's default, not a fallback
       density: "comfortable",
       reducedMotion: false,
+      backgroundMotion: "on", // a galáxia vive por padrão (BUG B)
       sidebarCollapsed: false,
       setTheme: (theme) => set({ theme }),
       toggleTheme: () =>
         set((s) => ({ theme: s.theme === "dark" ? "light" : "dark" })),
       setDensity: (density) => set({ density }),
       setReducedMotion: (reducedMotion) => set({ reducedMotion }),
+      setBackgroundMotion: (backgroundMotion) => set({ backgroundMotion }),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
     }),
     { name: "nexus.ui" },
@@ -63,4 +77,13 @@ export function applyDensity(density: Density) {
 export function applyReducedMotion(on: boolean) {
   if (on) document.documentElement.dataset.reducedMotion = "true";
   else delete document.documentElement.dataset.reducedMotion;
+}
+
+/**
+ * Espelha "Movimento do fundo" em `<html data-bg-motion>`. O `Starfield` e a poeira
+ * da logo leem daqui (`backgroundMotionOn` em lib/motion) — o fundo anima por essa
+ * preferência, NÃO pelo `prefers-reduced-motion` do SO. Ver [[BackgroundMotion]].
+ */
+export function applyBackgroundMotion(v: BackgroundMotion) {
+  document.documentElement.dataset.bgMotion = v;
 }

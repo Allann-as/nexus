@@ -36,6 +36,7 @@ import { bootTelemetry, verifyPin } from "../../lib/ipc";
 import { greeting, useDisplayName } from "../../lib/greeting";
 import { prefersReducedMotion } from "../../lib/motion";
 import { useLock } from "../../stores/lock";
+import { useUi } from "../../stores/ui";
 import { NexusMark } from "../../design-system/NexusMark";
 import { Starfield } from "../../design-system/Starfield";
 import { cx } from "../../design-system/primitives";
@@ -55,6 +56,7 @@ const REVEAL_HOLD_MS = 850;
 export function LockScreen() {
   const unlockStore = useLock((s) => s.unlock);
   const name = useDisplayName();
+  const bgMotion = useUi((s) => s.backgroundMotion) === "on";
 
   const [entry, setEntry] = useState("");
   const [error, setError] = useState(false);
@@ -174,7 +176,7 @@ export function LockScreen() {
     >
       {/* A poeira estelar, em fósforo, preenchendo tudo atrás. */}
       <div className="pointer-events-none absolute inset-0 z-0">
-        <Starfield color="var(--accent)" />
+        <Starfield color="var(--accent)" motion={bgMotion} />
       </div>
 
       <HudBar />

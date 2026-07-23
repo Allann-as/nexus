@@ -22,6 +22,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 
 import { setDisplayName, setPin, toNexusError } from "../../lib/ipc";
+import { useUi } from "../../stores/ui";
 import { NexusMark } from "../../design-system/NexusMark";
 import { Starfield } from "../../design-system/Starfield";
 import { cx } from "../../design-system/primitives";
@@ -39,6 +40,7 @@ export function OnboardingScreen({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const bgMotion = useUi((s) => s.backgroundMotion) === "on";
 
   const onPin = phase === "create" || phase === "confirm";
 
@@ -122,7 +124,7 @@ export function OnboardingScreen({ onDone }: { onDone: () => void }) {
   return (
     <div className="nx-lock fixed inset-0 z-[100] overflow-hidden">
       <div className="pointer-events-none absolute inset-0 z-0">
-        <Starfield color="var(--accent)" />
+        <Starfield color="var(--accent)" motion={bgMotion} />
       </div>
 
       <div className="relative z-10 flex h-full flex-col items-center justify-center gap-5 overflow-y-auto px-6 py-10">

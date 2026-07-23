@@ -229,6 +229,8 @@ function AppearanceSection() {
   const setDensity = useUi((s) => s.setDensity);
   const reducedMotion = useUi((s) => s.reducedMotion);
   const setReducedMotion = useUi((s) => s.setReducedMotion);
+  const backgroundMotion = useUi((s) => s.backgroundMotion);
+  const setBackgroundMotion = useUi((s) => s.setBackgroundMotion);
 
   return (
     <div className="flex flex-col gap-4">
@@ -259,6 +261,26 @@ function AppearanceSection() {
         hint="Desliga as animações e o count-up. Vale mesmo que o sistema esteja em movimento normal."
       >
         <Toggle on={reducedMotion} onChange={setReducedMotion} />
+      </SettingCard>
+
+      <SettingCard
+        title="Movimento do fundo"
+        hint="A galáxia atrás do app — poeira estelar, constelação, névoa. Fica viva por padrão, mesmo que o Windows esteja com os efeitos de animação desligados."
+      >
+        <div className="flex gap-2">
+          <Choice
+            active={backgroundMotion === "on"}
+            onClick={() => setBackgroundMotion("on")}
+          >
+            Ligado
+          </Choice>
+          <Choice
+            active={backgroundMotion === "reduced"}
+            onClick={() => setBackgroundMotion("reduced")}
+          >
+            Reduzido
+          </Choice>
+        </div>
       </SettingCard>
 
       <TraySetting />
