@@ -22,7 +22,6 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 
 import { setDisplayName, setPin, toNexusError } from "../../lib/ipc";
-import { DEFAULT_DISPLAY_NAME } from "../../lib/greeting";
 import { NexusMark } from "../../design-system/NexusMark";
 import { Starfield } from "../../design-system/Starfield";
 import { cx } from "../../design-system/primitives";
@@ -227,20 +226,22 @@ function NameStep({
           if (e.key === "Enter") onSubmit();
         }}
         maxLength={40}
-        placeholder={DEFAULT_DISPLAY_NAME}
+        placeholder="Insira seu nome"
         aria-label="Como você gostaria de ser chamado"
         data-selectable
-        className="h-12 w-[300px] rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-surface)_70%,transparent)] px-4 text-center font-mono text-[15px] text-[var(--text-primary)] outline-none backdrop-blur-[3px] transition-colors focus:border-[var(--accent)] placeholder:text-[var(--text-tertiary)]"
+        className="h-12 w-[300px] rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-surface)_70%,transparent)] px-4 text-center font-mono text-[15px] text-[var(--text-primary)] caret-[var(--accent)] outline-none backdrop-blur-[3px] transition-colors focus:border-[var(--accent)] placeholder:text-[var(--text-tertiary)]"
       />
 
+      {/* O "Entrar no NEXUS" segue a BARRA DE ACENTO (fase 10 §4): grafite com a
+          faixa e a seta na cor (aqui o fósforo, fora de qualquer Esfera). */}
       <button
         type="button"
         onClick={onSubmit}
         disabled={name.trim().length === 0 || busy}
         className={cx(
-          "mt-1 flex h-11 items-center gap-2 rounded-full border px-6 font-mono text-[13px] tracking-[0.06em] transition-colors duration-[var(--dur-fast)]",
-          "border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--accent)]",
-          "hover:bg-[color-mix(in_srgb,var(--accent)_22%,transparent)] disabled:pointer-events-none disabled:opacity-40",
+          "mt-1 inline-flex h-11 items-center gap-2 rounded-[9px] px-6 text-[13px] font-semibold transition-[transform,background-color,border-color] duration-[var(--dur-fast)]",
+          "border border-[var(--border-strong)] border-l-[3px] border-l-[color:var(--sphere)] bg-[var(--bg-surface)] text-[var(--text-primary)] [&>svg]:text-[var(--sphere)]",
+          "hover:-translate-y-px hover:border-[var(--border-glow)] hover:bg-[var(--bg-hover)] disabled:pointer-events-none disabled:opacity-40",
         )}
       >
         {busy ? "Entrando…" : "Entrar no NEXUS"}

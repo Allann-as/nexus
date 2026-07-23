@@ -97,12 +97,17 @@ export function SphereDashboard({
       />
 
       <div className="grid grid-cols-4 gap-3">
+        {/* UMA COR POR SEÇÃO (fase 10 §7): todo acento herda a cor da Esfera. O
+            âmbar do streak e o fósforo das tarefas abertas eram acentos DECORATIVOS
+            soltos — dentro de uma Esfera ciano/violeta destoavam. Agora seguem
+            `--sphere`. (O vermelho/âmbar seguem sendo cor de ESTADO real; aqui não
+            havia estado, só ênfase.) */}
         <StatCard
           icon={Flame}
           label="Streak vivo"
           value={<CountUp to={card.bestStreak} />}
           unit="dias"
-          tone={card.bestStreak >= 7 ? "warning" : "sphere"}
+          tone="sphere"
         />
         <StatCard
           icon={Repeat}
@@ -115,7 +120,7 @@ export function SphereDashboard({
           icon={CheckSquare}
           label="Tarefas abertas"
           value={<CountUp to={card.openTasks} />}
-          tone={card.openTasks > 0 ? "accent" : "sphere"}
+          tone="sphere"
           onClick={() => navigate("/goals")}
         />
         <StatCard
@@ -159,8 +164,8 @@ function summary(card: SphereCard) {
   if (card.bestStreak > 0 && card.bestStreakTitle) {
     parts.push(
       <>
-        <Val tone="warning">{card.bestStreakTitle}</Val> acumula{" "}
-        <Val tone="warning">{card.bestStreak} dias</Val> seguidos
+        <Val tone="sphere">{card.bestStreakTitle}</Val> acumula{" "}
+        <Val tone="sphere">{card.bestStreak} dias</Val> seguidos
       </>,
     );
   }
@@ -168,7 +173,7 @@ function summary(card: SphereCard) {
   if (open > 0) {
     parts.push(
       <>
-        há <Val tone="accent">{open}</Val> {open === 1 ? "item" : "itens"} em aberto
+        há <Val tone="sphere">{open}</Val> {open === 1 ? "item" : "itens"} em aberto
       </>,
     );
   }

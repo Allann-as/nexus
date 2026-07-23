@@ -421,6 +421,20 @@
   }
 }
 
+/* O FIO DE BORDA VIVA (fase 10 §6): com a rail recolhida, resta um fio de 5px que
+   pulsa devagar na cor da seção ativa — a telemetria de "onde você está" sobrevive
+   ao colapso. Só opacity; `.nx-loop` o congela com a janela sem foco, e o
+   reduced-motion o deixa aceso e parado. */
+@keyframes nexus-edge-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 /* O PIN errado: um tremor curto e seco, e os círculos se apagam. Só transform. */
 @keyframes nexus-shake {
   0%,

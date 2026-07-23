@@ -86,7 +86,7 @@ export function HealthExams({ areaId }: { areaId: string }) {
         <StatTile
           icon={CalendarClock}
           label="Próximo exame"
-          tone={next && daysUntil(next.day) < 7 ? "warning" : "sphere"}
+          tone="sphere"
           value={next ? countdown(daysUntil(next.day)) : "—"}
           hint={next?.title ?? "nenhum agendado"}
         />
@@ -300,7 +300,8 @@ function ExamRow({
     <div
       className={cx(
         "flex items-center gap-4 rounded-[var(--radius-lg)] border bg-[var(--bg-surface)] px-4 py-3",
-        soon ? "border-[var(--warning)]" : "border-[var(--border-subtle)]",
+        // "Em breve" na cor da SEÇÃO (fase 10 §7), não âmbar: uma cor por Esfera.
+        soon ? "border-[color-mix(in_srgb,var(--sphere)_45%,transparent)]" : "border-[var(--border-subtle)]",
         // O passado é passado: a linha recua um tom para o olho ir primeiro ao
         // que ainda vai acontecer.
         past && "opacity-70",
@@ -337,7 +338,7 @@ function ExamRow({
         className={cx(
           "tabular shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium",
           soon
-            ? "bg-[color-mix(in_srgb,var(--warning)_18%,transparent)] text-[var(--warning)]"
+            ? "bg-[color-mix(in_srgb,var(--sphere)_18%,transparent)] text-[var(--sphere)]"
             : "text-[var(--text-tertiary)]",
         )}
       >

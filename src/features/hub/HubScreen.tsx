@@ -57,6 +57,7 @@ import { DayAgenda } from "./DayAgenda";
 import { NextMilestones } from "./NextMilestones";
 import { OnThisDay } from "../timeline/OnThisDay";
 import { greeting, useDisplayName } from "../../lib/greeting";
+import { prefersReducedMotion } from "../../lib/motion";
 
 export function HubScreen() {
   const navigate = useNavigate();
@@ -134,7 +135,7 @@ export function HubScreen() {
             <header className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <h1 className="text-[28px] leading-[34px] font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
-                  {greeting()}, {displayName}
+                  <TypedGreeting text={`${greeting()}, ${displayName}`} />
                 </h1>
                 <p className="mt-0.5 text-[13px] text-[var(--text-tertiary)]">
                   {today.data ? formatDay(today.data.day) : " "}
@@ -369,6 +370,57 @@ export function HubScreen() {
         </div>
       </PageContainer>
     </div>
+  );
+}
+
+/**
+ * A SAUDAÇÃO DIGITADA (fase 10 §8) — datilografa letra a letra na ENTRADA do Hub,
+ * com o cursor piscando. O cursor pisca por ~6s e some (um cursor eterno cansa). O
+ * componente só datilografa ao MONTAR (a entrada do Hub), nunca a cada re-render:
+ * navegar para fora e voltar remonta, e aí sim re-datilografa. Em reduced-motion,
+ * o texto aparece pronto e sem cursor.
+ */
+function TypedGreeting({ text }: { text: string }) {
+  const reduce = prefersReducedMotion();
+  const [shown, setShown] = useState(reduce ? text.length : 0);
+  const [caret, setCaret] = useState(!reduce);
+
+  useEffect(() => {
+    if (reduce) {
+      setShown(text.length);
+      setCaret(false);
+      return;
+    }
+    let i = 0;
+    let typeT = 0;
+    let hideT = 0;
+    const startT = window.setTimeout(function tk() {
+      i += 1;
+      setShown(i);
+      if (i < text.length) {
+        typeT = window.setTimeout(tk, 70);
+      } else {
+        hideT = window.setTimeout(() => setCaret(false), 6000);
+      }
+    }, 400);
+    return () => {
+      window.clearTimeout(startT);
+      window.clearTimeout(typeT);
+      window.clearTimeout(hideT);
+    };
+  }, [text, reduce]);
+
+  return (
+    <>
+      {text.slice(0, shown)}
+      {caret && (
+        <span
+          aria-hidden
+          className="nx-loop ml-1 inline-block h-[0.82em] w-[3px] translate-y-[1px] bg-[var(--accent)] align-baseline"
+          style={{ animation: "nexus-caret 1.06s steps(2, jump-none) infinite" }}
+        />
+      )}
+    </>
   );
 }
 

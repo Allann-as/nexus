@@ -1,31 +1,33 @@
 /**
- * A MARCA do NEXUS — o SINAL-N (v1.3 COCKPIT, substitui a bússola da v1.2).
+ * A MARCA do NEXUS — o NÚCLEO ORBITAL (v1.3 COCKPIT, fase 10).
  *
- * Por que a troca: a bússola resolveu a legibilidade a 32px, mas ela era a marca
- * do Midnight — a metáfora da navegação, num app que virou um COCKPIT. O Cockpit
- * pede um emblema de instrumento: o N desenhado como um TRAÇO DE SINAL/CIRCUITO,
- * com NÓS acesos nas pontas. É a letra e é um diagrama de conexão ao mesmo tempo —
- * o "nexus" (o ponto onde as coisas se ligam) dito na própria forma.
+ * A fase 9 desenhou o "SINAL-N", mas o uso reprovou: a letra lia como um logotipo
+ * de banco, não como o emblema de um instrumento. A marca volta ao NÚCLEO ORBITAL
+ * — duas elipses de órbita CRUZADAS, um núcleo central sólido e dois corpos
+ * orbitando —, dentro de um squircle grafite com uma POEIRA ESTELAR quase
+ * imperceptível atrás. É o "nexus" (o ponto onde tudo gira e se liga) dito na
+ * própria forma, e rima com a borda infinita que corre atrás do app inteiro.
  *
- * A receita: um traço único em FÓSFORO (o accent do Cockpit) desenhando o N, dois
- * nós preenchidos nas pontas em diagonal (superior-esquerda ↘ inferior-direita — a
- * diagonal do sinal), dentro de um squircle GRAFITE com um glow de fósforo suave
- * atrás. Inverte a bússola: lá o traço era branco sobre índigo; aqui é fósforo
- * sobre grafite — a luz de um mostrador aceso.
+ * A GRADE É O DESENHO: num quadro 240, tudo gira em torno do centro (120,120). A
+ * geometria é a do mockup aprovado (viewBox 44 × 5.4545): elipses rx98/ry38 com o
+ * traço em fósforo, o núcleo r24, dois corpos em (33,82) e (202,164). Os mesmos
+ * números vivem no splash do `index.html` — dois desenhos, uma geometria só.
  *
- * A GRADE É O DESENHO: nada a olho. Num quadro 240, o N ocupa x∈[84,156],
- * y∈[76,164]; traço de 14 (≈2.4 na grade de 40 da referência × 6); nós de raio 12.
- * Os mesmos números vivem em `docs/logo-concepts-v3/generate.mjs` (que escreve os
- * SVGs do bundle: .ico/.png/.icns) e no splash do `index.html` — três desenhos,
- * uma geometria só.
+ * A POEIRA (`dust`, ligada com o `plate`): ~12 estrelas minúsculas piscando de
+ * leve atrás do núcleo — um respiro, não um céu. É a única exceção de rAF por
+ * logo, e ela se comporta: com `prefers-reduced-motion` desenha UM quadro e para,
+ * e pausa com a janela sem foco/minimizada. As instâncias pequenas (a rail, o
+ * favicon) não a ligam — um logo de 24px não paga uma animação.
  *
  * Por que hex cru aqui, se "hex cru em componente é bug"? Porque um LOGO é um ativo
  * de marca com UMA identidade — não se tinge com o tema nem com a Esfera (ADR-0043).
  */
 
-import { useId } from "react";
+import { useEffect, useId, useRef } from "react";
 
-/** O vocabulário fechado da marca. Fósforo para o traço; grafite para o fundo. */
+import { prefersReducedMotion } from "../lib/motion";
+
+/** O vocabulário fechado da marca. Fósforo para o núcleo; grafite para o fundo. */
 const INK = {
   phos: "#33E1A0",
   plateTop: "#12181B",
@@ -34,26 +36,14 @@ const INK = {
   glow: "#33E1A0",
 };
 
+/** O centro do quadro 240 — a órbita inteira gira em torno dele. */
 const C = 120;
-/** As colunas do N. */
-const X_L = 84;
-const X_R = 156;
-/** O topo e a base do traço. */
-const Y_T = 76;
-const Y_B = 164;
-/** O traço do N — um caminho único: sobe a esquerda, desce a diagonal, sobe a direita. */
-const STEM = `M${X_L} ${Y_B} L${X_L} ${Y_T} L${X_R} ${Y_B} L${X_R} ${Y_T}`;
-
-/** Os dois nós acesos, na diagonal do sinal. */
-const NODES: Array<[number, number]> = [
-  [X_L, Y_T], // superior-esquerda
-  [X_R, Y_B], // inferior-direita
-];
 
 export function NexusMark({
   size = 28,
   plate = false,
   glow = false,
+  dust,
   className,
 }: {
   size?: number;
@@ -61,13 +51,17 @@ export function NexusMark({
   plate?: boolean;
   /** O halo suave atrás do squircle (a tela de bloqueio, o Sobre). */
   glow?: boolean;
+  /** A poeira estelar atrás do núcleo. Por padrão acompanha o `plate` (as
+   *  instâncias grandes e emblemáticas); pode ser forçada em qualquer sentido. */
+  dust?: boolean;
   className?: string;
 }) {
   const uid = useId().replace(/:/g, "");
   const bg = `plate-${uid}`;
   const halo = `glow-${uid}`;
+  const showDust = dust ?? plate;
 
-  return (
+  const core = (
     <svg
       width={size}
       height={size}
@@ -75,7 +69,8 @@ export function NexusMark({
       fill="none"
       role="img"
       aria-label="NEXUS"
-      className={className}
+      className={showDust ? undefined : className}
+      style={showDust ? { position: "relative", zIndex: 2, display: "block" } : undefined}
     >
       <defs>
         {plate && (
@@ -114,34 +109,149 @@ export function NexusMark({
         </>
       )}
 
-      {/* O anel de nó (halo fino) atrás de cada nó — a "luz" acesa. */}
-      {NODES.map(([x, y]) => (
-        <circle
-          key={`ring-${x}-${y}`}
-          cx={x}
-          cy={y}
-          r="19"
-          fill="none"
-          stroke={INK.phos}
-          strokeWidth="2.5"
-          opacity="0.35"
-        />
-      ))}
-
-      {/* O traço do N. */}
-      <path
-        d={STEM}
-        fill="none"
+      {/* As DUAS órbitas cruzadas — o traço fino em fósforo, uma clara e uma mais
+          apagada, giradas em direções opostas para lerem como um cruzamento. */}
+      <ellipse
+        cx={C}
+        cy={C}
+        rx="98"
+        ry="38"
         stroke={INK.phos}
-        strokeWidth="14"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        strokeWidth="7"
+        opacity="0.5"
+        transform={`rotate(-25 ${C} ${C})`}
+      />
+      <ellipse
+        cx={C}
+        cy={C}
+        rx="98"
+        ry="38"
+        stroke={INK.phos}
+        strokeWidth="7"
+        opacity="0.3"
+        transform={`rotate(35 ${C} ${C})`}
       />
 
-      {/* Os nós preenchidos por cima das pontas. */}
-      {NODES.map(([x, y]) => (
-        <circle key={`node-${x}-${y}`} cx={x} cy={y} r="12" fill={INK.phos} />
-      ))}
+      {/* O núcleo sólido no centro, e os dois corpos orbitando. */}
+      <circle cx={C} cy={C} r="24" fill={INK.phos} />
+      <circle cx="33" cy="82" r="10" fill={INK.phos} />
+      <circle cx="202" cy="164" r="8" fill={INK.phos} opacity="0.75" />
     </svg>
   );
+
+  if (!showDust) return core;
+
+  // A poeira mora atrás do núcleo, num canvas do tamanho exato da marca.
+  return (
+    <span
+      className={className}
+      style={{ position: "relative", display: "inline-block", width: size, height: size, lineHeight: 0 }}
+    >
+      <Stardust size={size} plate={plate} />
+      {core}
+    </span>
+  );
+}
+
+/**
+ * A POEIRA — ~12 estrelas piscando de leve, quase imperceptíveis. Recortada ao
+ * squircle quando há `plate`, para não vazar dos cantos. Um respiro; a §6 do design
+ * system a vigia como qualquer rAF: quadro único em reduced-motion, pausa em idle.
+ */
+function Stardust({ size, plate }: { size: number; plate: boolean }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const cv = ref.current;
+    if (!cv) return;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+    cv.width = size;
+    cv.height = size;
+
+    // Estrelas em coordenadas normalizadas — sobrevivem ao tamanho.
+    const stars = Array.from({ length: 12 }, (_, i) => ({
+      x: pseudo(i * 2.13 + 0.7),
+      y: pseudo(i * 3.71 + 1.9),
+      r: 0.35 + pseudo(i * 1.27) * 0.9,
+      o: 0.1 + pseudo(i * 2.61) * 0.25,
+      p: pseudo(i * 4.03) * 7,
+      sp: 0.6 + pseudo(i * 1.91),
+    }));
+
+    const draw = (t: number) => {
+      ctx.clearRect(0, 0, size, size);
+      for (const s of stars) {
+        const o = s.o * (0.5 + 0.5 * Math.sin(t * s.sp + s.p));
+        ctx.beginPath();
+        ctx.arc(s.x * size, s.y * size, s.r * (size / 64), 0, 7);
+        ctx.fillStyle = `rgba(51,225,160,${o.toFixed(3)})`;
+        ctx.fill();
+      }
+    };
+
+    if (prefersReducedMotion()) {
+      draw(0.7);
+      return;
+    }
+
+    let raf = 0;
+    let t = 0;
+    let running = true;
+    const loop = () => {
+      if (!running) return;
+      t += 0.016;
+      draw(t);
+      raf = requestAnimationFrame(loop);
+    };
+    const idle = () => document.hidden || !document.hasFocus();
+    const stop = () => {
+      running = false;
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+    };
+    const start = () => {
+      if (running && raf) return;
+      running = true;
+      raf = requestAnimationFrame(loop);
+    };
+    const onVis = () => (idle() ? stop() : start());
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("blur", onVis);
+    window.addEventListener("focus", onVis);
+    if (idle()) draw(t);
+    else raf = requestAnimationFrame(loop);
+
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("blur", onVis);
+      window.removeEventListener("focus", onVis);
+    };
+  }, [size]);
+
+  return (
+    <canvas
+      ref={ref}
+      aria-hidden
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: size,
+        height: size,
+        // Recorta a poeira ao squircle da placa (o mesmo raio proporcional do
+        // `rx=58` num quadro 240 ≈ 24%); sem placa, o quadrado inteiro.
+        borderRadius: plate ? "24%" : 0,
+        pointerEvents: "none",
+        zIndex: 1,
+      }}
+    />
+  );
+}
+
+/** Ruído determinístico [0,1) — evita `Math.random` no corpo do módulo e mantém a
+ *  poeira idêntica entre renders (nada de estrelas pulando a cada montagem). */
+function pseudo(n: number): number {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
 }

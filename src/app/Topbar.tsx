@@ -38,18 +38,32 @@ export function Topbar({
 
   return (
     <header
-      // TINGIDA NA COR DA SEÇÃO (fase 9 §4): translúcida sobre a poeira estelar,
-      // com um sopro do `--tint` e a borda inferior na cor da seção. A troca
-      // transiciona suave (400ms) — a barra deixa de ser um bloco de cor à parte
-      // e passa a fazer parte do ambiente. Um só backdrop-filter aqui.
-      className="relative z-10 flex shrink-0 items-center gap-3 border-b px-4 backdrop-blur-[8px] transition-[background-color,border-color] duration-[var(--dur-slow)] ease-[var(--ease)]"
+      // LUZ AMBIENTE (fase 10 §5): a faixa colorida cheia e a borda saturada
+      // morreram — elas cortavam o topo. Agora a barra é grafite NEUTRO translúcido
+      // (só o blur segura a legibilidade do chrome sobre a poeira estelar), sem
+      // borda, e a cor da seção entra como um BRILHO que desce do topo e dissolve
+      // (o `<div>` abaixo). O título e as métricas flutuam sobre o starfield.
+      className="relative z-10 flex shrink-0 items-center gap-3 px-4 backdrop-blur-[8px]"
       style={{
         height: "var(--topbar-h)",
-        backgroundColor:
-          "color-mix(in srgb, var(--tint) 12%, color-mix(in srgb, var(--bg-void) 55%, transparent))",
-        borderBottomColor: "color-mix(in srgb, var(--tint) 28%, transparent)",
+        backgroundColor: "color-mix(in srgb, var(--bg-void) 42%, transparent)",
       }}
     >
+      {/* O brilho ambiente: um véu da cor da seção que desce do topo e dissolve
+          (mascarado, para não virar bloco nem borda). `background-color` — e não um
+          gradiente — para a TROCA de seção interpolar suave (~400ms), como a poeira
+          estelar. Bleed ~28px abaixo da barra: a luz derrama no conteúdo. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[80px]"
+        style={{
+          backgroundColor: "color-mix(in srgb, var(--tint) 14%, transparent)",
+          WebkitMaskImage: "linear-gradient(180deg, #000, transparent)",
+          maskImage: "linear-gradient(180deg, #000, transparent)",
+          transition: "background-color var(--dur-slow) var(--ease)",
+        }}
+      />
+
       <button
         onClick={onOpenNav}
         title="O Nexo"

@@ -184,10 +184,8 @@ export function LockScreen() {
 
         {/* ===== a coluna da FUNÇÃO ===== */}
         <section className="relative flex flex-col items-center justify-center px-6 py-10 md:border-l md:border-[color-mix(in_srgb,var(--border-strong)_60%,transparent)]">
-          <BezelRings error={error} />
-
           <div className="relative flex flex-col items-center">
-            <PinDots length={PIN_LEN} filled={entry.length} error={error} />
+            <PinDots length={PIN_LEN} filled={entry.length} error={error} success={authed} />
 
             <div className="mt-9">
               <NumPad
@@ -563,30 +561,5 @@ function Caret() {
       className="nx-loop ml-0.5 inline-block h-[13px] w-[7px] bg-[var(--accent)] align-middle"
       style={{ animation: "nexus-caret 1.06s steps(2, jump-none) infinite" }}
     />
-  );
-}
-
-/**
- * O BISEL: três aros finos centrados atrás do teclado. Geometria parada. A única
- * vez que reage é o PIN errado: o aro fica VERMELHO por 450ms.
- */
-function BezelRings({ error }: { error: boolean }) {
-  return (
-    <svg
-      className={cx(
-        "pointer-events-none absolute top-1/2 left-1/2 aspect-square w-[min(100%,520px)]",
-        "-translate-x-1/2 -translate-y-1/2",
-        "transition-[stroke] duration-[var(--dur-fast)] ease-[var(--ease)]",
-      )}
-      viewBox="0 0 600 600"
-      fill="none"
-      stroke={error ? "var(--danger)" : "var(--accent)"}
-      strokeLinecap="round"
-      aria-hidden
-    >
-      <circle cx="300" cy="300" r="280" strokeWidth="1.4" opacity={error ? 0.5 : 0.16} />
-      <circle cx="300" cy="300" r="210" strokeWidth="1.2" opacity={error ? 0.34 : 0.11} />
-      <circle cx="300" cy="300" r="140" strokeWidth="1" opacity={error ? 0.22 : 0.07} />
-    </svg>
   );
 }

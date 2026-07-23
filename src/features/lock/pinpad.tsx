@@ -11,15 +11,21 @@ import { Delete } from "lucide-react";
 
 import { cx } from "../../design-system/primitives";
 
-/** As seis bolinhas do PIN. `error` acende todas em vermelho. */
+/**
+ * As seis bolinhas do PIN. `error` acende todas em vermelho; `success` (o PIN
+ * correto, fase 10) acende todas em FÓSFORO com glow — o "operador reconhecido"
+ * dito também na cor.
+ */
 export function PinDots({
   length,
   filled,
   error,
+  success,
 }: {
   length: number;
   filled: number;
   error?: boolean;
+  success?: boolean;
 }) {
   return (
     <div
@@ -34,14 +40,16 @@ export function PinDots({
           <span
             key={i}
             className={cx(
-              "size-3 rounded-full border transition-[background-color,border-color,transform] duration-[var(--dur-fast)]",
+              "size-3 rounded-full border transition-[background-color,border-color,transform,box-shadow] duration-[var(--dur-fast)]",
               error
                 ? "border-[var(--danger)] bg-[var(--danger)]"
-                : on
-                  ? "scale-100 border-[var(--text-primary)] bg-[var(--text-primary)]"
-                  : "scale-90 border-[var(--border-strong)] bg-transparent",
+                : success
+                  ? "scale-100 border-[var(--accent)] bg-[var(--accent)] shadow-[0_0_11px_var(--accent)]"
+                  : on
+                    ? "scale-100 border-[var(--text-primary)] bg-[var(--text-primary)]"
+                    : "scale-90 border-[var(--border-strong)] bg-transparent",
             )}
-            style={on && !error ? { animation: "nexus-pulse 180ms var(--ease) both" } : undefined}
+            style={on && !error && !success ? { animation: "nexus-pulse 180ms var(--ease) both" } : undefined}
           />
         );
       })}
@@ -68,8 +76,11 @@ export function PadKey({
       type="button"
       onClick={onClick}
       disabled={disabled}
+      // O SQUIRCLE D1 (fase 10): `border-radius: 44% / 44%` — nem círculo nem
+      // quadrado, a tecla de um mostrador. Vale para o bloqueio e o onboarding.
+      style={{ borderRadius: "44% / 44%", ...(rest.style ?? {}) }}
       className={cx(
-        "tabular grid size-16 place-items-center rounded-full border text-[22px] font-medium",
+        "tabular grid size-16 place-items-center border text-[22px] font-medium",
         "transition-[transform,background-color,border-color] duration-[var(--dur-fast)] ease-[var(--ease)]",
         "active:scale-[0.94] disabled:pointer-events-none disabled:opacity-30",
         accent

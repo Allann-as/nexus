@@ -166,7 +166,7 @@ export function HealthDashboard({
           label="Maior streak"
           value={<CountUp to={card.bestStreak} />}
           unit="dias"
-          tone="warning"
+          tone="sphere"
           hint={card.bestStreakTitle ?? undefined}
         />
         <StatTile
@@ -188,10 +188,13 @@ export function HealthDashboard({
           delta={delta}
           hint={delta ? "vs. os 7 dias anteriores" : undefined}
         />
+        {/* O exame segue a cor da SEÇÃO (fase 10 §7): o "círculo amarelo do exame
+            de sangue" morreu — a urgência quem dá é o texto do countdown
+            (hoje/amanhã/Nd), não um âmbar que destoa do verde da Saúde. */}
         <StatTile
           icon={CalendarClock}
           label="Próximo exame"
-          tone={examSoon ? "warning" : "sphere"}
+          tone="sphere"
           value={countdown(examDays)}
           hint={nextExam?.title}
         />
@@ -203,12 +206,16 @@ export function HealthDashboard({
         <div
           className={cx(
             "flex items-center gap-3 rounded-[var(--radius-lg)] border bg-[var(--bg-surface)] px-4 py-3",
-            examSoon ? "border-[var(--warning)]" : "border-[var(--border-subtle)]",
+            // "Em breve" ganha uma borda na cor da SEÇÃO (não âmbar) — o realce
+            // fica, a cor segue a Esfera.
+            examSoon
+              ? "border-[color-mix(in_srgb,var(--sphere)_45%,transparent)]"
+              : "border-[var(--border-subtle)]",
           )}
         >
           <CalendarClock
             size={16}
-            className={examSoon ? "text-[var(--warning)]" : "text-[var(--text-tertiary)]"}
+            className={examSoon ? "text-[var(--sphere)]" : "text-[var(--text-tertiary)]"}
           />
           <span className="text-[13px] text-[var(--text-primary)]">{nextExam.title}</span>
           {nextExam.location && (
