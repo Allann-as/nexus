@@ -340,10 +340,13 @@ impl AppState {
         let backups = BackupEngine::new(db.clone(), paths.clone(), clock.clone());
         let exports = ExportEngine::new(db.clone(), paths.clone(), clock.clone());
 
-        // A tela de bloqueio (M5.5 §3.5): semeia o PIN de fábrica no primeiro boot
-        // (idempotente). Vive em disco, fora do banco — sobrevive a um restauro.
+        // A tela de bloqueio (M5.5 §3.5): a config de PIN vive em disco, fora do
+        // banco — sobrevive a um restauro. NÃO se semeia mais um PIN de fábrica no
+        // primeiro boot (fase 9): sem `security.json`, o app abre o ONBOARDING e o
+        // usuário CRIA a própria senha (§3). Instalações que já têm o arquivo (o
+        // PIN semeado por versões anteriores, ou um trocado à mão) seguem intactas
+        // — a migração é não fazer nada com o que já existe.
         let security = SecurityService::new(paths.clone());
-        security.ensure_seeded()?;
 
         // As preferências de SO (ARSENAL): lidas do `settings.json`, fora do banco.
         let settings = SettingsStore::load(&paths);

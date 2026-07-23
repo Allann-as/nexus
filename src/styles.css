@@ -88,123 +88,53 @@
 }
 
 /* ============================================================
-   O FUNDO — sobriedade, custo zero
+   O FUNDO — a borda infinita (fase 9)
    ------------------------------------------------------------
-   A v1.1 empilhava aurora + dot grid + a geometria do astrolábio +
-   grão + vinheta. Cada camada era defensável sozinha; somadas
-   viraram RUÍDO, e o dono do app leu o resultado como "péssimo". A
-   referência que ele trouxe (a tela de bloqueio de um app de banco)
-   faz o oposto: quase preto, dois ou três aros finos, e vazio.
+   A v1.1 empilhava aurora + dot grid + astrolábio + grão + vinheta e
+   virou RUÍDO. A v1.3 (Cockpit) enxugou para um fundo ESTÁTICO por tela:
+   grafite sólido + dot-grid de fósforo + os aros da bússola no
+   `.nx-page::before`. Resolveu o ruído, mas cada tela pintava o próprio
+   chão — e somado ao `--bg-void` da moldura, ao `--bg-surface` da rail e
+   da barra do topo, davam VÁRIOS grafites de perto, cuja emenda o olho
+   lia como "o app nem está em tela cheia".
 
-   Então o fundo agora tem DUAS camadas, de baixo para cima:
+   A fase 9 troca isso pela POEIRA ESTELAR: um único `<canvas>` FIXO na
+   Shell, cobrindo a viewport inteira atrás de tudo (ver `Starfield.tsx`).
+   As telas ficaram TRANSPARENTES (`.nx-page` abaixo não pinta fundo
+   nenhum), a rail e os painéis são translúcidos, e o starfield aparece de
+   ponta a ponta — a "borda infinita". A cor vem de `--tint` (a seção
+   ativa), interpolada suave na troca de Esfera.
 
-     1. --bg-base sólido                (a superfície)
-     2. uma aurora única e fraca        (a cor da Esfera, só um sopro)
-     3. .nx-page::before                (os aros da bússola, fora de centro)
-
-   Só os AROS, sem as marcas cardeais — e foi a dirigida que decidiu.
-   Os tiques tinham stroke 4 contra o stroke 2 do aro que deveriam
-   graduar; sob `--astro-alpha` (0.12) essa hierarquia se inverte: o
-   aro some e o tique fica, e o que aparecia na tela eram quatro
-   riscos soltos perto das bordas, sem nada a que pertencer. Num
-   desenho de fundo a esta opacidade, tudo tem que ter o MESMO peso,
-   senão o detalhe sobrevive ao que ele detalha.
-
-   Sem dot grid, sem segunda aurora, sem as bandas de anel borradas.
-   Tudo `background-image` ESTÁTICO no mesmo elemento: zero DOM extra,
-   zero canvas, zero frame de animação, zero backdrop-filter. O fundo
-   não custa nada porque não faz nada — quem se move são os DADOS.
-
-   A cor vem de `--sphere`, que a tela define. Uma propriedade, e a
-   Esfera Saúde fica verde inteira.
+   O que sobrou aqui é só o que EMOLDURA a viewport (grão + vinheta, em
+   `.nx-viewport-fx`) — estático, custo ~zero. Quem se move agora, além dos
+   dados, é a poeira estelar, e ela obedece à higiene de segundo plano
+   (pausa sem foco / reduced-motion).
    ============================================================ */
 @layer components {
+  /* ============================================================
+     A BORDA INFINITA (fase 9 §4) — o fundo é UM só, de ponta a ponta
+     ------------------------------------------------------------
+     Até a v1.3, cada tela era uma `.nx-page` que pintava o PRÓPRIO fundo:
+     grafite sólido + dot-grid + os aros da bússola. Somado ao `--bg-void`
+     da moldura, ao `--bg-surface` da rail e ao `--bg-void` da barra do topo,
+     davam QUATRO chãos de cores próximas mas diferentes — e o olho lia a
+     emenda como "o app nem está em tela cheia".
+
+     Agora o fundo é a POEIRA ESTELAR: um único `<canvas>` FIXO na Shell,
+     atrás de tudo (ver `Shell.tsx` / `Starfield.tsx`). Para ele aparecer de
+     fora a fora, a `.nx-page` deixou de pintar qualquer fundo — ficou
+     TRANSPARENTE. Sem dot-grid, sem os aros da bússola: as estrelas, tingidas
+     pela cor da seção, são a textura agora. A rail e os painéis são
+     translúcidos e flutuam sobre elas; nada corta o ambiente.
+
+     `overflow-x: clip` FICA (ADR-0080): a raiz é `overflow-y: auto`, e o CSS
+     promove o eixo X junto — sem o `clip`, qualquer sangria vira área rolável
+     horizontal. `clip` e não `hidden` porque `hidden` cria um container
+     rolável e `clip` não. */
   .nx-page {
     position: relative;
-    background-color: var(--bg-base);
-
-    /* O DOT-GRID de fósforo (Cockpit) — a textura de mostrador. Um ponto de
-       ~1px a cada 24px, em fósforo a `--dot-alpha` (0.05): quase invisível,
-       mas dá ao grafite chapado a casca de um painel de instrumentos. Não é a
-       grade de pontos ruidosa que a v1.2 removeu — aquela era navy-clara e
-       densa; esta é fósforo, esparsa e no limiar da percepção. Estático,
-       `background-attachment: local` para rolar com o conteúdo. */
-    background-image: radial-gradient(
-      circle,
-      color-mix(in srgb, var(--phos) calc(var(--dot-alpha) * 100%), transparent) 1px,
-      transparent 1.4px
-    );
-    background-size: 24px 24px;
-    background-position: 0 0;
-    background-attachment: local;
-
-    /* Os AROS (o `::before` logo abaixo) moram em `right: -240px` — 240px além
-       da borda direita, de propósito, para sangrar pelo canto. Só que toda
-       tela é `.nx-page` com `overflow-y-auto`, e o CSS não deixa um eixo
-       `visible` conviver com o outro `auto`: o X é promovido a `auto` junto.
-       Os aros deixam então de ser decoração sangrando e viram 240px de área
-       ROLÁVEL horizontal — medido: `scrollWidth` 1282 contra 1052 de largura.
-
-       `clip` e não `hidden`: os dois cortam a pintura, mas `hidden` cria um
-       container rolável (a área continua alcançável por script e pela roda do
-       mouse) e `clip` não cria. É para isto que ele existe, e é por isso que
-       pode conviver com `overflow-y: auto` sem mexer no eixo Y.
-
-       O que isto NÃO é: não é a causa do conteúdo aparecer cortado à direita
-       na dirigida da fase 3b. Essa hipótese foi levantada aqui, testada, e
-       FALSIFICADA — a medição de dentro da página mostrou que a viewport do
-       WebView era mais larga que a janela (ver ADR-0080). Fica registrado
-       para ninguém reabrir este caminho achando que resolve aquilo. */
+    background-color: transparent;
     overflow-x: clip;
-  }
-
-  /* ============================================================
-     OS AROS DA BÚSSOLA — a marca vira o fundo, em voz baixa
-     ------------------------------------------------------------
-     A identidade do fundo é a MESMA família da marca (`NexusMark`):
-     círculos concêntricos finos com marcas cardeais. Só isso — três
-     aros e oito tiques, sem rosa dos ventos, sem limbo graduado, sem
-     constelação. O fundo cita o instrumento; ele não é o instrumento.
-
-     Como funciona sem custo e sem tocar cada tela:
-       - UM pseudo-elemento de `.nx-page` — zero DOM, presente em toda
-         página por construção (a régua do §3.1 garante que TODA tela é
-         `.nx-page`).
-       - A geometria é uma MÁSCARA (SVG branco sobre transparente,
-         data-URI, zero rede). A COR vem de `background-color:
-         var(--sphere)` — então a mesma máscara se tinge com a Esfera, e
-         um SVG serve às cinco. É por isso que a técnica da máscara fica.
-       - FORA DE CENTRO e sangrando pelo canto: centrado leria como
-         wallpaper, não como composição.
-       - Estático: nada anima. O custo é o de pintar um gradiente parado.
-       - O tema claro herda tudo; só a opacidade muda, via `--astro-alpha`
-         (o token que governa a presença desta camada, definido em
-         `design-system/tokens.css` para os dois temas).
-
-     `isolation: isolate` cria o contexto de empilhamento que PRENDE o
-     `z-index: -1` dentro do `.nx-page`: os aros ficam ACIMA do fundo em
-     camadas e ABAIXO de todo card e texto, sem vazar para trás da janela. */
-  .nx-page {
-    isolation: isolate;
-  }
-
-  .nx-page::before {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    pointer-events: none;
-    top: -220px;
-    right: -240px;
-    width: 780px;
-    height: 780px;
-    background-color: var(--sphere);
-    opacity: var(--astro-alpha);
-    -webkit-mask-repeat: no-repeat;
-    mask-repeat: no-repeat;
-    -webkit-mask-size: contain;
-    mask-size: contain;
-    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 600' fill='none' stroke='%23fff'%3E%3Ccircle cx='300' cy='300' r='280' stroke-width='2'/%3E%3Ccircle cx='300' cy='300' r='210' stroke-width='1.5'/%3E%3Ccircle cx='300' cy='300' r='140' stroke-width='1.2'/%3E%3C/svg%3E");
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 600' fill='none' stroke='%23fff'%3E%3Ccircle cx='300' cy='300' r='280' stroke-width='2'/%3E%3Ccircle cx='300' cy='300' r='210' stroke-width='1.5'/%3E%3Ccircle cx='300' cy='300' r='140' stroke-width='1.2'/%3E%3C/svg%3E");
   }
 
   /* ============================================================
@@ -264,39 +194,24 @@
   }
 
   /* ============================================================
-     A TELA DE BLOQUEIO — o mesmo painel, sem os aros da Esfera
+     A TELA DE BLOQUEIO / ONBOARDING — o mesmo chão da borda infinita
      ------------------------------------------------------------
-     Ela não é uma `.nx-page`: fica ACIMA do router, não tem Esfera
-     ativa (logo, `--sphere` não significa nada aqui) e não rola
-     conteúdo. Mas o CHÃO é o mesmo — grafite mais fundo e o dot-grid
-     de fósforo, com os MESMOS tokens (`--phos`, `--dot-alpha`), para
-     desbloquear e entrar no app ser uma superfície só.
+     Ela não é uma `.nx-page`: fica ACIMA do router e não rola conteúdo. Mas
+     partilha a POEIRA ESTELAR — o `Starfield` mora dentro dela (§4). O chão é o
+     grafite mais fundo (`--bg-base`), que dá um piso escuro sólido às estrelas;
+     a textura vem delas agora, não mais de um dot-grid (que a fase 9 removeu
+     daqui, redundante sob o canvas).
 
-     Os aros ficam no componente (`BezelRings`), e não aqui, porque
-     eles são o bisel do TECLADO — precisam ficar presos à coluna da
-     direita e ficar vermelhos no PIN errado. Fundo não reage; este
-     reage. ============================================================ */
+     `--bg-base` e não `--bg-void`: no CLARO a moldura (`--bg-void`) é o cinza
+     mais fechado da paleta, e uma tela inteira pintada com ela lê como
+     desabilitada. `--bg-base` é o mesmo piso do app nos dois temas.
+
+     Os aros ficam no componente (`BezelRings`), não aqui: são o bisel do
+     TECLADO e ficam vermelhos no PIN errado. `overflow-x: clip` pela mesma
+     razão do `.nx-page` (ADR-0080). */
   .nx-lock {
-    /* `--bg-base` e não `--bg-void`. No ESCURO os dois são o mesmo chão a olho
-       (#060809 contra #040506) — mas o `--bg-void` é a moldura EXTERNA da
-       janela, e no CLARO ele é o cinza mais fechado da paleta (#d9dee0). Uma
-       tela inteira pintada com a cor da moldura lê como desabilitada, e não como
-       a superfície do app. `--bg-base` é o mesmo piso que o app inteiro pisa nos
-       dois temas — desbloquear vira uma troca de conteúdo, não de chão. */
     background-color: var(--bg-base);
-
-    /* A MESMA razão do `.nx-page` (ADR-0080): a raiz é `overflow-y: auto`, e o
-       CSS não deixa um eixo `visible` conviver com o outro `auto` — o X é
-       promovido junto. Sem isto, o bisel que sobra da coluna vira área ROLÁVEL
-       horizontal em vez de decoração cortada. `clip` e não `hidden` porque
-       `hidden` cria um container rolável e `clip` não. */
     overflow-x: clip;
-    background-image: radial-gradient(
-      circle,
-      color-mix(in srgb, var(--phos) calc(var(--dot-alpha) * 100%), transparent) 1px,
-      transparent 1.4px
-    );
-    background-size: 24px 24px;
   }
 
   /* A entrada de uma tela: fade + 12px. Só na montagem. */

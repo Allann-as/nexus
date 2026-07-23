@@ -149,6 +149,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::system::system_info,
+            commands::system::boot_telemetry,
             commands::system::quick_check,
             commands::system::vacuum_db,
             commands::areas::create_area,

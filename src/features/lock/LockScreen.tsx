@@ -1,73 +1,75 @@
 /**
- * A tela de bloqueio por PIN (M5.5 §3.5 — recomposta na v1.2, refeita na v1.3).
+ * A tela de bloqueio por PIN — layout C-HUD com identidade progressiva (fase 9).
  *
  * Privacidade de TELA: impede que alguém que pega o computador desbloqueado abra
  * o NEXUS e leia a sua vida. NÃO é cifra de disco — o banco segue legível para
  * quem tem acesso à máquina (ADR-0054). O PIN nunca viaja nem é guardado em
  * claro: o backend só devolve um veredito.
  *
- * A COMPOSIÇÃO (v1.3 COCKPIT): a v1.2 era uma COLUNA centrada — marca, nome,
- * bolinhas, teclado, versão — copiada da tela de bloqueio de um app de banco.
- * Ela resolveu o problema da v1.1 (poluição), mas resolveu virando genérica: sem
- * a marca, aquela tela é a de qualquer app com PIN. O Cockpit pede o oposto — que
- * a primeira tela do app já seja o painel ligando.
+ * A COMPOSIÇÃO (fase 9): três faixas sobre a POEIRA ESTELAR (`Starfield`), que
+ * preenche a tela de ponta a ponta.
  *
- * Então: SPLIT ASSIMÉTRICO. À esquerda, a IDENTIDADE — o SINAL-N, NEXUS, a
- * saudação por hora com o nome de quem está na frente, e o LOG DE BOOT em
- * terminal, uma linha por vez. À direita, a FUNÇÃO — as seis bolinhas e o teclado
- * circular, com os aros finos atrás fazendo de bisel do instrumento. Uma
- * divisória fina separa as duas: quem sou eu à esquerda, o que você faz à
- * direita.
+ *   1. A BARRA HUD no topo — telemetria LOCAL digitada ao vivo: a data por
+ *      extenso, o "ping" (latência local medida, nunca rede), o último backup, a
+ *      versão, e um relógio vivo. Ver `boot_telemetry`.
+ *   2. À ESQUERDA, a IDENTIDADE — o SINAL-N, NEXUS, uma saudação GENÉRICA por hora
+ *      SEM NOME, e o terminal de boot.
+ *   3. À DIREITA, a FUNÇÃO — as seis bolinhas e o teclado.
  *
- * O LOG DE BOOT NÃO É CENÁRIO. Ele lê `system_info` — o MESMO comando da aba
- * Sobre — e diz a versão, o esquema do banco e o tamanho do ledger. Escrever
- * "núcleo OK · ledger íntegro" à mão teria sido teatro: quatro linhas afirmando
- * o que ninguém verificou, na tela onde a afirmação nunca seria contestada. As
- * linhas com dado só aparecem QUANDO o dado chega; se a leitura falha, elas não
- * aparecem — o log fica com a única linha que é verdade sempre ("aguardando
- * operador"). Ver ADR-0109.
+ * IDENTIDADE PROGRESSIVA — o ponto central. Enquanto ninguém digitou a senha,
+ * NENHUM nome aparece: a saudação é só "Boa noite.". Quando o PIN correto entra,
+ * ABAIXO de "aguardando operador" brotam, digitando, "operador identificado" (com
+ * um Check) e "Seja bem-vindo de volta, {NOME}." — e só então, lida a saudação,
+ * o app destrava. O nome vem das Configurações (`settings.json`), nunca cravado, e
+ * é lido apenas no instante em que a saudação aparece: um PIN errado não vaza nada.
  *
- * Tudo CSS/SVG estático — zero canvas. A única animação em idle é o cursor do
- * terminal, marcado `nx-loop` (congela com a janela sem foco) e neutralizado por
- * `prefers-reduced-motion`.
- *
- * Teclado físico E teclado numérico na tela; do 3º erro, 1s de atraso por
- * tentativa esfria o brute force manual.
+ * Tudo respeita `prefers-reduced-motion`: sem datilografia, sem estrela cadente,
+ * sem deriva — o estado final aparece de imediato (ver `prefersReducedMotion` e o
+ * `Starfield`, que desenha um quadro estático).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Delete } from "lucide-react";
+import { Check } from "lucide-react";
 
-import { systemInfo, verifyPin } from "../../lib/ipc";
+import { bootTelemetry, verifyPin } from "../../lib/ipc";
 import { greeting, useDisplayName } from "../../lib/greeting";
+import { prefersReducedMotion } from "../../lib/motion";
 import { useLock } from "../../stores/lock";
 import { NexusMark } from "../../design-system/NexusMark";
+import { Starfield } from "../../design-system/Starfield";
 import { cx } from "../../design-system/primitives";
+import { NumPad, PinDots } from "./pinpad";
 
 const PIN_LEN = 6;
 
-/** O intervalo entre uma linha do log e a seguinte. */
-const BOOT_STEP_MS = 130;
-
 /**
- * Quanto tempo o PIN errado fica VISÍVEL: o tremor das bolinhas, o vermelho
- * delas e o aro vermelho do bisel. Um número só para os três — a v1.2 tinha o
- * `450` do `setTimeout` e o `450ms` da classe do tremor escritos separados, e
- * duas cópias de uma duração divergem no dia em que só uma é ajustada.
+ * Quanto tempo o PIN errado fica VISÍVEL: o tremor das bolinhas, o vermelho delas
+ * e o aro vermelho do bisel. Um número só para os três.
  */
 const ERROR_MS = 450;
 
+/** O respiro depois da saudação personalizada, antes de a cortina subir. */
+const REVEAL_HOLD_MS = 850;
+
 export function LockScreen() {
   const unlockStore = useLock((s) => s.unlock);
+  const name = useDisplayName();
+
   const [entry, setEntry] = useState("");
   const [error, setError] = useState(false);
+  const [authed, setAuthed] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const [attempts, setAttempts] = useState(0);
   const [coolUntilMs, setCoolUntilMs] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const checking = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  // O terminal de boot + a identidade progressiva. `reveal`/`fail` são estáveis;
+  // `lines` muda a cada caractere digitado — por isso o handle é desestruturado,
+  // para o listener de teclado não re-assinar a cada quadro da datilografia.
+  const { lines: termLines, reveal: termReveal, fail: termFail } = useBootTerminal();
 
   const cooling = coolUntilMs > now;
   const coolLeft = cooling ? Math.ceil((coolUntilMs - now) / 1000) : 0;
@@ -78,8 +80,6 @@ export function LockScreen() {
     return () => window.clearInterval(t);
   }, [cooling]);
 
-  /* O foco entra na coluna ao montar: o listener de teclado é da janela, mas sem
-     isto o primeiro Tab começaria fora da tela de bloqueio. */
   useEffect(() => {
     rootRef.current?.focus();
   }, []);
@@ -91,10 +91,16 @@ export function LockScreen() {
       try {
         const ok = await verifyPin(pin);
         if (ok) {
-          // O gesto de acerto: a tela dissolve, e só então o app aparece — a
-          // transição é a recompensa de entrar.
-          setUnlocking(true);
-          window.setTimeout(() => unlockStore(), 420);
+          // Não destrava na hora: a identidade progressiva ROLA primeiro. O
+          // terminal revela "operador identificado" + a saudação e, quando ela
+          // termina, chama de volta para a cortina subir.
+          setAuthed(true);
+          termReveal(name, () => {
+            window.setTimeout(() => {
+              setUnlocking(true);
+              window.setTimeout(() => unlockStore(), 420);
+            }, REVEAL_HOLD_MS);
+          });
           return;
         }
         setAttempts((a) => {
@@ -104,17 +110,20 @@ export function LockScreen() {
         });
         setError(true);
         setEntry("");
+        termFail();
         window.setTimeout(() => setError(false), ERROR_MS);
       } finally {
         checking.current = false;
       }
     },
-    [unlockStore],
+    [unlockStore, termReveal, termFail, name],
   );
+
+  const locked = cooling || unlocking || authed;
 
   const push = useCallback(
     (digit: string) => {
-      if (cooling || checking.current || unlocking) return;
+      if (locked || checking.current) return;
       setEntry((cur) => {
         if (cur.length >= PIN_LEN) return cur;
         const next = cur + digit;
@@ -122,18 +131,19 @@ export function LockScreen() {
         return next;
       });
     },
-    [cooling, unlocking, submit],
+    [locked, submit],
   );
 
-  const backspace = useCallback(() => setEntry((c) => c.slice(0, -1)), []);
+  const backspace = useCallback(() => {
+    if (locked) return;
+    setEntry((c) => c.slice(0, -1));
+  }, [locked]);
 
-  /* O OK confirma o que já está digitado. Com 6 dígitos o envio é automático, de
-     modo que ele serve para quem digitou menos e quer o veredito assim mesmo. */
   const confirm = useCallback(() => {
-    if (cooling || checking.current || unlocking) return;
+    if (locked || checking.current) return;
     if (entry.length === 0) return;
     void submit(entry);
-  }, [cooling, unlocking, entry, submit]);
+  }, [locked, entry, submit]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -152,200 +162,178 @@ export function LockScreen() {
     return () => window.removeEventListener("keydown", onKey);
   }, [push, backspace, confirm]);
 
-  const locked = cooling || unlocking;
-
   return (
     <div
       ref={rootRef}
       tabIndex={-1}
       className={cx(
-        "nx-lock fixed inset-0 z-[100] grid grid-cols-1 overflow-y-auto outline-none",
-        "md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]",
+        "nx-lock fixed inset-0 z-[100] overflow-hidden outline-none",
         "transition-opacity duration-[400ms] ease-[var(--ease)]",
         unlocking ? "opacity-0" : "opacity-100",
       )}
     >
-      <Identity />
+      {/* A poeira estelar, em fósforo, preenchendo tudo atrás. */}
+      <div className="pointer-events-none absolute inset-0 z-0">
+        <Starfield color="var(--accent)" />
+      </div>
 
-      {/* ===== a coluna da FUNÇÃO ===== */}
-      {/* `--border-strong`, e não `--border-subtle`: a dirigida no tema CLARO mediu
-          a divisória em #D7DEE0 sobre um fundo #D9DEE0 — dois pontos de diferença
-          num canal, ou seja, invisível. A única linha que estrutura o split
-          sumia, e o que sobrava eram dois blocos flutuando. No escuro a subtle
-          aparecia, que é como o defeito passou despercebido. */}
-      <section className="relative flex flex-col items-center justify-center px-6 py-10 md:border-l md:border-[var(--border-strong)]">
-        <BezelRings error={error} />
+      <HudBar />
 
-        <div className="relative flex flex-col items-center">
-          {/* ===== as seis bolinhas ===== */}
-          <div
-            className="flex items-center gap-4"
-            style={
-              error ? { animation: `nexus-shake ${ERROR_MS}ms var(--ease)` } : undefined
-            }
-            role="status"
-            aria-label={`${entry.length} de ${PIN_LEN} dígitos`}
-          >
-            {Array.from({ length: PIN_LEN }).map((_, i) => {
-              const filled = i < entry.length;
-              return (
-                <span
-                  key={i}
-                  className={cx(
-                    "size-3 rounded-full border transition-[background-color,border-color,transform] duration-[var(--dur-fast)]",
-                    error
-                      ? "border-[var(--danger)] bg-[var(--danger)]"
-                      : filled
-                        ? "scale-100 border-[var(--text-primary)] bg-[var(--text-primary)]"
-                        : "scale-90 border-[var(--border-strong)] bg-transparent",
-                  )}
-                  style={
-                    filled && !error
-                      ? { animation: "nexus-pulse 180ms var(--ease) both" }
-                      : undefined
-                  }
-                />
-              );
-            })}
-          </div>
+      <div className="relative z-10 grid h-full grid-cols-1 overflow-y-auto pt-[38px] md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+        <Identity lines={termLines} />
 
-          {/* ===== o teclado numérico ===== */}
-          <div className="mt-9 grid grid-cols-3 gap-4">
-            {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
-              <PadKey key={d} onClick={() => push(d)} disabled={locked}>
-                {d}
-              </PadKey>
-            ))}
-            <PadKey onClick={backspace} disabled={locked} aria-label="Apagar">
-              <Delete size={20} strokeWidth={1.8} />
-            </PadKey>
-            <PadKey onClick={() => push("0")} disabled={locked}>
-              0
-            </PadKey>
-            <PadKey
-              onClick={confirm}
-              disabled={locked || entry.length === 0}
-              aria-label="Confirmar"
-              accent
+        {/* ===== a coluna da FUNÇÃO ===== */}
+        <section className="relative flex flex-col items-center justify-center px-6 py-10 md:border-l md:border-[color-mix(in_srgb,var(--border-strong)_60%,transparent)]">
+          <BezelRings error={error} />
+
+          <div className="relative flex flex-col items-center">
+            <PinDots length={PIN_LEN} filled={entry.length} error={error} />
+
+            <div className="mt-9">
+              <NumPad
+                onKey={push}
+                onBackspace={backspace}
+                onOk={confirm}
+                disabled={locked}
+                okDisabled={entry.length === 0}
+              />
+            </div>
+
+            <p
+              className={cx(
+                "mt-6 h-4 text-[12px]",
+                attempts > 0 ? "text-[var(--danger)]" : "text-[var(--text-tertiary)]",
+              )}
+              role="status"
             >
-              <span className="text-[15px] font-semibold tracking-[0.06em]">OK</span>
-            </PadKey>
+              {cooling
+                ? `Aguarde ${coolLeft}s antes de tentar de novo`
+                : attempts > 0
+                  ? "PIN incorreto. Tente novamente."
+                  : "Digite seu PIN para desbloquear"}
+            </p>
           </div>
+        </section>
+      </div>
 
-          <p
-            className={cx(
-              "mt-6 h-4 text-[12px]",
-              attempts > 0 ? "text-[var(--danger)]" : "text-[var(--text-tertiary)]",
-            )}
-            role="status"
-          >
-            {cooling
-              ? `Aguarde ${coolLeft}s antes de tentar de novo`
-              : attempts > 0
-                ? "PIN incorreto. Tente novamente."
-                : "Digite seu PIN para desbloquear"}
-          </p>
-        </div>
-      </section>
+      {/* O reforço do offline — o dono gosta da mensagem. */}
+      <div className="pointer-events-none absolute bottom-4 left-6 z-20 flex items-center gap-1.5 font-mono text-[9.5px] tracking-[0.1em] text-[var(--text-tertiary)] md:left-14">
+        <span className="size-[5px] rounded-full bg-[var(--success)]" />
+        100% local · autenticação no dispositivo
+      </div>
     </div>
   );
 }
 
-/**
- * A coluna da esquerda: quem é o app, e para quem ele está abrindo.
- *
- * A saudação usa a MESMA fonte do Hub (`greeting` + `useDisplayName`) — o nome
- * vem do `settings.json`, nunca cravado (ADR-0075). Ela é lida no momento em que
- * a cortina sobe, que é quando ela importa.
- */
-function Identity() {
-  const name = useDisplayName();
+/* ============================================================
+   A BARRA HUD — telemetria local, digitada ao vivo
+   ============================================================ */
+
+function HudBar() {
+  const { data } = useQuery({ queryKey: ["boot-telemetry"], queryFn: bootTelemetry });
+  const clock = useLiveClock();
+
+  const line = useMemo(() => {
+    const now = new Date();
+    const date = capitalize(
+      now.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }),
+    );
+    const short = now.toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+    if (!data) return `> ${date}  ·  ${short}`;
+    const ping = pingText(data.pingMs);
+    const backup = data.lastBackupMs ? `último backup ${agoText(data.lastBackupMs)}` : "sem backup ainda";
+    return `> ${date}  ·  ${ping}  ·  ${backup}  ·  v${data.appVersion}  ·  ${short}`;
+    // `data` só muda quando a telemetria chega — reconstruir a linha aí é o certo.
+  }, [data]);
+
+  const typed = useTypewriter(line);
+  const done = typed.length >= line.length;
+
+  return (
+    <div className="absolute inset-x-0 top-0 z-20 flex h-[38px] items-center gap-3 border-b border-[color-mix(in_srgb,var(--border-subtle)_60%,transparent)] bg-[color-mix(in_srgb,var(--bg-base)_45%,transparent)] px-5 font-mono text-[10.5px] tracking-[0.06em] whitespace-nowrap text-[var(--text-tertiary)] backdrop-blur-[3px]">
+      <span className="min-w-0 truncate">
+        {typed}
+        {done ? <Caret /> : null}
+      </span>
+      <span className="ml-auto flex shrink-0 items-center gap-1.5">
+        <span className="size-[5px] rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
+        <span className="tabular">{clock}</span>
+      </span>
+    </div>
+  );
+}
+
+/* ============================================================
+   A IDENTIDADE — marca, saudação sem nome, terminal
+   ============================================================ */
+
+function Identity({ lines }: { lines: TLine[] }) {
+  // A saudação por hora, SEM NOME: o nome só chega no terminal, depois do PIN.
   const hello = useMemo(() => greeting(), []);
 
   return (
     <section className="flex flex-col justify-center px-8 py-10 md:px-14 lg:px-20">
       <NexusMark size={76} plate glow />
-
       <h1 className="mt-7 text-[26px] font-bold tracking-[0.28em] text-[var(--text-primary)]">
         NEXUS
       </h1>
-      <p className="mt-2 text-[14px] text-[var(--text-secondary)]">
-        {hello}, {name}.
-      </p>
+      <p className="mt-2 text-[14px] text-[var(--text-secondary)]">{hello}.</p>
 
-      <BootLog />
+      <BootTerminal lines={lines} />
     </section>
   );
 }
 
-/**
- * O log de boot — quatro linhas de terminal, uma por vez.
- *
- * A regra que ele obedece: **só entra na lista a linha que tem um dado por
- * trás**. As três primeiras vêm de `system_info`; se a chamada ainda não voltou,
- * ou falhou, elas simplesmente não existem — e a revelação começa direto na
- * última, que não depende de leitura nenhuma. É por isso que a sequência só
- * dispara quando a query ASSENTA (dado ou erro): sem isso, "aguardando operador"
- * apareceria primeiro e as linhas de dado brotariam ACIMA dele, que é o inverso
- * de um log.
- */
-function BootLog() {
-  const { data, isPending } = useQuery({ queryKey: ["system-info"], queryFn: systemInfo });
-
-  const lines = useMemo(() => {
-    const out: string[] = [];
-    if (data) {
-      out.push(`NEXUS OS v${data.appVersion}`);
-      out.push(`núcleo · esquema v${data.schemaVersion}`);
-      out.push(
-        `ledger · ${data.ledgerCount.toLocaleString("pt-BR")} registros · ` +
-          `${data.nodeCount.toLocaleString("pt-BR")} nodes`,
-      );
-      /* A mesma advertência que a aba "Seus dados" dá — aqui ela chega ANTES de
-         qualquer clique, que é onde ela evita confundir uma dirigida com o app
-         real (ADR-0048). */
-      if (data.isCustomDataDir) out.push("dados de TESTE (NEXUS_DATA_DIR)");
-    }
-    out.push("aguardando operador");
-    return out;
-  }, [data]);
-
-  const [shown, setShown] = useState(0);
-
-  /* A dependência é a QUANTIDADE de linhas, não o array: `system_info` é
-     revalidado em background pelo react-query, e depender da identidade do array
-     faria o log inteiro rebobinar do zero a cada refetch. O número de linhas só
-     muda quando a leitura chega (ou quando o modo dev entra) — que é exatamente
-     quando rebobinar é o certo. */
-  const total = lines.length;
-
-  useEffect(() => {
-    if (isPending) return;
-    setShown(0);
-    let i = 0;
-    const t = window.setInterval(() => {
-      i += 1;
-      setShown(i);
-      if (i >= total) window.clearInterval(t);
-    }, BOOT_STEP_MS);
-    return () => window.clearInterval(t);
-  }, [isPending, total]);
-
+/** O terminal renderiza as linhas que o driver produz — a lógica está no hook. */
+function BootTerminal({ lines }: { lines: TLine[] }) {
   return (
     <div
-      className="mt-9 flex flex-col gap-1.5 border-t border-[var(--border-subtle)] pt-6 font-mono text-[12px] leading-[18px]"
+      className="mt-9 flex min-h-[120px] flex-col gap-1.5 border-t border-[color-mix(in_srgb,var(--border-subtle)_70%,transparent)] pt-6 font-mono text-[12px] leading-[20px]"
       role="status"
       aria-live="polite"
     >
-      {lines.slice(0, shown).map((line, i) => {
-        const last = i === lines.length - 1;
+      {lines.map((l, i) => {
+        const isLast = i === lines.length - 1;
+        const text = l.text.slice(0, l.shown);
+        const complete = l.shown >= l.text.length;
+
+        if (l.tone === "greet") {
+          // A saudação personalizada: maior/mais clara, com o nome em fósforo.
+          return (
+            <p key={l.id} className="nx-section-enter mt-1.5 text-[14px] font-semibold text-[var(--text-primary)]">
+              {complete ? <GreetingText text={l.text} name={l.name ?? ""} /> : text}
+              {isLast && complete && <Caret />}
+            </p>
+          );
+        }
+
+        const color =
+          l.tone === "error"
+            ? "text-[var(--danger)]"
+            : l.tone === "wait"
+              ? "text-[var(--text-secondary)]"
+              : "text-[var(--text-tertiary)]";
+
         return (
-          <p key={line} className="nx-section-enter flex items-center gap-2">
+          <p key={l.id} className="nx-section-enter flex items-center gap-2">
             <span className="text-[var(--accent)] opacity-70">&gt;</span>
-            <span className={last ? "text-[var(--text-secondary)]" : "text-[var(--text-tertiary)]"}>
-              {line}
-            </span>
-            {last && <Caret />}
+            <span className={color}>{text}</span>
+            {complete && l.badge && (
+              <span className="flex items-center gap-1 text-[var(--text-tertiary)]">
+                {" "}
+                ..........{" "}
+                {l.badge === "check" ? (
+                  <Check size={13} strokeWidth={2.4} className="text-[var(--accent)]" />
+                ) : (
+                  <span className="text-[var(--accent)]">{l.badge}</span>
+                )}
+              </span>
+            )}
+            {isLast && l.tone === "wait" && complete && <Caret />}
           </p>
         );
       })}
@@ -353,52 +341,240 @@ function BootLog() {
   );
 }
 
-/**
- * O cursor do terminal. Um bloco DESENHADO, não o caractere `U+258C`: o glifo de
- * meio-bloco depende da fonte ter a faixa de Block Elements e da métrica dela
- * bater com a linha, e o que sobra quando não bate é um retângulo desalinhado. Um
- * `span` com fundo é a mesma leitura em qualquer fonte.
- *
- * `nx-loop` porque ele pisca em IDLE: com a janela sem foco, o compositor para
- * (ver §A6 dos tokens). `steps(2)` termina o ciclo ACESO, então o congelamento por
- * reduced-motion deixa um cursor visível, e não um espaço vazio.
- */
+/** "Seja bem-vindo de volta, Allan." com o nome em fósforo. */
+function GreetingText({ text, name }: { text: string; name: string }) {
+  const idx = name ? text.lastIndexOf(name) : -1;
+  if (idx < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <b className="text-[var(--accent)]">{name}</b>
+      {text.slice(idx + name.length)}
+    </>
+  );
+}
+
+/* ============================================================
+   O DRIVER do terminal — datilografia com fila
+   ------------------------------------------------------------
+   As linhas entram numa FILA e são reveladas uma a uma, caractere a caractere.
+   Eventos externos (PIN certo/errado) empurram linhas novas — que, por
+   construção, entram SEMPRE ABAIXO das anteriores (o terminal cresce para
+   baixo, como o print pede). Com o movimento desligado, cada linha aparece
+   inteira de imediato.
+   ============================================================ */
+
+export interface TLine {
+  id: number;
+  text: string;
+  shown: number;
+  tone: "log" | "wait" | "greet" | "error";
+  badge?: "OK" | "check";
+  name?: string;
+}
+
+interface Spec {
+  text: string;
+  tone: TLine["tone"];
+  badge?: "OK" | "check";
+  name?: string;
+  onDone?: () => void;
+}
+
+function useBootTerminal() {
+  const [lines, setLines] = useState<TLine[]>([]);
+  const queue = useRef<Spec[]>([]);
+  const busy = useRef(false);
+  const idc = useRef(0);
+  const timer = useRef<number | undefined>(undefined);
+  const started = useRef(false);
+
+  const pump = useCallback(() => {
+    if (busy.current) return;
+    const spec = queue.current.shift();
+    if (!spec) return;
+    busy.current = true;
+    const id = ++idc.current;
+    const line: TLine = {
+      id,
+      text: spec.text,
+      shown: 0,
+      tone: spec.tone,
+      badge: spec.badge,
+      name: spec.name,
+    };
+    setLines((ls) => [...ls, line]);
+
+    const finish = () => {
+      busy.current = false;
+      spec.onDone?.();
+      pump();
+    };
+
+    if (prefersReducedMotion()) {
+      setLines((ls) => ls.map((l) => (l.id === id ? { ...l, shown: l.text.length } : l)));
+      window.setTimeout(finish, 0);
+      return;
+    }
+
+    const step = () => {
+      setLines((ls) => {
+        const cur = ls.find((l) => l.id === id);
+        if (!cur) return ls;
+        const nextShown = cur.shown + 1;
+        return ls.map((l) => (l.id === id ? { ...l, shown: nextShown } : l));
+      });
+    };
+
+    let shown = 0;
+    const tick = () => {
+      shown += 1;
+      step();
+      if (shown < spec.text.length) {
+        timer.current = window.setTimeout(tick, 24 + Math.random() * 24);
+      } else {
+        // Um respiro depois do selo (OK/Check) antes da próxima linha.
+        timer.current = window.setTimeout(finish, spec.badge ? 240 : 120);
+      }
+    };
+    timer.current = window.setTimeout(tick, 24 + Math.random() * 24);
+  }, []);
+
+  const enqueue = useCallback(
+    (spec: Spec) => {
+      queue.current.push(spec);
+      pump();
+    },
+    [pump],
+  );
+
+  // A sequência de boot: dispara UMA vez. "ledger íntegro" só entra se a
+  // telemetria voltou (a leitura ao núcleo funcionou) — a regra do ADR-0109:
+  // uma linha por dado, nunca teatro. "aguardando operador" é sempre verdade.
+  const boot = useQuery({ queryKey: ["boot-telemetry"], queryFn: bootTelemetry });
+  useEffect(() => {
+    if (started.current) return;
+    if (boot.isPending) return; // espera a query ASSENTAR (dado ou erro)
+    started.current = true;
+    if (boot.data) enqueue({ text: "ledger íntegro", tone: "log", badge: "OK" });
+    enqueue({ text: "aguardando operador", tone: "wait" });
+  }, [boot.isPending, boot.data, enqueue]);
+
+  const reveal = useCallback(
+    (name: string, onComplete: () => void) => {
+      enqueue({ text: "operador identificado", tone: "log", badge: "check" });
+      enqueue({
+        text: `Seja bem-vindo de volta, ${name}.`,
+        tone: "greet",
+        name,
+        onDone: onComplete,
+      });
+    },
+    [enqueue],
+  );
+
+  const fail = useCallback(() => {
+    enqueue({ text: "senha incorreta", tone: "error" });
+    window.setTimeout(() => {
+      setLines((ls) => ls.filter((l) => l.tone !== "error"));
+    }, ERROR_MS + 200);
+  }, [enqueue]);
+
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  return { lines, reveal, fail };
+}
+
+/* ============================================================
+   Peças pequenas
+   ============================================================ */
+
+/** Datilografa um texto; com o movimento desligado, entrega-o inteiro. */
+function useTypewriter(text: string): string {
+  const [shown, setShown] = useState(0);
+  const timer = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    window.clearTimeout(timer.current);
+    if (!text) {
+      setShown(0);
+      return;
+    }
+    if (prefersReducedMotion()) {
+      setShown(text.length);
+      return;
+    }
+    setShown(0);
+    let i = 0;
+    const tick = () => {
+      i += 1;
+      setShown(i);
+      if (i < text.length) timer.current = window.setTimeout(tick, 18 + Math.random() * 22);
+    };
+    timer.current = window.setTimeout(tick, 18 + Math.random() * 22);
+    return () => window.clearTimeout(timer.current);
+  }, [text]);
+
+  return text.slice(0, shown);
+}
+
+/** O relógio HH:MM:SS local, vivo. */
+function useLiveClock(): string {
+  const [s, setS] = useState(() => clockText());
+  useEffect(() => {
+    const t = window.setInterval(() => setS(clockText()), 1000);
+    return () => window.clearInterval(t);
+  }, []);
+  return s;
+}
+
+function clockText(): string {
+  const n = new Date();
+  const p = (x: number) => String(x).padStart(2, "0");
+  return `${p(n.getHours())}:${p(n.getMinutes())}:${p(n.getSeconds())}`;
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** "ping 3ms" — a latência local, arredondada com honestidade sob 1ms. */
+function pingText(ms: number): string {
+  if (ms < 1) return "ping <1ms";
+  return `ping ${Math.round(ms)}ms`;
+}
+
+/** "há 2h", "há 15min", "há 3 dias" — o tempo desde o último backup. */
+function agoText(ms: number): string {
+  const diff = Date.now() - ms;
+  const min = Math.floor(diff / 60_000);
+  if (min < 1) return "agora há pouco";
+  if (min < 60) return `há ${min}min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h}h`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? "há 1 dia" : `há ${d} dias`;
+}
+
 function Caret() {
   return (
     <span
       aria-hidden
-      className="nx-loop inline-block h-[13px] w-[7px] bg-[var(--accent)] align-middle"
+      className="nx-loop ml-0.5 inline-block h-[13px] w-[7px] bg-[var(--accent)] align-middle"
       style={{ animation: "nexus-caret 1.06s steps(2, jump-none) infinite" }}
     />
   );
 }
 
 /**
- * O BISEL: três aros finos centrados atrás do teclado. Não gira, não pulsa, não
- * reage — é geometria parada, e é isso que a deixa calma. Na v1.2 eles ficavam
- * atrás da coluna inteira; aqui emolduram só o teclado, que é o que transforma
- * uma grade de botões num mostrador.
- *
- * A ÚNICA vez que eles reagem é o PIN errado: o aro fica VERMELHO por 450ms, o
- * mesmo flag que sacode as bolinhas. O erro tem que ser visível na periferia,
- * porque o olho de quem digita está no teclado, não nas bolinhas.
- *
- * O TAMANHO É RELATIVO À COLUNA, não fixo — e isso foi a dirigida que decidiu. Com
- * `640px` cravados, o aro externo era mais largo que a coluna que ele emoldura
- * (569px na janela de 1296, e 427px na largura MÍNIMA da janela): ele cruzava a
- * divisória para dentro da coluna da identidade de um lado e era cortado pela
- * borda da janela do outro — um círculo cortado lê como falha de render, não como
- * sangria. Pior: a raiz é `overflow-y-auto`, e o CSS promove o eixo X junto, de
- * modo que a sobra virava ÁREA ROLÁVEL horizontal (a armadilha do ADR-0080, já
- * documentada no `.nx-page`). `min(100%, 520px)` fecha os dois: o aro nunca é
- * maior que a coluna, e o `overflow-x: clip` da `.nx-lock` é o cinto do
- * suspensório.
+ * O BISEL: três aros finos centrados atrás do teclado. Geometria parada. A única
+ * vez que reage é o PIN errado: o aro fica VERMELHO por 450ms.
  */
 function BezelRings({ error }: { error: boolean }) {
   return (
     <svg
       className={cx(
-        "pointer-events-none absolute left-1/2 top-1/2 aspect-square w-[min(100%,520px)]",
+        "pointer-events-none absolute top-1/2 left-1/2 aspect-square w-[min(100%,520px)]",
         "-translate-x-1/2 -translate-y-1/2",
         "transition-[stroke] duration-[var(--dur-fast)] ease-[var(--ease)]",
       )}
@@ -412,41 +588,5 @@ function BezelRings({ error }: { error: boolean }) {
       <circle cx="300" cy="300" r="210" strokeWidth="1.2" opacity={error ? 0.34 : 0.11} />
       <circle cx="300" cy="300" r="140" strokeWidth="1" opacity={error ? 0.22 : 0.07} />
     </svg>
-  );
-}
-
-function PadKey({
-  children,
-  onClick,
-  disabled,
-  accent,
-  ...rest
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-  /** O OK — a única tecla que se anuncia como ação. */
-  accent?: boolean;
-} & React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      {...rest}
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cx(
-        "tabular grid size-16 place-items-center rounded-full border text-[22px] font-medium",
-        "transition-[transform,background-color,border-color] duration-[var(--dur-fast)] ease-[var(--ease)]",
-        "active:scale-[0.94] disabled:pointer-events-none disabled:opacity-30",
-        accent
-          ? "border-transparent bg-[var(--accent)] text-white hover:bg-[var(--accent-bright)]"
-          : cx(
-              "border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-surface)_55%,transparent)] text-[var(--text-primary)]",
-              "hover:border-[var(--border-glow)] hover:bg-[var(--bg-raised)]",
-            ),
-      )}
-    >
-      {children}
-    </button>
   );
 }

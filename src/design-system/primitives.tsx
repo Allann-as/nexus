@@ -100,7 +100,9 @@ export function Card({
   return (
     <div
       className={cx(
-        "rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--bg-surface)]",
+        // `--panel-bg` translúcido (fase 9 §4): o card flutua sobre a poeira
+        // estelar. Sem backdrop-filter por card — só alfa (ver o token).
+        "rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--panel-bg)]",
         hover &&
           "transition-[transform,border-color,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease)] hover:-translate-y-0.5 hover:border-[var(--border-glow)] hover:shadow-[var(--glow-accent)]",
         className,

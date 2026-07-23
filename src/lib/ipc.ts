@@ -2437,10 +2437,27 @@ export const exportData = () => call<ExportInfo>("export_data");
 export interface LockStatus {
   /** Há um PIN ativo? A tela de bloqueio no boot segue isto. */
   enabled: boolean;
+  /**
+   * Já existe uma senha cadastrada neste computador? `false` = primeiro acesso,
+   * e o boot abre o onboarding (§3) em vez de um bloqueio. Ver ADR da fase 9.
+   */
+  configured: boolean;
 }
 
-/** O app deve abrir bloqueado? Lido no boot. */
+/** O app deve abrir bloqueado, ou é o primeiro acesso? Lido no boot. */
 export const lockStatus = () => call<LockStatus>("lock_status");
+
+/** A telemetria local que a barra HUD do bloqueio digita ao vivo (fase 9 §2). */
+export interface BootTelemetry {
+  /** Latência LOCAL medida (ms) de uma consulta ao núcleo — nunca rede. */
+  pingMs: number;
+  /** O instante do último backup local, ou `null` se nunca houve um. */
+  lastBackupMs: number | null;
+  appVersion: string;
+}
+
+/** Mede a latência local do núcleo + o último backup — a barra HUD do bloqueio. */
+export const bootTelemetry = () => call<BootTelemetry>("boot_telemetry");
 
 /** Confere um PIN — só um booleano volta; o hash fica no backend. */
 export const verifyPin = (pin: string) => call<boolean>("verify_pin", { pin });

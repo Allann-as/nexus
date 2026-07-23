@@ -49,6 +49,14 @@ struct PinConfig {
 pub struct LockStatus {
     /// Há um PIN ativo? A tela de bloqueio no boot segue isto.
     pub enabled: bool,
+    /// Já existe uma senha CADASTRADA neste computador (o `security.json`)?
+    ///
+    /// Distingue os dois "sem cadeado" que antes eram o mesmo: `enabled:false,
+    /// configured:true` é quem DESLIGOU a tela de bloqueio (abre direto); já
+    /// `configured:false` é o PRIMEIRO ACESSO — nunca houve senha, e o boot
+    /// abre o onboarding (§3) em vez de um bloqueio genérico. Antes da fase 9 o
+    /// app semeava um PIN de fábrica e este segundo estado não existia.
+    pub configured: bool,
 }
 
 pub struct SecurityService {
@@ -80,8 +88,11 @@ impl SecurityService {
             .map_err(|e| NexusError::Storage(format!("não consegui gravar security.json: {e}")))
     }
 
-    /// No primeiro boot, semeia o PIN de fábrica. Idempotente: se o arquivo já
-    /// existe, não toca em nada.
+    /// Semeia o PIN de fábrica se ainda não há config. Idempotente.
+    ///
+    /// NÃO é mais chamado no boot (fase 9): o primeiro acesso passou a ser o
+    /// onboarding, que deixa o usuário criar a própria senha. Fica como capacidade
+    /// de ferramenta/teste — semear um banco de dirigida com um PIN conhecido.
     pub fn ensure_seeded(&self) -> Result<()> {
         if self.load()?.is_none() {
             self.save(&new_config(DEFAULT_PIN, true)?)?;
@@ -89,10 +100,19 @@ impl SecurityService {
         Ok(())
     }
 
-    /// A tela de boot lê isto para decidir se abre bloqueada.
+    /// A tela de boot lê isto para decidir o que abrir: onboarding (sem
+    /// `security.json`), bloqueio (PIN ativo) ou direto para o app (PIN desligado).
     pub fn status(&self) -> Result<LockStatus> {
-        let enabled = self.load()?.map(|c| c.enabled).unwrap_or(false);
-        Ok(LockStatus { enabled })
+        match self.load()? {
+            Some(cfg) => Ok(LockStatus {
+                enabled: cfg.enabled,
+                configured: true,
+            }),
+            None => Ok(LockStatus {
+                enabled: false,
+                configured: false,
+            }),
+        }
     }
 
     /// Confere um PIN contra o hash guardado. `false` também quando não há PIN
@@ -232,6 +252,33 @@ mod tests {
         assert!(!s.status().unwrap().enabled);
         // desligado, verify nunca passa
         assert!(!s.verify("242807").unwrap());
+    }
+
+    #[test]
+    fn a_fresh_install_is_unconfigured_then_onboards() {
+        let (s, _d) = svc();
+        // Sem `security.json`: o primeiro acesso. O boot abre o onboarding.
+        let st = s.status().unwrap();
+        assert!(!st.configured, "sem arquivo, não há senha cadastrada");
+        assert!(!st.enabled);
+        // O onboarding cria a senha do zero — sem `current`, porque não há atual.
+        s.set_pin(None, "135790").unwrap();
+        let st = s.status().unwrap();
+        assert!(st.configured, "criar a senha passa a existir cadastro");
+        assert!(st.enabled);
+        assert!(s.verify("135790").unwrap());
+    }
+
+    #[test]
+    fn disabling_keeps_configured_true() {
+        // Quem DESLIGA a tela de bloqueio não volta ao onboarding: já tem cadastro,
+        // o app só abre direto. `configured` os separa.
+        let (s, _d) = svc();
+        s.set_pin(None, "222333").unwrap();
+        s.disable("222333").unwrap();
+        let st = s.status().unwrap();
+        assert!(!st.enabled);
+        assert!(st.configured, "desligar não é apagar o cadastro");
     }
 
     #[test]

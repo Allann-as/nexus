@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createHashRouter, Navigate, RouterProvider, useParams } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 
 import { Shell } from "./Shell";
 import { HubScreen } from "../features/hub/HubScreen";
@@ -30,6 +30,7 @@ import { useUi, applyTheme, applyDensity, applyReducedMotion } from "../stores/u
 import { useLock } from "../stores/lock";
 import { lockStatus } from "../lib/ipc";
 import { LockScreen } from "../features/lock/LockScreen";
+import { OnboardingScreen } from "../features/lock/OnboardingScreen";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -138,13 +139,18 @@ export function App() {
 }
 
 /**
- * A cortina do PIN (M5.5 §3.5). No boot, lê `lock_status`: se há PIN ativo, abre
- * bloqueado. `Ctrl+L` bloqueia à mão a qualquer momento. Fica ACIMA do router —
- * a tela de bloqueio cobre o app inteiro, topbar incluída.
+ * A cortina do boot (M5.5 §3.5 · fase 9). No boot, lê `lock_status` e decide entre
+ * TRÊS aberturas: o ONBOARDING (nunca houve senha — primeiro acesso), o BLOQUEIO
+ * (há PIN ativo) ou direto para o app (PIN desligado). `Ctrl+L` bloqueia à mão a
+ * qualquer momento. Fica ACIMA do router — cobre o app inteiro, topbar incluída.
  */
 function LockGate() {
   const locked = useLock((s) => s.locked);
   const setEnabled = useLock((s) => s.setEnabled);
+  const qc = useQueryClient();
+  // `true` = primeiro acesso, sem senha cadastrada. `null` até o boot responder —
+  // não pisca uma tela antes de saber qual das três abrir.
+  const [onboarding, setOnboarding] = useState<boolean | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -152,9 +158,12 @@ function LockGate() {
       .then((s) => {
         if (!alive) return;
         setEnabled(s.enabled);
-        if (s.enabled) useLock.setState({ locked: true });
+        setOnboarding(!s.configured);
+        if (s.configured && s.enabled) useLock.setState({ locked: true });
       })
-      .catch(() => {});
+      .catch(() => {
+        if (alive) setOnboarding(false);
+      });
     return () => {
       alive = false;
     };
@@ -170,6 +179,23 @@ function LockGate() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  if (onboarding) {
+    return (
+      <OnboardingScreen
+        onDone={() => {
+          // A senha e o nome já estão gravados. Entra no app: passa a existir
+          // cadastro (bloqueio LIGADO), mas desbloqueado agora. As telas que leem
+          // essas fontes revalidam.
+          setOnboarding(false);
+          setEnabled(true);
+          useLock.setState({ locked: false });
+          qc.invalidateQueries({ queryKey: ["lock-status"] });
+          qc.invalidateQueries({ queryKey: ["app-settings"] });
+        }}
+      />
+    );
+  }
 
   return locked ? <LockScreen /> : null;
 }

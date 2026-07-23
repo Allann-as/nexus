@@ -99,9 +99,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::hint::black_box(rows);
     }
 
+    // ===== O "ping" da barra HUD do bloqueio (fase 9) =====
+    // É EXATAMENTE o que `boot_telemetry` mede: o tempo de `ledger.count()`. A
+    // barra do bloqueio mostra este número; aqui ele é medido no banco de 5 anos.
+    let mut ping_samples = Vec::new();
+    for _ in 0..9 {
+        let t = Instant::now();
+        let _ = ledger_repo.count()?;
+        ping_samples.push(t.elapsed().as_secs_f64() * 1000.0);
+    }
+
     line("Abertura do banco (frio)", open_ms, 1500.0);
     line("Busca FTS", median_ms(search_samples), 50.0);
     line("Um mês da Timeline", median_ms(month_samples), 100.0);
+    line("Ping local (ledger.count)", median_ms(ping_samples), 50.0);
 
     println!("\nscroll 60fps e RAM < 300MB: exigem o app rodando (dirigida ao vivo).");
     Ok(())

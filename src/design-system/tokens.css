@@ -75,6 +75,15 @@
   /* O grão da camada de viewport (ver .nx-viewport-fx). */
   --grain-alpha: 0.045;
 
+  /* O FUNDO DOS PAINÉIS (fase 9 §4) — translúcido, para os cards flutuarem
+     sobre a poeira estelar sem que o dado compita com o fundo. Alfa, NÃO
+     backdrop-filter: um `blur` por card, com dezenas deles sobre um canvas vivo,
+     estouraria o custo que os tokens vigiam (o backdrop-filter é o efeito mais
+     caro do arsenal — por isso só a rail/topbar e os overlays o usam). Sobre o
+     grafite quase-preto, 80% já esconde a estrela atrás do texto e deixa só um
+     sopro do ambiente sangrar na borda. */
+  --panel-bg: color-mix(in srgb, var(--bg-surface) 80%, transparent);
+
   color-scheme: dark;
 }
 
@@ -123,6 +132,10 @@
   /* Sobre claro a mesma geometria precisa de menos alfa — a linha fina já
      contrasta muito mais do que sobre o grafite. */
   --astro-alpha: 0.07;
+
+  /* No claro o painel é branco e as estrelas ficam sobre um fundo claro: o
+     mesmo 80% deixaria a poeira aparecer demais atrás do texto. Sobe para 88%. */
+  --panel-bg: color-mix(in srgb, var(--bg-surface) 88%, transparent);
 
   color-scheme: light;
 }

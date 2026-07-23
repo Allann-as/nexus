@@ -7,17 +7,23 @@ import { Topbar } from "./Topbar";
 import { CockpitRail } from "./CockpitRail";
 import { useKeyboard } from "./useKeyboard";
 import { useBootTasks } from "./useBootTasks";
+import { useSectionTint } from "./useSectionTint";
 import { CommandPalette } from "../features/command-palette/CommandPalette";
 import { QuickCapture } from "../features/inbox/QuickCapture";
 import { AporteHost } from "../features/finance/AporteHost";
 import { FocusHost } from "../features/focus/FocusHost";
 import { Toaster } from "../design-system/Toaster";
+import { Starfield } from "../design-system/Starfield";
 
 export function Shell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const navigate = useNavigate();
+
+  // A BORDA INFINITA (fase 9 §4): a cor da seção ativa tinge o ambiente inteiro —
+  // a poeira estelar e a barra do topo. `--tint` desce por CSS para quem herda.
+  const tint = useSectionTint();
 
   // Congela o Score e sincroniza conquistas/temporadas na abertura (ADR-0038/0039).
   useBootTasks();
@@ -56,7 +62,19 @@ export function Shell() {
   });
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--bg-void)]">
+    <div
+      className="relative isolate flex h-screen overflow-hidden"
+      style={{ ["--tint" as string]: tint }}
+    >
+      {/* A POEIRA ESTELAR — um único canvas fixo cobrindo a viewport inteira, atrás
+          de TODO o app (a "borda infinita"). Fica em `-z-10` dentro do contexto de
+          empilhamento da Shell (`isolate`): atrás da rail e do conteúdo, à frente
+          do `--bg-void` da moldura. A rail/os painéis são translúcidos e o deixam
+          aparecer de ponta a ponta — sem faixa de cor destoante. */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
+        <Starfield color={tint} />
+      </div>
+
       {/* A rail do Cockpit (§2.1): a telemetria das Esferas parada à esquerda.
           O NEXO (hambúrguer) segue como o mapa global + busca; a rail cobre o
           dia a dia. */}

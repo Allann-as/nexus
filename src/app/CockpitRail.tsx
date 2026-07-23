@@ -62,7 +62,11 @@ export function CockpitRail() {
   return (
     <aside
       className={cx(
-        "flex shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-surface)]",
+        // Translúcida + blur (fase 9 §4): a poeira estelar corre atrás dela, e a
+        // rail deixa de ser um bloco de cor destoante para virar parte do
+        // ambiente. Um só backdrop-filter aqui (não por linha) — barato.
+        "flex shrink-0 flex-col border-r border-[color-mix(in_srgb,var(--border-subtle)_70%,transparent)]",
+        "bg-[color-mix(in_srgb,var(--bg-surface)_72%,transparent)] backdrop-blur-[8px]",
         "transition-[width] duration-[var(--dur-base)] ease-[var(--ease)]",
         collapsed ? "w-[var(--rail-w)]" : "w-[228px]",
       )}
