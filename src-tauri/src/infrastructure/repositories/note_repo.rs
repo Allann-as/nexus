@@ -235,7 +235,23 @@ impl NoteRepository for SqliteNoteRepository {
                 }
             }
 
-            append_in_tx(&tx, event)?;
+            // COALESCÊNCIA da edição (fase 11, BUG 7): o autosave chama `save_body`
+            // a cada pausa da digitação, e cada chamada gravava um evento
+            // 'note_edited' — duas pausas viravam duas entradas "Nota" no mesmo
+            // minuto na Timeline. Uma edição por NOTA por DIA basta: só acrescenta o
+            // evento se ainda não houve um hoje. O corpo e os wiki-links são salvos
+            // SEMPRE (o autosave não pode perder texto); apenas o EVENTO é coalescido.
+            let edited_today: bool = tx.query_row(
+                "SELECT EXISTS(
+                     SELECT 1 FROM ledger
+                     WHERE entity_id = ?1 AND event_type = ?2 AND day = ?3
+                 )",
+                params![id, event.event_type.as_str(), event.day],
+                |r| r.get(0),
+            )?;
+            if !edited_today {
+                append_in_tx(&tx, event)?;
+            }
             let note = read_note(&tx, id)?;
             tx.commit()?;
             Ok(note)
@@ -398,6 +414,57 @@ mod tests {
         let full = notes.get_full("n1").unwrap();
         assert_eq!(full.body_md, "Dormir 7h30 por noite.");
         assert_eq!(full.updated_at, 10);
+    }
+
+    /// Coalescência da edição (fase 11, BUG 7): o autosave chama `save_body` a cada
+    /// pausa da digitação; sem coalescer, cada pausa virava uma entrada "Nota" na
+    /// Timeline (mesmo título, mesmo minuto). Vários saves no MESMO dia = 1 evento
+    /// `note_edited`; um save num dia novo = o segundo. O corpo é salvo SEMPRE.
+    #[test]
+    fn autosave_coalesces_note_edited_to_one_per_day() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::at(dir.path().to_path_buf()).unwrap();
+        let db = Arc::new(Db::open(&paths).unwrap());
+        let notes = SqliteNoteRepository::new(db.clone());
+        let nodes = SqliteNodeRepository::new(db.clone());
+        note(&nodes, "n1", "Sono");
+
+        // três autosaves no mesmo dia (o `ev` usa 2026-07-17)
+        for body in ["a", "ab", "abc"] {
+            notes
+                .save_body_with_event("n1", body, &[], 10, &ev("n1", EventType::NoteEdited))
+                .unwrap();
+        }
+        let count_day1: i64 = db
+            .with_read(|c| {
+                Ok(c.query_row(
+                    "SELECT COUNT(*) FROM ledger WHERE entity_id='n1' AND event_type='note_edited' AND day='2026-07-17'",
+                    [],
+                    |r| r.get(0),
+                )?)
+            })
+            .unwrap();
+        assert_eq!(count_day1, 1, "três autosaves no mesmo dia = 1 evento note_edited");
+
+        // um save no dia seguinte acrescenta um segundo evento
+        let mut ev_d2 = ev("n1", EventType::NoteEdited);
+        ev_d2.day = "2026-07-18".into();
+        notes
+            .save_body_with_event("n1", "abcd", &[], 13, &ev_d2)
+            .unwrap();
+        let total: i64 = db
+            .with_read(|c| {
+                Ok(c.query_row(
+                    "SELECT COUNT(*) FROM ledger WHERE entity_id='n1' AND event_type='note_edited'",
+                    [],
+                    |r| r.get(0),
+                )?)
+            })
+            .unwrap();
+        assert_eq!(total, 2, "um dia novo acrescenta um segundo evento");
+
+        // e o corpo mais recente foi salvo sempre (a coalescência é só do EVENTO)
+        assert_eq!(notes.get_full("n1").unwrap().body_md, "abcd");
     }
 
     /// A lista lateral e a nota aberta contam a MESMA coisa.

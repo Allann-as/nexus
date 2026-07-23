@@ -12,9 +12,9 @@ import { Delete } from "lucide-react";
 import { cx } from "../../design-system/primitives";
 
 /**
- * As seis bolinhas do PIN. `error` acende todas em vermelho; `success` (o PIN
- * correto, fase 10) acende todas em FÓSFORO com glow — o "operador reconhecido"
- * dito também na cor.
+ * As seis bolinhas do PIN. O ponto PREENCHIDO acende em FÓSFORO com glow — já ao
+ * digitar (fase 11, BUG 4: antes ficava branco, `--text-primary`), e segue verde no
+ * `success` (PIN correto). `error` acende todas em vermelho.
  */
 export function PinDots({
   length,
@@ -43,11 +43,9 @@ export function PinDots({
               "size-3 rounded-full border transition-[background-color,border-color,transform,box-shadow] duration-[var(--dur-fast)]",
               error
                 ? "border-[var(--danger)] bg-[var(--danger)]"
-                : success
+                : on || success
                   ? "scale-100 border-[var(--accent)] bg-[var(--accent)] shadow-[0_0_11px_var(--accent)]"
-                  : on
-                    ? "scale-100 border-[var(--text-primary)] bg-[var(--text-primary)]"
-                    : "scale-90 border-[var(--border-strong)] bg-transparent",
+                  : "scale-90 border-[var(--border-strong)] bg-transparent",
             )}
             style={on && !error && !success ? { animation: "nexus-pulse 180ms var(--ease) both" } : undefined}
           />

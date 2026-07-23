@@ -96,7 +96,10 @@ export function CockpitRail() {
     // Em modo FIXO a rail ocupa a coluna (o conteúdo fica ao lado); recolhida, ela
     // colapsa para 0 e o painel vira um OVERLAY que desliza sobre o conteúdo.
     <div
-      className="relative z-30 shrink-0 transition-[width] duration-[var(--dur-base)] ease-[var(--ease)]"
+      // A largura da COLUNA e o transform do PAINEL animam com a MESMA curva e
+      // duração (fase 11, BUG 6) — antes o width corria em 200ms e o painel em
+      // 400ms, e o descompasso lia como "seco". Agora deslizam juntos, suave.
+      className="relative z-30 shrink-0 transition-[width] duration-[380ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
       style={{ width: collapsed ? 0 : RAIL_W }}
     >
       {/* O FIO DE BORDA VIVA — só recolhida. Pulsa na cor da seção ativa. */}
@@ -132,7 +135,7 @@ export function CockpitRail() {
           "absolute inset-y-0 left-0 z-20 flex flex-col",
           "border-r border-[color-mix(in_srgb,var(--border-subtle)_70%,transparent)]",
           "bg-[color-mix(in_srgb,var(--bg-surface)_82%,transparent)] backdrop-blur-[8px]",
-          "transition-[transform] duration-[var(--dur-slow)] ease-[var(--ease)]",
+          "transition-[transform] duration-[380ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
           collapsed && "shadow-[var(--shadow-float)]",
         )}
         style={{ width: RAIL_W, transform: show ? "translateX(0)" : "translateX(-100%)" }}

@@ -21,13 +21,22 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CircleCheckBig, Flame, Plus } from "lucide-react";
+import { Archive, CircleCheckBig, Flame, Pencil, Plus } from "lucide-react";
 
 import { Checkbox } from "../../design-system/Checkbox";
 import { Button, EmptyState, cx } from "../../design-system/primitives";
 import { MonoLabel, Ring, SegBar } from "../../design-system/instruments";
+import { ArmedDelete } from "../../design-system/ArmedDelete";
 import { useToasts } from "../../stores/toasts";
-import { habitsToday, tickHabit, untickHabit, type HabitWithStats } from "../../lib/ipc";
+import {
+  deleteNode,
+  habitsToday,
+  renameNode,
+  setNodeStatus,
+  tickHabit,
+  untickHabit,
+  type HabitWithStats,
+} from "../../lib/ipc";
 import { HabitCreateForm, describeSchedule } from "../habits/HabitsScreen";
 
 export function SphereCheckpoints({ areaId }: { areaId: string }) {
@@ -140,6 +149,7 @@ export function SphereCheckpoints({ areaId }: { areaId: string }) {
             habit={h}
             busy={toggle.isPending}
             onToggle={() => toggle.mutate(h)}
+            onChanged={refresh}
           />
         ))}
       </div>
@@ -155,14 +165,50 @@ function CheckpointRow({
   habit,
   busy,
   onToggle,
+  onChanged,
 }: {
   habit: HabitWithStats;
   busy: boolean;
   onToggle: () => void;
+  /** Chamado após renomear/desativar/excluir — o pai revalida as queries. */
+  onChanged: () => void;
 }) {
   const done = habit.today === "done";
   // A key remonta o +XP para reiniciar a animação a cada nova marcação.
   const [floatKey, setFloatKey] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(habit.title);
+  const pushError = useToasts((s) => s.pushError);
+  const push = useToasts((s) => s.push);
+
+  // RENOMEAR / DESATIVAR / EXCLUIR (fase 11, BUG 2). Um hábito é um `node`, então
+  // os comandos genéricos de node servem: renomear, arquivar (soft-disable — some
+  // dos checkpoints sem apagar o histórico/streak) e excluir (o `Deleted` no ledger
+  // preserva a Timeline). Antes a linha só marcava/desmarcava.
+  const rename = useMutation({
+    mutationFn: (t: string) => renameNode(habit.id, t),
+    onSuccess: () => {
+      setEditing(false);
+      onChanged();
+    },
+    onError: pushError,
+  });
+  const archive = useMutation({
+    mutationFn: () => setNodeStatus(habit.id, "archived"),
+    onSuccess: () => {
+      push("success", `“${habit.title}” foi desativado`);
+      onChanged();
+    },
+    onError: pushError,
+  });
+  const remove = useMutation({
+    mutationFn: () => deleteNode(habit.id),
+    onSuccess: () => {
+      push("success", "Hábito excluído");
+      onChanged();
+    },
+    onError: pushError,
+  });
 
   const handle = () => {
     // O +XP só na transição para FEITO — desmarcar não premia.
@@ -170,10 +216,23 @@ function CheckpointRow({
     onToggle();
   };
 
+  // Um único ponto de commit (o blur): o Enter dá blur, o Esc reverte e dá blur.
+  const commitRename = () => {
+    const t = title.trim();
+    if (!t || t === habit.title) {
+      setEditing(false);
+      setTitle(habit.title);
+      return;
+    }
+    rename.mutate(t);
+  };
+
+  const actionBusy = rename.isPending || archive.isPending || remove.isPending;
+
   return (
     <div
       className={cx(
-        "relative flex items-center gap-3 rounded-[var(--radius-lg)] border bg-[var(--bg-surface)] px-4 py-3",
+        "group relative flex items-center gap-3 rounded-[var(--radius-lg)] border bg-[var(--bg-surface)] px-4 py-3",
         "transition-colors duration-[var(--dur-fast)]",
         done ? "border-[color-mix(in_srgb,var(--sphere)_35%,var(--border-subtle))]" : "border-[var(--border-subtle)]",
       )}
@@ -182,7 +241,7 @@ function CheckpointRow({
         checked={done}
         variant={habit.today === "skipped" ? "skipped" : "default"}
         onChange={handle}
-        disabled={busy}
+        disabled={busy || editing}
         size={24}
         title={done ? `Desmarcar ${habit.title}` : `Marcar ${habit.title}`}
       />
@@ -200,14 +259,33 @@ function CheckpointRow({
       )}
 
       <div className="min-w-0 flex-1">
-        <div
-          className={cx(
-            "text-[14px] transition-colors duration-[var(--dur-base)]",
-            done ? "text-[var(--text-tertiary)] line-through" : "text-[var(--text-primary)]",
-          )}
-        >
-          {habit.title}
-        </div>
+        {editing ? (
+          <input
+            autoFocus
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              else if (e.key === "Escape") {
+                setTitle(habit.title);
+                e.currentTarget.blur();
+              }
+            }}
+            onBlur={commitRename}
+            maxLength={80}
+            aria-label="Renomear hábito"
+            className="w-full rounded-[var(--radius-sm)] border border-[var(--border-glow)] bg-[var(--bg-raised)] px-2 py-1 text-[14px] text-[var(--text-primary)] caret-[var(--sphere)] outline-none"
+          />
+        ) : (
+          <div
+            className={cx(
+              "text-[14px] transition-colors duration-[var(--dur-base)]",
+              done ? "text-[var(--text-tertiary)] line-through" : "text-[var(--text-primary)]",
+            )}
+          >
+            {habit.title}
+          </div>
+        )}
         <div className="text-[11px] text-[var(--text-tertiary)]">
           {describeSchedule(habit.schedule)}
           {habit.targetValue != null && ` · meta ${habit.targetValue}${habit.unit ?? ""}`}
@@ -234,6 +312,63 @@ function CheckpointRow({
       ) : (
         <span className="shrink-0 text-[11px] text-[var(--text-tertiary)]">sem streak</span>
       )}
+
+      {/* AÇÕES do hábito — renomear · desativar · excluir. Discretas: surgem no
+          hover/foco da linha (e ficam sempre visíveis no toque). */}
+      {!editing && (
+        <div className="flex shrink-0 items-center gap-0.5 opacity-60 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          <RowAction
+            title="Renomear"
+            onClick={() => {
+              setTitle(habit.title);
+              setEditing(true);
+            }}
+            disabled={actionBusy}
+          >
+            <Pencil size={14} />
+          </RowAction>
+          <RowAction
+            title="Desativar (arquiva sem apagar o histórico)"
+            onClick={() => archive.mutate()}
+            disabled={actionBusy}
+          >
+            <Archive size={14} />
+          </RowAction>
+          <ArmedDelete
+            onConfirm={() => remove.mutate()}
+            pending={remove.isPending}
+            question="Excluir este hábito?"
+            ariaLabel="Excluir hábito"
+            size="sm"
+          />
+        </div>
+      )}
     </div>
+  );
+}
+
+/** Um botão-ícone discreto para as ações da linha do checkpoint. */
+function RowAction({
+  title,
+  onClick,
+  disabled,
+  children,
+}: {
+  title: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      onClick={onClick}
+      disabled={disabled}
+      className="grid size-7 place-items-center rounded-[var(--radius-sm)] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-raised)] hover:text-[var(--text-primary)] disabled:pointer-events-none disabled:opacity-40"
+    >
+      {children}
+    </button>
   );
 }

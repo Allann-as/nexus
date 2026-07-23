@@ -142,6 +142,15 @@ impl FinGoalService {
             ));
         }
         let goal = self.fin_goals.get(goal_id)?;
+        // Um SAQUE não pode exceder o saldo (fase 11, BUG 1): senão a caixinha vai a
+        // negativo absurdo e a % da UI explode (o −247072% que o usuário viu). O
+        // saldo é a SOMA dos lançamentos (não há coluna), então a trava mora aqui,
+        // no serviço — a fonte da verdade, nunca só no front.
+        if amount_cents < 0 && amount_cents.abs() > goal.saved_cents {
+            return Err(NexusError::Validation(
+                "não dá para sacar mais do que a caixinha tem".into(),
+            ));
+        }
         let day = match happened_on {
             Some(d) => format_day(parse_day(&d)?),
             None => self.clock.today_local(),

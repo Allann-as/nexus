@@ -37,6 +37,8 @@ import { useLock } from "../stores/lock";
 import { lockStatus } from "../lib/ipc";
 import { LockScreen } from "../features/lock/LockScreen";
 import { OnboardingScreen } from "../features/lock/OnboardingScreen";
+import { Starfield } from "../design-system/Starfield";
+import { NexusMark } from "../design-system/NexusMark";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -188,6 +190,14 @@ function LockGate() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // BOOT sem flash (fase 11, BUG 5): enquanto `lock_status` não respondeu
+  // (`onboarding === null`), NÃO deixamos o Hub aparecer atrás. Uma cortina neutra
+  // com a marca cobre tudo até sabermos qual das três aberturas mostrar. Como a
+  // resolução "há PIN ativo" seta `onboarding=false` e `locked=true` no mesmo tick,
+  // a cortina dá lugar ao BLOQUEIO direto — nunca ao Hub. O router segue montado
+  // atrás (preserva o estado ao bloquear com Ctrl+L no meio do uso).
+  if (onboarding === null) return <BootSplash />;
+
   if (onboarding) {
     return (
       <OnboardingScreen
@@ -206,4 +216,27 @@ function LockGate() {
   }
 
   return locked ? <LockScreen /> : null;
+}
+
+/**
+ * A CORTINA de boot (fase 11, BUG 5) — a marca sobre a poeira estelar, enquanto o
+ * `lock_status` não respondeu. Neutra de propósito: sem teclado (ainda não sabemos
+ * se há PIN) e sem Hub (que seria o "flash de conteúdo autenticado" que este ecrã
+ * existe para matar). Fica no ar por uma fração de segundo — o tempo de uma leitura
+ * local ao SQLite — e some assim que a abertura certa é decidida.
+ */
+function BootSplash() {
+  return (
+    <div className="fixed inset-0 z-[100] overflow-hidden bg-[var(--bg-base)]">
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <Starfield color="var(--accent)" />
+      </div>
+      <div className="relative z-10 flex h-full flex-col items-center justify-center gap-5">
+        <NexusMark size={76} plate glow />
+        <span className="font-mono text-[13px] font-bold tracking-[0.28em] text-[var(--text-secondary)]">
+          NEXUS
+        </span>
+      </div>
+    </div>
+  );
 }

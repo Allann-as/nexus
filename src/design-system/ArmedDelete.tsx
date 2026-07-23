@@ -45,6 +45,7 @@ export function ArmedDelete({
   size = "sm",
   ariaLabel = "Excluir",
   className,
+  overlay = false,
 }: {
   onConfirm: () => void;
   /** A mutação está em voo — trava os dois botões. */
@@ -59,6 +60,14 @@ export function ArmedDelete({
   size?: "sm" | "md";
   ariaLabel?: string;
   className?: string;
+  /**
+   * Confirmação como CAMADA sobre o container pai (fase 11, BUG 3), em vez de
+   * inline. Para cards estreitos: a pergunta armada por extenso não cabia na linha
+   * e quebrava por cima da barra/valor. Com `overlay`, o pai (que precisa ser
+   * `position: relative`) recebe um véu sólido com a pergunta centralizada e
+   * legível. O botão em repouso segue inline no canto.
+   */
+  overlay?: boolean;
 }) {
   const [armed, setArmed] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -93,6 +102,28 @@ export function ArmedDelete({
       document.removeEventListener("mousedown", onDown);
     };
   }, [armed, disarm]);
+
+  if (armed && overlay) {
+    // A CAMADA sobre o card: véu sólido (não translúcido a ponto de deixar o texto
+    // de baixo vazar), pergunta centralizada, os dois botões. `rounded-[inherit]`
+    // acompanha os cantos do card; `z-30` fica à frente de qualquer conteúdo dele.
+    return (
+      <div
+        ref={root}
+        className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 rounded-[inherit] bg-[color-mix(in_srgb,var(--bg-surface)_94%,transparent)] p-4 text-center backdrop-blur-[2px]"
+      >
+        <span className="text-[13px] font-medium text-[var(--text-primary)]">{question}</span>
+        <div className="flex items-center gap-2">
+          <Button variant="danger" size={size} onClick={() => onConfirm()} disabled={pending} autoFocus>
+            {pending ? "…" : confirmLabel}
+          </Button>
+          <Button variant="ghost" size={size} onClick={disarm} disabled={pending}>
+            {cancelLabel}
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (armed) {
     return (

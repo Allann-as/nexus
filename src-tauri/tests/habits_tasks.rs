@@ -7,7 +7,7 @@ use nexus_lib::application::use_cases::{
     areas::AreaService, dashboard::DashboardService, habits::HabitService, nodes::NodeService,
     tasks::TaskService,
 };
-use nexus_lib::domain::entities::Template;
+use nexus_lib::domain::entities::{Status, Template};
 use nexus_lib::domain::schedule::Schedule;
 use nexus_lib::domain::streak::TickStatus;
 use nexus_lib::infrastructure::clock::{SystemClock, Uuid7Gen};
@@ -23,6 +23,7 @@ struct H {
     areas: AreaService,
     habits: Arc<HabitService>,
     tasks: Arc<TaskService>,
+    nodes: NodeService,
     dashboard: DashboardService,
     ledger: Arc<dyn LedgerRepository>,
     habit_repo: Arc<dyn HabitRepository>,
@@ -63,8 +64,9 @@ fn harness() -> H {
         nodes: node_repo.clone(),
     };
 
-    // NodeService existe para o dashboard/áreas funcionarem; não é usado direto.
-    let _nodes = NodeService {
+    // NodeService cobre renomear/arquivar/excluir de qualquer node — inclusive um
+    // hábito (fase 11, BUG 2), já que um hábito É um node.
+    let nodes = NodeService {
         nodes: node_repo,
         areas: area_repo.clone(),
         ids: ids.clone(),
@@ -79,6 +81,7 @@ fn harness() -> H {
         },
         habits,
         tasks,
+        nodes,
         dashboard,
         ledger: Arc::new(SqliteLedgerRepository::new(db.clone())),
         habit_repo,
@@ -93,6 +96,36 @@ fn today() -> String {
 }
 
 // ===== Hábitos =====
+
+/// Fase 11, BUG 2 — nos Checkpoints dá para RENOMEAR, DESATIVAR e EXCLUIR um
+/// hábito. Como um hábito é um `node`, os comandos genéricos de node cobrem os três;
+/// a fase 11 só faltava expô-los na UI. Este teste prova o ciclo no backend.
+#[test]
+fn a_checkpoint_habit_can_be_renamed_archived_and_deleted() {
+    let h = harness();
+    let habit = h
+        .habits
+        .create("Beber água", None, Schedule::Daily, None, None, None, None)
+        .unwrap();
+
+    // RENOMEAR
+    let renamed = h.nodes.rename(&habit.id, "Beber 2L de água").unwrap();
+    assert_eq!(renamed.title, "Beber 2L de água");
+
+    // DESATIVAR (arquivar) — o soft-disable some da lista ativa sem apagar nada
+    h.nodes.set_status(&habit.id, Status::Archived).unwrap();
+    assert!(
+        h.habits.list(None).unwrap().iter().all(|x| x.id != habit.id),
+        "um hábito arquivado some da lista ativa dos checkpoints",
+    );
+
+    // EXCLUIR de vez
+    h.nodes.delete(&habit.id).unwrap();
+    assert!(
+        h.nodes.get(&habit.id).is_err(),
+        "um hábito excluído não é mais encontrado",
+    );
+}
 
 #[test]
 fn ticking_a_habit_records_it_and_returns_the_streak() {

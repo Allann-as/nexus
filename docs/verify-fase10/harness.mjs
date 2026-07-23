@@ -44,7 +44,9 @@ function makeInit(scenario, displayName) {
     const SPHERES = AREAS.map(card);
 
     const MOCKS = {
-      lock_status: () => SC === 'onboarding' ? { enabled:false, configured:false }
+      lock_status: () => SC === 'bootdelay'
+                       ? new Promise((r) => setTimeout(() => r({ enabled:true, configured:true }), 2500))
+                       : SC === 'onboarding' ? { enabled:false, configured:false }
                        : SC === 'app'         ? { enabled:false, configured:true }
                        : { enabled:true, configured:true },
       boot_telemetry: () => ({ pingMs:0.11, lastBackupMs: now - 2*3600*1000, appVersion:'1.3.0' }),
@@ -60,7 +62,23 @@ function makeInit(scenario, displayName) {
       get_area: (a) => AREAS.find(x => x.id === (a && a.id)) || AREAS[0],
       sphere_overview: () => SPHERES,
       count_nodes: () => 3,
-      habits_today: () => [],
+      // Hábitos de hoje (fase 11, BUG 2): a linha do checkpoint mostra renomear /
+      // desativar / excluir.
+      habits_today: () => ([
+        { id:'h1', title:'Beber água', areaId:'health', status:'active', schedule:{type:'daily'},
+          targetValue:2, unit:'L', routineId:null, routineOrder:null, reminderTime:null,
+          streaks:{current:5,record:12,isRecord:false}, today:null, todayValue:null },
+        { id:'h2', title:'Treino de força', areaId:'health', status:'active', schedule:{type:'daily'},
+          targetValue:null, unit:null, routineId:null, routineOrder:null, reminderTime:null,
+          streaks:{current:12,record:12,isRecord:true}, today:'done', todayValue:null },
+      ]),
+      // Uma caixinha (fase 11, BUG 1/3): % clampada e confirmação de exclusão em camada.
+      list_fin_goals: () => ([
+        { id:'g1', title:'PlayStation 5', areaId:'finance', status:'active', targetCents:450000,
+          savedCents:120000, accountId:null, accountName:'Nubank', deadline:null, emoji:'gamepad-2',
+          createdAt:0, projection:{ etaMonth:null, monthsRemaining:null, monthlyRateCents:0, formula:'' } },
+      ]),
+      fin_goal_deposits: () => [],
       dashboard_today: () => ({ day:'2026-07-22', habits:[], tasks:[], inboxOpen:0,
         score:{ value:72, components:[], formula:'' } }),
       gamification_overview: () => ({ overall:{ level:7, xp:12480, intoLevel:480, span:1000 },
@@ -210,6 +228,49 @@ try {
     await page.getByText('Aparência', { exact: true }).click().catch(() => {});
     await page.waitForTimeout(500);
     await snap(page, '12-settings.png', 'Configuracoes > Aparencia: controle Movimento do fundo');
+    await page.close();
+  }
+
+  if (want('pin')) {
+    const page = await newPage(ctx, 'lock');
+    await page.goto(BASE, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(3000);
+    for (const d of ['1', '3', '5', '7']) { await page.keyboard.press(d); await page.waitForTimeout(120); }
+    await snap(page, '13-pin-verde.png', 'PIN: 4/6 pontos preenchidos em VERDE (nao branco)');
+    await page.close();
+  }
+
+  if (want('checkpoints')) {
+    const page = await newPage(ctx, 'app');
+    await page.goto(BASE + '/#/sphere/health?s=checkpoints', { waitUntil: 'networkidle' });
+    await page.waitForTimeout(1600);
+    await snap(page, '14-checkpoints.png', 'Checkpoints: linha com renomear/desativar/excluir');
+    await page.close();
+  }
+
+  if (want('caixinha')) {
+    const page = await newPage(ctx, 'app');
+    await page.goto(BASE + '/#/sphere/finance?s=objetivos', { waitUntil: 'networkidle' });
+    await page.waitForTimeout(1600);
+    await page.getByLabel('Excluir caixinha').click().catch(() => {});
+    await page.waitForTimeout(400);
+    await snap(page, '15-caixinha-excluir.png', 'Confirmacao de exclusao em CAMADA legivel (sem sobreposicao)');
+    await page.close();
+  }
+
+  if (want('boot')) {
+    // Prova do BUG 5: com o lock_status atrasado, o que aparece durante o boot é a
+    // CORTINA neutra (marca + estrelas), nunca o Hub. Confirma também via DOM que
+    // não há conteúdo do Hub ("Nexus Score"/"Suas Esferas") no texto da tela.
+    const page = await newPage(ctx, 'bootdelay');
+    await page.goto(BASE, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(900); // dentro do atraso de 2.5s
+    const leaked = await page.evaluate(() => {
+      const t = document.body.innerText;
+      return t.includes('Nexus Score') || t.includes('Suas Esferas') || t.includes('Boa madrugada,') || t.includes('Boa noite,');
+    });
+    console.log('  BOOT_HUB_VAZOU=', leaked);
+    await snap(page, '16-boot-splash.png', 'boot: cortina neutra (marca), sem flash do Hub');
     await page.close();
   }
 

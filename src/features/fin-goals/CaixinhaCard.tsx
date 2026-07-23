@@ -49,8 +49,12 @@ export function CaixinhaCard({
   deleting?: boolean;
 }) {
   const [statement, setStatement] = useState(false);
-  const pct = card.targetCents > 0 ? card.savedCents / card.targetCents : 0;
-  const done = card.status === "done" || pct >= 1;
+  // Clamp da % (fase 11, BUG 1): saldo negativo de dado legado (ou over-funding) não
+  // pode virar "−247072%" nem estourar a barra. A barra e o texto usam o valor preso
+  // em 0..100%; `done` ainda enxerga o over-funding real (>= alvo).
+  const rawPct = card.targetCents > 0 ? card.savedCents / card.targetCents : 0;
+  const pct = Math.min(1, Math.max(0, rawPct));
+  const done = card.status === "done" || rawPct >= 1;
   const animatedSaved = useCountUp(Math.max(0, card.savedCents), 700);
 
   return (
@@ -106,8 +110,9 @@ export function CaixinhaCard({
           <ArmedDelete
             onConfirm={onDelete}
             pending={deleting}
-            question="Excluir esta caixinha?"
+            question="Excluir esta caixinha? Os depósitos vão junto."
             ariaLabel="Excluir caixinha"
+            overlay
           />
         </div>
       </header>
