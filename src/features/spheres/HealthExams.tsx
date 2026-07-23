@@ -5,8 +5,8 @@
  * categoria é a única coisa que o distingue de um almoço (ver a §2 da 0007).
  * Marcá-los no calendário e listá-los aqui é a mesma verdade, dois recortes.
  *
- * O alerta de < 7 dias é o ponto: um exame perdido é uma consulta remarcada em
- * três meses. O que está perto acende.
+ * O alerta de urgência (≤ 3 dias, o `isSoon` do app) é o ponto: um exame perdido
+ * é uma consulta remarcada em três meses. O que está perto acende em âmbar.
  *
  * A criação é INLINE (A5): antes só dava para marcar um exame indo até o
  * Calendário — a seção que os LISTA não os criava, e o usuário ficava sem o gesto
@@ -35,7 +35,7 @@ import { toDay } from "../calendar/grid";
 /* As contas de prazo saíram para `deadline.ts` quando a Faculdade passou a
    precisar das mesmas — uma cópia por tela é como duas telas começam a contar
    dias de forma diferente (ADR-0089). */
-import { countdown, daysUntil, elapsed } from "../calendar/deadline";
+import { countdown, daysUntil, elapsed, isSoon } from "../calendar/deadline";
 
 export function HealthExams({ areaId }: { areaId: string }) {
   const [creating, setCreating] = useState(false);
@@ -86,7 +86,7 @@ export function HealthExams({ areaId }: { areaId: string }) {
         <StatTile
           icon={CalendarClock}
           label="Próximo exame"
-          tone="sphere"
+          tone={next && isSoon(daysUntil(next.day)) ? "warning" : "sphere"}
           value={next ? countdown(daysUntil(next.day)) : "—"}
           hint={next?.title ?? "nenhum agendado"}
         />
@@ -278,7 +278,7 @@ function ExamRow({
   /** Já aconteceu: sem alerta, com o tempo contado para trás. */
   past?: boolean;
 }) {
-  const soon = !past && days >= 0 && days < 7;
+  const soon = !past && isSoon(days);
   const start = new Date(exam.startsAt);
 
   const qc = useQueryClient();
@@ -300,8 +300,8 @@ function ExamRow({
     <div
       className={cx(
         "flex items-center gap-4 rounded-[var(--radius-lg)] border bg-[var(--bg-surface)] px-4 py-3",
-        // "Em breve" na cor da SEÇÃO (fase 10 §7), não âmbar: uma cor por Esfera.
-        soon ? "border-[color-mix(in_srgb,var(--sphere)_45%,transparent)]" : "border-[var(--border-subtle)]",
+        // Perto do prazo (isSoon), a cor de URGÊNCIA âmbar (fase 10, item 3).
+        soon ? "border-[var(--warning)]" : "border-[var(--border-subtle)]",
         // O passado é passado: a linha recua um tom para o olho ir primeiro ao
         // que ainda vai acontecer.
         past && "opacity-70",
@@ -338,7 +338,7 @@ function ExamRow({
         className={cx(
           "tabular shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium",
           soon
-            ? "bg-[color-mix(in_srgb,var(--sphere)_18%,transparent)] text-[var(--sphere)]"
+            ? "bg-[color-mix(in_srgb,var(--warning)_18%,transparent)] text-[var(--warning)]"
             : "text-[var(--text-tertiary)]",
         )}
       >

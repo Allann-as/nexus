@@ -43,11 +43,14 @@ export function elapsed(days: number): string {
 }
 
 /**
- * O prazo está APERTADO? Menos de 7 dias, e ainda não passou.
+ * O prazo está IMINENTE? Até 3 dias, e ainda não passou.
  *
- * O limiar é o mesmo dos Exames da Saúde, e pela mesma razão: uma semana é o
- * tempo em que ainda dá para fazer alguma coisa a respeito.
+ * O LIMIAR ÚNICO de urgência do app (fase 10, item 3): a exceção proposital à
+ * regra "1 cor por seção" — a menos de 3 dias, o âmbar de alerta; mais longe, a
+ * cor da Esfera. Vale igual para o exame da Saúde, a prova de Estudos e os marcos
+ * do Hub (que já pintavam D-3 de âmbar). Três dias é o "ainda dá pra agir AGORA";
+ * a semana anterior era cedo demais e diluía o alerta a ponto de virar ruído.
  */
 export function isSoon(days: number): boolean {
-  return days >= 0 && days < 7;
+  return days >= 0 && days <= 3;
 }

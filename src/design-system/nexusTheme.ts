@@ -63,7 +63,7 @@ export function registerNexusTheme(): void {
       readToken("--sphere-saude", "#34D399"),
       readToken("--sphere-objetivos", "#FBBF24"),
       readToken("--sphere-carreira", "#EC4899"),
-      readToken("--sphere-estudos", "#38BDF8"),
+      readToken("--sphere-estudos", "#5B8DEF"),
       readToken("--accent-deep", "#1E4FD8"),
     ],
     backgroundColor: "transparent",

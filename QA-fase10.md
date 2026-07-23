@@ -71,3 +71,48 @@ arquivos tocados.
 
 `fetch(` · `reqwest` · `http(s)://` · `XMLHttpRequest` · `WebSocket` · `axios` · `ws://` →
 **nenhum**. Tudo local: relógio `new Date()`, ping = latência local, nome do `settings.json`.
+
+---
+
+# Ajustes finais — 3 itens sobre `08af2af`
+
+`tsc` limpo, `vitest` 129/129. Capturas regeradas em `docs/verify-fase10/`.
+
+### 1. Cores — Finanças = ciano, Estudos = azul (alinhado ao mockup)
+- **Finanças `#38C6E0`** (ciano) e **Estudos `#5B8DEF`** (azul) — estavam trocadas.
+- Fonte de verdade: **migration `0021_finance_cyan_studies_blue.sql`** (UPDATE com guarda
+  `AND color = '<cor de fábrica>'`, como a 0006 — não pisa em quem editou a própria cor),
+  registrada em `migrations.rs`. Padrão de fábrica nos tokens: `tokens.css` (`--sphere-financas`,
+  `--sphere-estudos`) e o fallback do `nexusTheme.ts`. Alinhei também os hardcodes derivados: a
+  linha do gráfico de patrimônio (`FinanceDashboard`) e as 5 primeiras cores do picker (`AreasScreen`).
+- **Verificado** (`10-hub.png`, `06b`): card/rail/sparkline de Finanças em ciano; Estudos em azul;
+  Saúde/Objetivos/Carreira/Casa intactos. Não toquei em dados do usuário (só o padrão + UPDATE guardado).
+- Nota: bancos de dev já semeados só pegam a cor nova ao aplicar a 0021 (abre e migra sozinho); a
+  guarda preserva cores customizadas.
+
+### 2. Ícone do app = núcleo orbital
+- Rasterizei o núcleo orbital (mesma geometria do `NexusMark`/splash) num PNG 1024² com o squircle
+  grafite (`docs/verify-fase10/_makeicon.mjs` + `icon-source.svg`) e rodei **`tauri icon`** →
+  regenerou `src-tauri/icons/*` (.ico, .icns, .png, todos os `Square*Logo`, `StoreLogo`, 32/64/128).
+- Substituí também `icons/icon.svg` (ainda tinha o "N") pelo núcleo. **Nenhum "N" sobra** em ícone,
+  splash (`index.html`, já orbital) ou favicon (não há favicon com N).
+- Removi as pastas `android/`/`ios/` que o `tauri icon` cria — o projeto é desktop-only e o
+  `tauri.conf.json` não as referencia. **Sem tag/build/release.** Verificado o `128x128.png` (orbital).
+
+### 3. Exame — cor de urgência distinta (revertido)
+- A urgência voltou ao **âmbar (`var(--warning)` = `#FFC24B`)**, a exceção proposital à "1 cor por
+  seção". Unifiquei o limiar no helper canônico **`isSoon`**, ajustado de `< 7` para **`≤ 3 dias`** —
+  a política que o Hub (`NextMilestones`) já usava e que o pedido sugeriu. Assim Saúde (exame),
+  Estudos (prova/deadline, que já usa `isSoon`) e Hub ficam **consistentes por construção** (um só
+  ponto de verdade em `calendar/deadline.ts`).
+- Aplicado no tile "Próximo exame", na borda/ícone da linha do exame (`HealthDashboard`) e no
+  tile/linha/badge de `HealthExams`. O texto do countdown (hoje/amanhã/em N dias) permanece.
+- **Verificado** (`06a-app-saude.png`, com exame mock a 2 dias): "Próximo exame · 2d" e a linha do
+  exame em **âmbar**; o resto da Saúde segue verde.
+- Decisão registrada: reutilizei `isSoon` (agora ≤3) em vez de um segundo limiar — mudar o número
+  no futuro é uma linha em `deadline.ts` e todas as seções acompanham.
+
+## Grep de rede (ajustes finais)
+Arquivos tocados (tokens.css, nexusTheme.ts, deadline.ts, HealthDashboard, HealthExams,
+FinanceDashboard, AreasScreen, migration 0021, migrations.rs) → **nenhum** primitivo de rede. A
+migration é SQL local (`UPDATE areas`).

@@ -30,12 +30,7 @@ import { CountUp, StatTile } from "../../design-system/cards";
 import { Sparkline } from "../../design-system/charts";
 import { MonoLabel, Ring, SegBar } from "../../design-system/instruments";
 import { EmptyState, cx } from "../../design-system/primitives";
-import { fromDay, toDay } from "../calendar/grid";
-
-function daysUntil(day: string): number {
-  const today = fromDay(toDay(new Date()));
-  return Math.round((fromDay(day).getTime() - today.getTime()) / 86_400_000);
-}
+import { daysUntil, isSoon } from "../calendar/deadline";
 
 /** "4d" / "hoje" / "amanhã" — e "—" quando não há exame nenhum. */
 function countdown(days: number | null): string {
@@ -80,7 +75,9 @@ export function HealthDashboard({
     ? Math.round((card.spark.reduce((a, b) => a + b, 0) / card.spark.length) * 100)
     : 0;
   const examDays = nextExam ? daysUntil(nextExam.day) : null;
-  const examSoon = examDays !== null && examDays >= 0 && examDays < 7;
+  // A URGÊNCIA do exame (fase 10, item 3): o `isSoon` canônico (≤ 3 dias) — o
+  // mesmo limiar que Estudos e o Hub usam. Perto do prazo, âmbar; longe, verde.
+  const examSoon = examDays !== null && isSoon(examDays);
 
   /* A comparação honesta da tendência: a média dos últimos 7 dias contra a dos 7
      anteriores. Só existe com 14 dias de série — com menos, um "delta" seria
@@ -188,13 +185,13 @@ export function HealthDashboard({
           delta={delta}
           hint={delta ? "vs. os 7 dias anteriores" : undefined}
         />
-        {/* O exame segue a cor da SEÇÃO (fase 10 §7): o "círculo amarelo do exame
-            de sangue" morreu — a urgência quem dá é o texto do countdown
-            (hoje/amanhã/Nd), não um âmbar que destoa do verde da Saúde. */}
+        {/* O exame ganha COR DE URGÊNCIA (fase 10, item 3): a exceção proposital à
+            "1 cor por seção". Perto do prazo (isSoon) fica âmbar — perder um exame
+            custa uma consulta remarcada; longe, segue o verde da Esfera. */}
         <StatTile
           icon={CalendarClock}
           label="Próximo exame"
-          tone="sphere"
+          tone={examSoon ? "warning" : "sphere"}
           value={countdown(examDays)}
           hint={nextExam?.title}
         />
@@ -206,16 +203,13 @@ export function HealthDashboard({
         <div
           className={cx(
             "flex items-center gap-3 rounded-[var(--radius-lg)] border bg-[var(--bg-surface)] px-4 py-3",
-            // "Em breve" ganha uma borda na cor da SEÇÃO (não âmbar) — o realce
-            // fica, a cor segue a Esfera.
-            examSoon
-              ? "border-[color-mix(in_srgb,var(--sphere)_45%,transparent)]"
-              : "border-[var(--border-subtle)]",
+            // Perto do prazo, a borda ganha a cor de URGÊNCIA (âmbar); longe, neutra.
+            examSoon ? "border-[var(--warning)]" : "border-[var(--border-subtle)]",
           )}
         >
           <CalendarClock
             size={16}
-            className={examSoon ? "text-[var(--sphere)]" : "text-[var(--text-tertiary)]"}
+            className={examSoon ? "text-[var(--warning)]" : "text-[var(--text-tertiary)]"}
           />
           <span className="text-[13px] text-[var(--text-primary)]">{nextExam.title}</span>
           {nextExam.location && (

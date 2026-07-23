@@ -151,10 +151,14 @@
    tokens servem ao que precisa da cor antes de qualquer IPC. */
 :root {
   --sphere-saude: #34d399;
-  --sphere-financas: #4d8dff;
+  /* Finanças = ciano e Estudos = azul (fase 10, item 1): o mockup aprovado inverte
+     o que a 0005 semeou (Finanças azul / Estudos ciano). A verdade é `areas.color`
+     no banco — a migration 0021 corrige o dado; estes tokens são o padrão de
+     fábrica de quem lê a cor antes de qualquer IPC. */
+  --sphere-financas: #38c6e0;
   --sphere-objetivos: #fbbf24;
   --sphere-carreira: #ec4899;
-  --sphere-estudos: #38bdf8;
+  --sphere-estudos: #5b8def;
 
   /* A cor da Esfera ATUAL. As telas sobrescrevem esta variável no
      container da página; tudo que é tingível lê daqui. É o que

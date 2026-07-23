@@ -36,10 +36,10 @@ import { useToasts } from "../../stores/toasts";
  */
 const PALETTE = [
   "#34D399",
-  "#4D8DFF",
+  "#38C6E0", // Finanças (ciano) — fase 10, item 1
   "#FBBF24",
   "#EC4899",
-  "#38BDF8",
+  "#5B8DEF", // Estudos (azul) — fase 10, item 1
   "#A78BFA",
   "#FB923C",
   "#2DD4BF",

@@ -33,9 +33,9 @@ function makeInit(scenario, displayName) {
     // azul, Carreira magenta, Estudos ciano, Casa violeta.
     const AREAS = [
       { id:'health',  name:'Saúde',    icon:'heart',    color:'#34d399', sortOrder:0, template:'health',  isSystem:true, archivedAt:null },
-      { id:'finance', name:'Finanças', icon:'wallet',   color:'#4d8dff', sortOrder:1, template:'finance', isSystem:true, archivedAt:null },
+      { id:'finance', name:'Finanças', icon:'wallet',   color:'#38c6e0', sortOrder:1, template:'finance', isSystem:true, archivedAt:null },
       { id:'career',  name:'Carreira', icon:'briefcase',color:'#ec4899', sortOrder:2, template:'career',  isSystem:true, archivedAt:null },
-      { id:'studies', name:'Estudos',  icon:'book-open',color:'#38bdf8', sortOrder:3, template:'studies', isSystem:true, archivedAt:null },
+      { id:'studies', name:'Estudos',  icon:'book-open',color:'#5b8def', sortOrder:3, template:'studies', isSystem:true, archivedAt:null },
       { id:'home',    name:'Casa',     icon:'home',     color:'#8e7dff', sortOrder:4, template:'simple',  isSystem:true, archivedAt:null },
     ];
     const spark = Array.from({length:30}, (_,i)=> 0.3 + 0.5*Math.abs(Math.sin(i/3)));
@@ -69,7 +69,13 @@ function makeInit(scenario, displayName) {
       get_insights: () => ({ burnout:null }),
       finance_overview: () => ({ portfolioCents:0, totalContributedCents:0, monthly:[], byClass:[], health:null }),
       perfect_week_view: () => ({ totalYear:3, weeks:[] }),
-      events_by_category: () => [],
+      // Um exame daqui a 2 dias (≤3 → urgência âmbar, para provar o item 3).
+      events_by_category: () => {
+        const d = new Date(now + 2*86400000);
+        const day = d.toISOString().slice(0,10);
+        return [{ eventId:'ex1', title:'Exame de sangue', location:'Lab Central',
+          day, startsAt: d.toISOString(), category:'exame' }];
+      },
       list_events: () => [],
     };
 

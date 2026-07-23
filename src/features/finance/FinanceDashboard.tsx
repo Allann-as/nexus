@@ -229,7 +229,7 @@ function AccumulatedArea({ monthly }: { monthly: FinanceOverview["monthly"] }) {
       running += m.cents;
       return { month: m.month, cents: running };
     });
-    const colour = "#4D8DFF";
+    const colour = "#38C6E0"; // ciano das Finanças (fase 10, item 1)
 
     return {
       grid: { top: 8, right: 8, bottom: 20, left: 8, containLabel: false },

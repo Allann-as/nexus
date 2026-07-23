@@ -42,6 +42,9 @@ fn migration_set() -> Vec<M<'static>> {
             "../../../migrations/0019_delete_is_a_right.sql"
         )),
         M::up(include_str!("../../../migrations/0020_subject_items.sql")),
+        M::up(include_str!(
+            "../../../migrations/0021_finance_cyan_studies_blue.sql"
+        )),
     ]
 }
 
