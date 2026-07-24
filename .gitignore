@@ -19,6 +19,24 @@ pnpm-debug.log*
 # `.devdata-scale` do seed de 5 anos (bench de performance, M5).
 .devdata*/
 
+# Instaladores / artefatos de release. O build já sai em `src-tauri/target`
+# (ignorado acima); estes padrões são cinto-e-suspensório para nunca subir um
+# binário por engano, onde quer que ele apareça.
+*.exe
+*.msi
+NEXUS-Setup-*.exe
+NEXUS-backup-*/
+
+# Bancos locais e snapshots — dados do usuário NUNCA vão para o git.
+*.db
+*.db-wal
+*.db-shm
+
+# Prints de QA (pesados, ~10MB). Os relatórios `QA-*.md` e os scripts de harness
+# (`.mjs`/`.svg`) continuam versionados; só as imagens ficam de fora.
+docs/verify-fase9/
+docs/verify-fase10/*.png
+
 # Editor
 .vscode/*
 !.vscode/extensions.json
