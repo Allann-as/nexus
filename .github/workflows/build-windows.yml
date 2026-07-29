@@ -39,7 +39,9 @@ jobs:
           # Add any env vars your build needs here; avoid secrets in repo
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY || '' }}
         run: |
-          npx tauri build --target windows
+          # Instala o target Rust necessário no runner (triplo MSVC) e roda o build para ele.
+          rustup target add x86_64-pc-windows-msvc
+          npx tauri build --target x86_64-pc-windows-msvc
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
