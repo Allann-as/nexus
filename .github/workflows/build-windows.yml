@@ -1,0 +1,51 @@
+﻿name: Build Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          # Vite requires Node.js >= 20.19 or 22.12+; usar 22 para compatibilidade
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+
+      - name: Install dependencies
+        run: |
+          npm ci
+
+      - name: Build web assets
+        run: |
+          npm run build
+
+      - name: Build Tauri app (Windows)
+        env:
+          # Add any env vars your build needs here; avoid secrets in repo
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY || '' }}
+        run: |
+          # Instala o target Rust necessário no runner (triplo MSVC) e roda o build para ele.
+          rustup target add x86_64-pc-windows-msvc
+          npx tauri build --target x86_64-pc-windows-msvc
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-windows-bundle
+          path: |
+            src-tauri/target/release/bundle/**

@@ -78,7 +78,13 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy}
-        className={cx("nx-glass nx-modal-panel w-full rounded-[var(--radius-xl)]", SIZE[size], className)}
+      // Limita a altura da modal à viewport e permite scroll interno para evitar
+      // que conteúdos altos (ex.: o painel de Impacto do Aporte) explodam o layout.
+      className={cx(
+        "nx-glass nx-modal-panel w-full rounded-[var(--radius-xl)] max-h-[90vh] overflow-auto",
+        SIZE[size],
+        className,
+      )}
       >
         {children}
       </div>
