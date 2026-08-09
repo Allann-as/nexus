@@ -27,6 +27,12 @@ pnpm-debug.log*
 NEXUS-Setup-*.exe
 NEXUS-backup-*/
 
+# EXCEÇÃO deliberada: o instalador oficial de cada versão fica versionado em
+# `installer/`, para quem baixa o código ver o `.exe` na pasta sem precisar
+# compilar. É o único binário que entra no repo de propósito.
+!installer/
+!installer/*.exe
+
 # Bancos locais e snapshots — dados do usuário NUNCA vão para o git.
 *.db
 *.db-wal
